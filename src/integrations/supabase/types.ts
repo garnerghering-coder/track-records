@@ -119,6 +119,7 @@ export type Database = {
       profile_claim_requests: {
         Row: {
           created_at: string
+          document_url: string | null
           driver_profile_id: string
           id: string
           message: string | null
@@ -129,6 +130,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          document_url?: string | null
           driver_profile_id: string
           id?: string
           message?: string | null
@@ -139,6 +141,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          document_url?: string | null
           driver_profile_id?: string
           id?: string
           message?: string | null
