@@ -146,8 +146,12 @@ const SearchPage = () => {
                 className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30"
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary font-display text-lg font-bold">
-                    {driver.first_name[0]}{driver.last_name[0]}
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-primary/10">
+                    {driver.photo_url ? (
+                      <img src={driver.photo_url} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-primary font-display text-lg font-bold">{driver.first_name[0]}{driver.last_name[0]}</span>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
