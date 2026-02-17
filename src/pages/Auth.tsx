@@ -133,7 +133,7 @@ const Auth = () => {
                   {role === "team_sponsor" && (
                     <div>
                       <Label htmlFor="orgName" className="text-card-foreground">Organization Name</Label>
-                      <Input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} required />
+                      <Input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Optional" />
                     </div>
                   )}
                 </>
