@@ -78,46 +78,61 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Search for season calendar/results pages
-    console.log(`Discovering series: ${seriesName} ${seasonYear}`);
-    const searchQuery = `${seriesName} ${seasonYear} full season race results`;
-    const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ query: searchQuery, limit: 10, scrapeOptions: { formats: ["markdown"] } }),
-    });
+    // Set up streaming response
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
 
-    if (!searchResponse.ok) {
-      const errText = await searchResponse.text();
-      console.error("Firecrawl search error:", errText);
-      return new Response(JSON.stringify({ error: "Failed to search for series results" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const sendEvent = async (data: Record<string, any>) => {
+      await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+    };
 
-    const searchData = await searchResponse.json();
-    const searchResults = searchData.data || [];
-    console.log(`Found ${searchResults.length} search results`);
+    // Start processing in background
+    (async () => {
+      try {
+        // Step 1: Search for season calendar/results pages
+        console.log(`Discovering series: ${seriesName} ${seasonYear}`);
+        await sendEvent({ type: "status", message: `Searching for ${seriesName} ${seasonYear} results...` });
 
-    if (searchResults.length === 0) {
-      return new Response(JSON.stringify({ error: "No results found for this series/year" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+        const searchQuery = `${seriesName} ${seasonYear} full season race results`;
+        const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query: searchQuery, limit: 10, scrapeOptions: { formats: ["markdown"] } }),
+        });
 
-    // Combine search result content for AI analysis
-    const combinedContent = searchResults.map((r: any, i: number) =>
-      `--- Result ${i + 1}: ${r.url} ---\nTitle: ${r.title || ""}\n${(r.markdown || r.description || "").slice(0, 5000)}`
-    ).join("\n\n");
+        if (!searchResponse.ok) {
+          const errText = await searchResponse.text();
+          console.error("Firecrawl search error:", errText);
+          await sendEvent({ type: "error", message: "Failed to search for series results" });
+          await writer.close();
+          return;
+        }
 
-    // Step 2: Ask AI to extract race events and their result URLs
-    const aiResponse = await callAI({
-      max_tokens: 8192,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You are a motorsport data researcher. Given search results about a racing series season, extract a list of individual race events with URLs where their full results can be found.
+        const searchData = await searchResponse.json();
+        const searchResults = searchData.data || [];
+        console.log(`Found ${searchResults.length} search results`);
+        await sendEvent({ type: "status", message: `Found ${searchResults.length} search results. Analyzing with AI...` });
+
+        if (searchResults.length === 0) {
+          await sendEvent({ type: "error", message: "No results found for this series/year" });
+          await writer.close();
+          return;
+        }
+
+        // Combine search result content for AI analysis
+        const combinedContent = searchResults.map((r: any, i: number) =>
+          `--- Result ${i + 1}: ${r.url} ---\nTitle: ${r.title || ""}\n${(r.markdown || r.description || "").slice(0, 5000)}`
+        ).join("\n\n");
+
+        // Step 2: Ask AI to extract race events
+        const aiResponse = await callAI({
+          max_tokens: 8192,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `You are a motorsport data researcher. Given search results about a racing series season, extract a list of individual race events with URLs where their full results can be found.
 
 Return JSON: { "events": [{ "event_name": "string", "result_url": "string or null", "event_date": "YYYY-MM-DD or null", "location": "string or null" }] }
 
@@ -127,122 +142,127 @@ Rules:
 - If you can't find a result URL for an event, set result_url to null
 - Use the official event name
 - Order events chronologically`,
-        },
-        {
-          role: "user",
-          content: `Extract all race events from the ${seasonYear} ${seriesName} season from these search results:\n\n${combinedContent.slice(0, 60000)}`,
-        },
-      ],
-    });
-
-    if (!aiResponse.ok) {
-      console.error("AI error:", await aiResponse.text());
-      return new Response(JSON.stringify({ error: "AI failed to extract events" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.choices?.[0]?.message?.content;
-    if (!rawContent) {
-      return new Response(JSON.stringify({ error: "AI returned no content" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    let discovered;
-    try {
-      discovered = JSON.parse(rawContent);
-    } catch {
-      console.error("Failed to parse AI response:", rawContent.slice(0, 500));
-      return new Response(JSON.stringify({ error: "AI returned invalid JSON" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const events = discovered.events || [];
-    console.log(`Discovered ${events.length} events`);
-
-    if (events.length === 0) {
-      return new Response(JSON.stringify({ error: "No events found for this series/year", eventsFound: 0 }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Step 3: Check which events already exist
-    const { data: existingEvents } = await adminClient
-      .from("race_events")
-      .select("event_name, series_name, season_year")
-      .eq("season_year", seasonYear)
-      .ilike("series_name", `%${seriesName.split(" ").slice(0, 2).join(" ")}%`);
-
-    const existingSet = new Set(
-      (existingEvents || []).map(e => `${e.event_name.toLowerCase()}|${e.season_year}`)
-    );
-
-    // Step 4: For each event with a URL, import via scrape-race-results
-    const results: any[] = [];
-    let imported = 0, skipped = 0, failed = 0, noUrl = 0;
-
-    for (const event of events) {
-      const key = `${event.event_name.toLowerCase()}|${seasonYear}`;
-      if (existingSet.has(key)) {
-        results.push({ event_name: event.event_name, status: "skipped", reason: "Already exists" });
-        skipped++;
-        continue;
-      }
-
-      if (!event.result_url) {
-        results.push({ event_name: event.event_name, status: "no_url", reason: "No results URL found" });
-        noUrl++;
-        continue;
-      }
-
-      try {
-        console.log(`Importing: ${event.event_name} from ${event.result_url}`);
-        const importResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-race-results`, {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            "Content-Type": "application/json",
-            apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-          },
-          body: JSON.stringify({ url: event.result_url }),
+            },
+            {
+              role: "user",
+              content: `Extract all race events from the ${seasonYear} ${seriesName} season from these search results:\n\n${combinedContent.slice(0, 60000)}`,
+            },
+          ],
         });
 
-        const importResult = await importResponse.json();
-        if (importResponse.ok && importResult.success) {
-          results.push({
-            event_name: event.event_name,
-            status: "imported",
-            entriesCount: importResult.entriesCount,
-            matchedDrivers: importResult.matchedDrivers,
-            createdDrivers: importResult.createdDrivers,
-          });
-          imported++;
-          existingSet.add(key);
-        } else {
-          results.push({ event_name: event.event_name, status: "error", reason: importResult.error || "Import failed" });
-          failed++;
+        if (!aiResponse.ok) {
+          console.error("AI error:", await aiResponse.text());
+          await sendEvent({ type: "error", message: "AI failed to extract events" });
+          await writer.close();
+          return;
         }
-      } catch (err) {
-        console.error(`Error importing ${event.event_name}:`, err);
-        results.push({ event_name: event.event_name, status: "error", reason: err instanceof Error ? err.message : "Unknown error" });
-        failed++;
-      }
-    }
 
-    return new Response(JSON.stringify({
-      success: true,
-      seriesName,
-      seasonYear,
-      eventsFound: events.length,
-      imported,
-      skipped,
-      failed,
-      noUrl,
-      results,
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const aiData = await aiResponse.json();
+        const rawContent = aiData.choices?.[0]?.message?.content;
+        if (!rawContent) {
+          await sendEvent({ type: "error", message: "AI returned no content" });
+          await writer.close();
+          return;
+        }
+
+        let discovered;
+        try {
+          discovered = JSON.parse(rawContent);
+        } catch {
+          console.error("Failed to parse AI response:", rawContent.slice(0, 500));
+          await sendEvent({ type: "error", message: "AI returned invalid JSON" });
+          await writer.close();
+          return;
+        }
+
+        const events = discovered.events || [];
+        console.log(`Discovered ${events.length} events`);
+        await sendEvent({ type: "discovered", eventsFound: events.length, events: events.map((e: any) => ({ event_name: e.event_name, has_url: !!e.result_url })) });
+
+        if (events.length === 0) {
+          await sendEvent({ type: "error", message: "No events found for this series/year" });
+          await writer.close();
+          return;
+        }
+
+        // Step 3: Check which events already exist
+        const { data: existingEvents } = await adminClient
+          .from("race_events")
+          .select("event_name, series_name, season_year")
+          .eq("season_year", seasonYear)
+          .ilike("series_name", `%${seriesName.split(" ").slice(0, 2).join(" ")}%`);
+
+        const existingSet = new Set(
+          (existingEvents || []).map(e => `${e.event_name.toLowerCase()}|${e.season_year}`)
+        );
+
+        // Step 4: Import each event, streaming progress
+        let imported = 0, skipped = 0, failed = 0, noUrl = 0;
+
+        for (let i = 0; i < events.length; i++) {
+          const event = events[i];
+          const key = `${event.event_name.toLowerCase()}|${seasonYear}`;
+
+          if (existingSet.has(key)) {
+            skipped++;
+            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "skipped", reason: "Already exists" });
+            continue;
+          }
+
+          if (!event.result_url) {
+            noUrl++;
+            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "no_url", reason: "No results URL found" });
+            continue;
+          }
+
+          try {
+            console.log(`Importing: ${event.event_name} from ${event.result_url}`);
+            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "importing" });
+
+            const importResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-race-results`, {
+              method: "POST",
+              headers: {
+                Authorization: authHeader,
+                "Content-Type": "application/json",
+                apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+              },
+              body: JSON.stringify({ url: event.result_url }),
+            });
+
+            const importResult = await importResponse.json();
+            if (importResponse.ok && importResult.success) {
+              imported++;
+              existingSet.add(key);
+              await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "imported", entriesCount: importResult.entriesCount, matchedDrivers: importResult.matchedDrivers, createdDrivers: importResult.createdDrivers });
+            } else {
+              failed++;
+              await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "error", reason: importResult.error || "Import failed" });
+            }
+          } catch (err) {
+            console.error(`Error importing ${event.event_name}:`, err);
+            failed++;
+            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "error", reason: err instanceof Error ? err.message : "Unknown error" });
+          }
+        }
+
+        // Final summary
+        await sendEvent({ type: "complete", seriesName, seasonYear, eventsFound: events.length, imported, skipped, failed, noUrl });
+      } catch (e) {
+        console.error("discover-series stream error:", e);
+        await sendEvent({ type: "error", message: e instanceof Error ? e.message : "Unknown error" });
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (e) {
     console.error("discover-series error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {

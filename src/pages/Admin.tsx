@@ -132,6 +132,7 @@ const Admin = () => {
   const [discoverYear, setDiscoverYear] = useState(new Date().getFullYear().toString());
   const [discovering, setDiscovering] = useState(false);
   const [discoverResult, setDiscoverResult] = useState<any>(null);
+  const [discoverLog, setDiscoverLog] = useState<string[]>([]);
 
   // Import Sources
   const [importSources, setImportSources] = useState<any[]>([]);
@@ -308,6 +309,7 @@ const Admin = () => {
     if (!discoverSeriesName.trim()) { toast({ title: "Enter a series name", variant: "destructive" }); return; }
     setDiscovering(true);
     setDiscoverResult(null);
+    setDiscoverLog([]);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(
@@ -318,15 +320,63 @@ const Admin = () => {
           body: JSON.stringify({ seriesName: discoverSeriesName, seasonYear: parseInt(discoverYear) || new Date().getFullYear() }),
         }
       );
-      const result = await response.json();
+
       if (!response.ok) {
-        toast({ title: "Discovery failed", description: result.error, variant: "destructive" });
-      } else {
-        setDiscoverResult(result);
-        toast({ title: "Series discovery complete!", description: `Found ${result.eventsFound} events, imported ${result.imported}.` });
-        fetchPendingEvents();
-        fetchRaceEvents();
-        fetchDrivers();
+        const errText = await response.text();
+        let errMsg = "Discovery failed";
+        try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
+        toast({ title: "Discovery failed", description: errMsg, variant: "destructive" });
+        setDiscovering(false);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) { toast({ title: "Error", description: "No response stream", variant: "destructive" }); setDiscovering(false); return; }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === "status") {
+              setDiscoverLog(prev => [...prev, event.message]);
+            } else if (event.type === "discovered") {
+              setDiscoverLog(prev => [...prev, `✅ Discovered ${event.eventsFound} events`]);
+            } else if (event.type === "progress") {
+              const prefix = `[${event.index}/${event.total}] ${event.event_name}`;
+              if (event.status === "importing") {
+                setDiscoverLog(prev => [...prev, `⏳ ${prefix} — importing...`]);
+              } else if (event.status === "imported") {
+                setDiscoverLog(prev => [...prev, `✅ ${prefix} — ${event.entriesCount} entries imported`]);
+              } else if (event.status === "skipped") {
+                setDiscoverLog(prev => [...prev, `⏭️ ${prefix} — skipped (already exists)`]);
+              } else if (event.status === "no_url") {
+                setDiscoverLog(prev => [...prev, `⚠️ ${prefix} — no results URL found`]);
+              } else if (event.status === "error") {
+                setDiscoverLog(prev => [...prev, `❌ ${prefix} — ${event.reason}`]);
+              }
+            } else if (event.type === "complete") {
+              setDiscoverResult(event);
+              toast({ title: "Series discovery complete!", description: `Found ${event.eventsFound} events, imported ${event.imported}.` });
+              fetchPendingEvents();
+              fetchRaceEvents();
+              fetchDrivers();
+            } else if (event.type === "error") {
+              setDiscoverLog(prev => [...prev, `❌ Error: ${event.message}`]);
+              toast({ title: "Discovery error", description: event.message, variant: "destructive" });
+            }
+          } catch {}
+        }
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1573,9 +1623,25 @@ const Admin = () => {
                 </div>
                 {discovering && (
                   <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Searching the web for {discoverSeriesName} {discoverYear} results… This may take a minute.</span>
+                      <span>Discovering {discoverSeriesName} {discoverYear}…</span>
+                    </div>
+                    {discoverLog.length > 0 && (
+                      <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
+                        {discoverLog.map((line, i) => (
+                          <div key={i} className="text-muted-foreground">{line}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!discovering && discoverLog.length > 0 && !discoverResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
+                      {discoverLog.map((line, i) => (
+                        <div key={i} className="text-muted-foreground">{line}</div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1594,17 +1660,10 @@ const Admin = () => {
                       <div className="text-muted-foreground">Failed:</div>
                       <div className="text-card-foreground">{discoverResult.failed}</div>
                     </div>
-                    {discoverResult.results && (
-                      <div className="space-y-1 max-h-60 overflow-y-auto">
-                        {discoverResult.results.map((r: any, i: number) => (
-                          <div key={i} className="flex items-center gap-2 text-xs">
-                            {r.status === "imported" && <CheckCircle2 className="h-3 w-3 text-green-500" />}
-                            {r.status === "skipped" && <Clock className="h-3 w-3 text-muted-foreground" />}
-                            {r.status === "error" && <XCircle className="h-3 w-3 text-destructive" />}
-                            {r.status === "no_url" && <Globe className="h-3 w-3 text-muted-foreground" />}
-                            <span className="text-card-foreground">{r.event_name}</span>
-                            <span className="text-muted-foreground">— {r.status}{r.entriesCount ? ` (${r.entriesCount} entries)` : ""}{r.reason ? `: ${r.reason}` : ""}</span>
-                          </div>
+                    {discoverLog.length > 0 && (
+                      <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
+                        {discoverLog.map((line, i) => (
+                          <div key={i} className="text-muted-foreground">{line}</div>
                         ))}
                       </div>
                     )}
