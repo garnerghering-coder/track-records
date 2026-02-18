@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson, PenLine, Undo2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson, PenLine, Undo2, Car } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
@@ -61,7 +61,7 @@ const Admin = () => {
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("create-driver");
+  const [activeTab, setActiveTab] = useState("drivers");
 
   // Create driver form
   const [driverFirst, setDriverFirst] = useState("");
@@ -93,6 +93,7 @@ const Admin = () => {
 
   // Existing data
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
+  const [allTeams, setAllTeams] = useState<any[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
 
   // All race events
@@ -298,6 +299,7 @@ const Admin = () => {
     setIsAdmin(true);
     setLoading(false);
     fetchDrivers();
+    fetchTeams();
     fetchRoles();
     fetchClaims();
     fetchPendingEvents();
@@ -311,6 +313,11 @@ const Admin = () => {
   const fetchDrivers = async () => {
     const { data } = await supabase.from("driver_profiles").select("*").order("created_at", { ascending: false });
     if (data) setDrivers(data);
+  };
+
+  const fetchTeams = async () => {
+    const { data } = await supabase.from("team_profiles" as any).select("*").order("name") as any;
+    if (data) setAllTeams(data);
   };
 
   const fetchRoles = async () => {
@@ -1440,21 +1447,23 @@ Here are the results to parse:
 
         <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedEntryIds(new Set()); }} className="w-full">
           <TabsList className="mb-6 flex-wrap">
-            <TabsTrigger value="create-driver">Create Driver</TabsTrigger>
             <TabsTrigger value="drivers">All Drivers ({drivers.length})</TabsTrigger>
-            <TabsTrigger value="duplicates">
-              <Users className="h-3.5 w-3.5 mr-1" /> Duplicates {duplicateCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{duplicateCount}</span>}
+            <TabsTrigger value="all-teams">
+              <Car className="h-3.5 w-3.5 mr-1" /> All Teams ({allTeams.length})
             </TabsTrigger>
-            <TabsTrigger value="claims">
-              Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
-            </TabsTrigger>
+            <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
             <TabsTrigger value="ai-import">
-              <Sparkles className="h-3.5 w-3.5 mr-1" /> AI Import
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Race Import
             </TabsTrigger>
             <TabsTrigger value="pending">
               Pending {pendingEvents.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingEvents.length}</span>}
             </TabsTrigger>
-            <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
+            <TabsTrigger value="duplicates">
+              <Users className="h-3.5 w-3.5 mr-1" /> Duplicates {(duplicateCount + teamDuplicateCount) > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{duplicateCount + teamDuplicateCount}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="claims">
+              Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
+            </TabsTrigger>
             <TabsTrigger value="flags">
               <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Flags {flagCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs">{flagCount}</span>}
             </TabsTrigger>
@@ -1470,68 +1479,9 @@ Here are the results to parse:
             <TabsTrigger value="edit-queue">
               <PenLine className="h-3.5 w-3.5 mr-1" /> Edit Queue {editQueue.filter((e: any) => e.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{editQueue.filter((e: any) => e.status === "pending").length}</span>}
             </TabsTrigger>
-            <TabsTrigger value="team-duplicates">
-              <Users className="h-3.5 w-3.5 mr-1" /> Team Dupes {teamDuplicateCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{teamDuplicateCount}</span>}
-            </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
-          {/* ── Create Driver ── */}
-          <TabsContent value="create-driver">
-            <div className="max-w-2xl rounded-xl border border-border bg-card p-6">
-              <h2 className="font-display text-xl font-bold text-card-foreground mb-4">New Driver Profile</h2>
-              <form onSubmit={handleCreateDriver} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label htmlFor="dFirst" className="text-card-foreground">First Name</Label><Input id="dFirst" value={driverFirst} onChange={(e) => setDriverFirst(e.target.value)} required /></div>
-                  <div><Label htmlFor="dLast" className="text-card-foreground">Last Name</Label><Input id="dLast" value={driverLast} onChange={(e) => setDriverLast(e.target.value)} required /></div>
-                </div>
-                <div><Label className="text-card-foreground">Nationality</Label><CountrySelect value={driverNationality} onChange={setDriverNationality} /></div>
-                <div>
-                  <Label className="text-card-foreground">Primary Category</Label>
-                  <Select value={driverCategory} onValueChange={setDriverCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>))}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label htmlFor="dBio" className="text-card-foreground">Bio</Label><Input id="dBio" value={driverBio} onChange={(e) => setDriverBio(e.target.value)} placeholder="Optional" /></div>
-
-                {/* Race Results */}
-                <div className="border-t border-border pt-4 mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <Label className="text-card-foreground font-semibold">Race Results</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setRaceResults(prev => [...prev, emptyResult()])}><Plus className="h-4 w-4 mr-1" /> Add Result</Button>
-                  </div>
-                  {raceResults.length === 0 && <p className="text-sm text-muted-foreground">No results added yet.</p>}
-                  <div className="space-y-4">
-                    {raceResults.map((r, i) => (
-                      <div key={r.key} className="rounded-lg border border-border/50 bg-muted/20 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-card-foreground">Result #{i + 1}</span>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeResult(r.key)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><Label className="text-xs text-muted-foreground">Season Year</Label><Input value={r.season_year} onChange={(e) => updateResult(r.key, "season_year", e.target.value)} type="number" /></div>
-                          <div><Label className="text-xs text-muted-foreground">Series Name</Label><Input value={r.series_name} onChange={(e) => updateResult(r.key, "series_name", e.target.value)} placeholder="e.g. F4 British" required /></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><Label className="text-xs text-muted-foreground">Event Name</Label><Input value={r.event_name} onChange={(e) => updateResult(r.key, "event_name", e.target.value)} placeholder="Optional" /></div>
-                          <div><Label className="text-xs text-muted-foreground">Category</Label>
-                            <Select value={r.category} onValueChange={(v) => updateResult(r.key, "category", v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>))}</SelectContent></Select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div><Label className="text-xs text-muted-foreground">Finishing Position</Label><Input value={r.finishing_position} onChange={(e) => updateResult(r.key, "finishing_position", e.target.value)} type="number" placeholder="Optional" /></div>
-                          <div><Label className="text-xs text-muted-foreground">Championship Position</Label><Input value={r.championship_position} onChange={(e) => updateResult(r.key, "championship_position", e.target.value)} type="number" placeholder="Optional" /></div>
-                        </div>
-                        <div><Label className="text-xs text-muted-foreground">Notes</Label><Input value={r.notes} onChange={(e) => updateResult(r.key, "notes", e.target.value)} placeholder="Optional" /></div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <Button type="submit" disabled={creatingDriver} className="w-full mt-4">{creatingDriver ? "Creating…" : "Create Driver Profile"}</Button>
-              </form>
-            </div>
-          </TabsContent>
 
           {/* ── All Drivers ── */}
           <TabsContent value="drivers">
@@ -1643,13 +1593,86 @@ Here are the results to parse:
             </div>
           </TabsContent>
 
-          {/* ── Duplicates ── */}
+          {/* ── All Teams ── */}
+          <TabsContent value="all-teams">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-display text-xl font-bold text-foreground">All Teams</h2>
+            </div>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Team</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Nationality</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allTeams.map((t: any) => (
+                    <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                            <Car className="h-4 w-4" />
+                          </div>
+                          <span className="text-card-foreground font-medium">{t.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{t.primary_category?.replace(/_/g, " ") ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <FlagImage nationality={t.nationality} size={16} /> {t.nationality ?? "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/team/${t.id}`)}><Eye className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm"><Trash className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {t.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete this team profile.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                                  await supabase.from("team_profiles" as any).delete().eq("id", t.id);
+                                  toast({ title: "Team deleted" });
+                                  fetchTeams();
+                                }}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {allTeams.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No teams yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* ── Duplicates (Drivers + Teams) ── */}
           <TabsContent value="duplicates">
-            <DuplicatesTab
-              drivers={drivers}
-              onRefresh={fetchDrivers}
-              onGroupCountChange={setDuplicateCount}
-            />
+            <div className="space-y-8">
+              <div>
+                <h3 className="font-display text-lg font-semibold text-foreground mb-3">Driver Duplicates</h3>
+                <DuplicatesTab
+                  drivers={drivers}
+                  onRefresh={fetchDrivers}
+                  onGroupCountChange={setDuplicateCount}
+                />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-semibold text-foreground mb-3">Team Duplicates</h3>
+                <TeamDuplicatesTab onRefresh={() => { fetchRaceEvents(); fetchTeams(); }} onGroupCountChange={setTeamDuplicateCount} />
+              </div>
+            </div>
           </TabsContent>
 
           {/* ── Claims ── */}
@@ -2485,10 +2508,7 @@ Here are the results to parse:
             </div>
           </TabsContent>
 
-          {/* ── Team Duplicates ── */}
-          <TabsContent value="team-duplicates">
-            <TeamDuplicatesTab onRefresh={() => { fetchRaceEvents(); }} onGroupCountChange={setTeamDuplicateCount} />
-          </TabsContent>
+
 
           {/* ── Manage Roles ── */}
           <TabsContent value="roles">
