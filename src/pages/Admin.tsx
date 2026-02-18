@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Key } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -148,6 +149,14 @@ const Admin = () => {
   const [approvingSubmission, setApprovingSubmission] = useState<string | null>(null);
 
   // Bulk selection
+  // AI API Keys
+  const [aiKeys, setAiKeys] = useState<any[]>([]);
+  const [newKeyLabel, setNewKeyLabel] = useState("");
+  const [newKeyProviderUrl, setNewKeyProviderUrl] = useState("https://api.groq.com/openai/v1/chat/completions");
+  const [newKeyModel, setNewKeyModel] = useState("llama-3.3-70b-versatile");
+  const [newKeyApiKey, setNewKeyApiKey] = useState("");
+  const [addingKey, setAddingKey] = useState(false);
+
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
 
@@ -250,6 +259,7 @@ const Admin = () => {
     fetchReports();
     fetchImportSources();
     fetchCommunitySubmissions();
+    fetchAiKeys();
   };
 
   const fetchDrivers = async () => {
@@ -312,6 +322,39 @@ const Admin = () => {
       .order("created_at", { ascending: false })
       .limit(20);
     if (data) setDiscoveryJobs(data as any[]);
+  };
+
+  const fetchAiKeys = async () => {
+    const { data } = await supabase.from("ai_api_keys" as any).select("*").order("priority", { ascending: true });
+    if (data) setAiKeys(data as any[]);
+  };
+
+  const handleAddAiKey = async () => {
+    if (!newKeyLabel.trim() || !newKeyApiKey.trim()) { toast({ title: "Label and API Key required", variant: "destructive" }); return; }
+    setAddingKey(true);
+    const nextPriority = aiKeys.length > 0 ? Math.max(...aiKeys.map((k: any) => k.priority)) + 1 : 0;
+    const { error } = await supabase.from("ai_api_keys" as any).insert({
+      label: newKeyLabel.trim(),
+      provider_url: newKeyProviderUrl.trim(),
+      model_name: newKeyModel.trim(),
+      api_key: newKeyApiKey.trim(),
+      priority: nextPriority,
+    } as any);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    else { toast({ title: "API key added" }); setNewKeyLabel(""); setNewKeyApiKey(""); fetchAiKeys(); }
+    setAddingKey(false);
+  };
+
+  const handleToggleAiKey = async (id: string, isActive: boolean) => {
+    const { error } = await supabase.from("ai_api_keys" as any).update({ is_active: !isActive } as any).eq("id", id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else fetchAiKeys();
+  };
+
+  const handleDeleteAiKey = async (id: string) => {
+    const { error } = await supabase.from("ai_api_keys" as any).delete().eq("id", id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else { toast({ title: "Key deleted" }); fetchAiKeys(); }
   };
 
   // Poll for running jobs
@@ -1158,6 +1201,9 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="community">
               <Send className="h-3.5 w-3.5 mr-1" /> Community {communitySubmissions.filter((s: any) => s.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{communitySubmissions.filter((s: any) => s.status === "pending").length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="ai-keys">
+              <Key className="h-3.5 w-3.5 mr-1" /> AI Keys ({aiKeys.length})
             </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
@@ -2056,6 +2102,80 @@ const Admin = () => {
                 <tbody>{roles.map((r) => (<tr key={r.id} className="border-b border-border/50"><td className="px-4 py-3 text-card-foreground font-mono text-xs">{r.user_id}</td><td className="px-4 py-3 text-muted-foreground capitalize">{r.role.replace(/_/g, " ")}</td></tr>))}</tbody>
               </table>
             </div>
+          </TabsContent>
+
+          {/* ── AI Keys Tab ── */}
+          <TabsContent value="ai-keys" className="space-y-6">
+            <div className="rounded-xl border border-border bg-card p-6">
+              <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Add API Key</h2>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <Label className="text-card-foreground">Label</Label>
+                  <Input value={newKeyLabel} onChange={(e) => setNewKeyLabel(e.target.value)} placeholder='e.g. "My Groq Key"' />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Provider URL</Label>
+                  <Input value={newKeyProviderUrl} onChange={(e) => setNewKeyProviderUrl(e.target.value)} placeholder="https://api.groq.com/openai/v1/chat/completions" />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Model Name</Label>
+                  <Input value={newKeyModel} onChange={(e) => setNewKeyModel(e.target.value)} placeholder="llama-3.3-70b-versatile" />
+                </div>
+                <div>
+                  <Label className="text-card-foreground">API Key</Label>
+                  <Input value={newKeyApiKey} onChange={(e) => setNewKeyApiKey(e.target.value)} type="password" placeholder="sk-..." />
+                </div>
+              </div>
+              <Button onClick={handleAddAiKey} disabled={addingKey || !newKeyLabel.trim() || !newKeyApiKey.trim()}>
+                {addingKey ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Adding…</> : <><Plus className="h-4 w-4 mr-2" /> Add Key</>}
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Priority</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Label</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Provider</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Model</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Active</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Last Used</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Key</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiKeys.length === 0 && (
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No API keys configured. Add one above to get started.</td></tr>
+                  )}
+                  {aiKeys.map((key: any, idx: number) => (
+                    <tr key={key.id} className="border-b border-border/50">
+                      <td className="px-4 py-3 text-card-foreground">{idx + 1}</td>
+                      <td className="px-4 py-3 text-card-foreground font-medium">{key.label}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs font-mono truncate max-w-[200px]">{key.provider_url}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{key.model_name}</td>
+                      <td className="px-4 py-3">
+                        <Switch checked={key.is_active} onCheckedChange={() => handleToggleAiKey(key.id, key.is_active)} />
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {key.last_used_at ? new Date(key.last_used_at).toLocaleString() : "Never"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                        ••••{key.api_key.slice(-4)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteAiKey(key.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-muted-foreground">Keys are tried in priority order (top first). If one fails or is rate-limited, the next is tried. The built-in Groq key and Lovable AI gateway serve as final fallbacks.</p>
           </TabsContent>
         </Tabs>
       </div>
