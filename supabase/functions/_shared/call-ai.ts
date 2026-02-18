@@ -29,8 +29,8 @@ export async function callAI(body: Record<string, any>): Promise<Response> {
             body: JSON.stringify({ ...body, model: key.model_name }),
           });
 
-          if (resp.status === 429) {
-            console.log(`Key "${key.id}" rate limited, trying next...`);
+          if (resp.status === 429 || resp.status === 402) {
+            console.log(`Key "${key.id}" returned ${resp.status} (${resp.status === 429 ? 'rate limited' : 'insufficient credits'}), trying next...`);
             continue;
           }
 
@@ -64,7 +64,7 @@ export async function callAI(body: Record<string, any>): Promise<Response> {
       },
       body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
     });
-    if (resp.status !== 429) return resp;
+    if (resp.status !== 429 && resp.status !== 402) return resp;
     console.log("Groq env key rate limited, falling back to Lovable AI");
   }
 
