@@ -1,111 +1,42 @@
 
-## Combined Improvements: AI Speed, Scraping Quality, Motorsport Intelligence, Flags, Reject Logic, and Bulk Delete
 
-### 1. Speed Up All AI Calls
+## Switch All AI Edge Functions to Groq (Llama 3.3 70B)
 
-Switch the AI model from `google/gemini-3-flash-preview` (slow preview) to `google/gemini-2.5-flash` (production-ready, faster) in all four edge functions:
-- `generate-race-event/index.ts`
-- `scrape-race-results/index.ts`
-- `import-race-results/index.ts`
-- `enrich-driver-profile/index.ts`
+### Setup
 
-This should noticeably reduce response times.
+You'll need to add your Groq API key as a backend secret called `GROQ_API_KEY`. You can get a free key from [console.groq.com](https://console.groq.com).
 
-### 2. Improve URL Scraping Quality
+### Why This Is Simple
 
-In `scrape-race-results/index.ts`:
-- Increase the markdown sent to the AI from 30,000 to 80,000 characters to capture full results pages
-- Enhance the system prompt to stress extracting ALL table rows, every car/entry, not just summarizing
+Groq's API is OpenAI-compatible, so the changes in each function are minimal -- just 3 things per function:
 
-### 3. Improve Name-Based Search (generate-race-event)
+1. Replace `LOVABLE_API_KEY` env check with `GROQ_API_KEY`
+2. Change the API URL from `https://ai.gateway.lovable.dev/v1/chat/completions` to `https://api.groq.com/openai/v1/chat/completions`
+3. Change the model from `google/gemini-2.5-flash` to `llama-3.3-70b-versatile`
 
-In `generate-race-event/index.ts`:
-- Improve the Firecrawl search query to `"{eventName} full race results classification {year}"` for better hits
-- If the first search returns no useful content, try a fallback search with simplified terms
-- Increase scraped content limit from 40,000 to 80,000 characters
+The request body format (messages, tools, tool_choice) stays identical since Groq supports OpenAI-compatible tool calling.
 
-### 4. Motorsport Intelligence for Raw Text Import
-
-In `import-race-results/index.ts`:
-- Update the system prompt to instruct the AI to use motorsport domain knowledge: infer team names from car numbers (e.g., #31 Cadillac = Whelen Engineering Racing), normalize team names to official forms, infer class from car type/team, and correct abbreviations
-
-### 5. Flag Images Instead of Emojis
-
-**New file: `src/components/FlagImage.tsx`**
-- A component that renders flag images from `flagcdn.com` (a free flag CDN) using ISO country codes
-- Props: `nationality: string | null`, `size?: number` (default 20)
-- Falls back to a globe icon if nationality is unknown
-
-**Updated: `src/lib/countries.ts`**
-- Add a `getCountryCode(nationality: string): string | null` function that maps nationality strings (like "Danish", "American", "Brazilian") and country names to ISO codes
-
-**Updated UI files** -- replace all `getFlagForCountry()` emoji usage with `<FlagImage>`:
-- `src/pages/Admin.tsx` (driver table, entry driver tags, search results)
-- `src/pages/DriverProfile.tsx` (profile header)
-- `src/pages/Search.tsx` (search results)
-- `src/pages/EventDetail.tsx` (entry driver links)
-
-### 6. Reject = Full Delete
-
-Update `handleRejectEvent` in `Admin.tsx` to fully remove all data instead of just marking entries as "rejected":
-- Delete all `race_entry_drivers` rows for the event's entries
-- Collect the `driver_profile_id` values from those junction rows
-- Delete all `race_entries` rows for the event
-- Delete the `race_events` row itself
-- For each linked driver where `is_claimed = false`, check if they have any remaining `race_entry_drivers` links; if not, delete that auto-created driver profile too
-- Refresh all relevant lists afterward
-
-### 7. Bulk Select and Delete for Drivers and Races
-
-**All Drivers tab:**
-- Add a `selectedDriverIds` state (Set)
-- Add a checkbox column to the table with a "select all" checkbox in the header
-- Show a "Delete Selected (N)" button when any are checked, with a confirmation dialog
-- Bulk delete removes each selected driver, then clears the selection
-
-**All Races tab:**
-- Add a `selectedEventIds` state (Set)
-- Same checkbox column and select-all pattern
-- "Delete Selected (N)" button with confirmation dialog
-- Uses the existing `handleDeleteEvent` logic for each selected event
-
----
-
-### Technical Details
-
-**Edge function changes (model swap + prompt improvements):**
+### Files Changed
 
 | File | Changes |
 |------|---------|
-| `generate-race-event/index.ts` | Model to `gemini-2.5-flash`, improved search query with year + "full results classification", fallback search, content limit to 80k |
-| `scrape-race-results/index.ts` | Model to `gemini-2.5-flash`, markdown slice to 80k, prompt emphasizes ALL entries |
-| `import-race-results/index.ts` | Model to `gemini-2.5-flash`, system prompt adds motorsport knowledge instructions (team name inference, class inference, abbreviation normalization) |
-| `enrich-driver-profile/index.ts` | Model to `gemini-2.5-flash` |
+| `supabase/functions/generate-race-event/index.ts` | Swap API key, URL, and model |
+| `supabase/functions/scrape-race-results/index.ts` | Swap API key, URL, and model |
+| `supabase/functions/import-race-results/index.ts` | Swap API key, URL, and model |
+| `supabase/functions/enrich-driver-profile/index.ts` | Swap API key, URL, and model |
 
-**New file: `src/components/FlagImage.tsx`**
-- Takes `nationality` prop, calls `getCountryCode()` to get ISO code
-- Renders `<img src="https://flagcdn.com/w40/{code}.png" width={size} height={size} />` with inline styling
-- Falls back to Globe icon from lucide-react
+### Error Handling Update
 
-**Updated: `src/lib/countries.ts`**
-- New export: `getCountryCode(nationality: string): string | null`
-- Maps demonyms ("Danish" -> "DK", "American" -> "US", "Brazilian" -> "BR", etc.) and country names to their ISO codes using the existing COUNTRIES array plus a demonym lookup table
+- Keep 429 (rate limit) handling as-is -- Groq returns 429 too
+- Remove the 402 (credits exhausted) handling since Groq's free tier doesn't use that error code
+- Add handling for 401 (invalid API key)
 
-**Updated: `src/pages/Admin.tsx`**
-- Import `FlagImage` component, add `Checkbox` import
-- Replace all `getFlagForCountry()` calls with `<FlagImage nationality={...} />`
-- `handleRejectEvent`: full cascade delete (junction rows -> entries -> event -> orphaned unclaimed drivers)
-- New state: `selectedDriverIds`, `selectedEventIds` (both `Set<string>`)
-- Drivers table: checkbox column with select-all, "Delete Selected" button with AlertDialog
-- Races table: checkbox column with select-all, "Delete Selected" button with AlertDialog
+### Groq Free Tier Limits
 
-**Updated: `src/pages/DriverProfile.tsx`**
-- Replace `getFlagForCountry()` with `<FlagImage>`
+- Llama 3.3 70B: 30 requests/minute, 1,000 requests/day, 100,000 tokens/minute
+- This should be plenty for admin-only race imports and driver enrichment
 
-**Updated: `src/pages/Search.tsx`**
-- Replace `getFlagForCountry()` with `<FlagImage>`
+### No other changes needed
 
-**Updated: `src/pages/EventDetail.tsx`**
-- Replace `getFlagForCountry()` with `<FlagImage>`
+The tool calling schema, database logic, driver matching, and all frontend code remain exactly the same.
 
-**No database changes needed.**
