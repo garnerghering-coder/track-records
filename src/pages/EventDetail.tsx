@@ -7,7 +7,7 @@ import { ArrowLeft, Trophy, CheckCircle, MapPin, Calendar } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ReportDialog from "@/components/ReportDialog";
-import { getFlagForCountry } from "@/lib/countries";
+import FlagImage from "@/components/FlagImage";
 
 const categoryLabels: Record<string, string> = {
   karting: "Karting", single_seater: "Single Seater", gt: "GT",
@@ -229,14 +229,13 @@ const EventDetailPage = () => {
                               <span className="text-muted-foreground">—</span>
                             ) : (
                               entry.drivers.map(d => {
-                                const flag = getFlagForCountry(d.nationality);
                                 return (
                                   <Link
                                     key={d.id}
                                     to={`/driver/${d.id}`}
-                                    className="text-sm text-primary hover:underline"
+                                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
                                   >
-                                    {flag && <span className="mr-1">{flag}</span>}
+                                    <FlagImage nationality={d.nationality} size={14} />
                                     {d.first_name} {d.last_name}
                                   </Link>
                                 );

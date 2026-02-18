@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getFlagForCountry } from "@/lib/countries";
+import FlagImage from "@/components/FlagImage";
 import type { Tables } from "@/integrations/supabase/types";
 
 type DriverProfile = Tables<"driver_profiles">;
@@ -164,7 +164,7 @@ const SearchPage = () => {
                     </div>
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {driver.nationality && (
-                        <span>{getFlagForCountry(driver.nationality) ?? "🌍"} {driver.nationality}</span>
+                        <span className="inline-flex items-center gap-1"><FlagImage nationality={driver.nationality} size={16} /> {driver.nationality}</span>
                       )}
                       {driver.primary_category && <span>{categoryLabels[driver.primary_category] || driver.primary_category}</span>}
                     </div>

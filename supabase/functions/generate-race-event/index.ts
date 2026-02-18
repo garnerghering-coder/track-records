@@ -109,8 +109,8 @@ serve(async (req) => {
           method: "POST",
           headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            query: `${eventName.trim()} race results`,
-            limit: 3,
+            query: `"${eventName.trim()}" full race results classification`,
+            limit: 5,
             scrapeOptions: { formats: ["markdown"] },
           }),
         });
@@ -126,12 +126,44 @@ serve(async (req) => {
               .slice(0, 2)
               .join("\n\n---\n\n");
             if (combined.length > 100) {
-              webContext = combined.slice(0, 40000);
+              webContext = combined.slice(0, 80000);
               console.log("Found web context, length:", webContext.length);
             }
           }
         } else {
           console.log("Firecrawl search returned status:", searchResponse.status);
+        }
+
+        // Fallback search if first attempt returned no useful content
+        if (webContext.length < 100) {
+          try {
+            const simpleName = eventName.trim().replace(/["\-]/g, " ").replace(/\s+/g, " ");
+            console.log("Trying fallback search for:", simpleName);
+            const fallbackResponse = await fetch("https://api.firecrawl.dev/v1/search", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                query: `${simpleName} race results full classification`,
+                limit: 5,
+                scrapeOptions: { formats: ["markdown"] },
+              }),
+            });
+            if (fallbackResponse.ok) {
+              const fallbackData = await fallbackResponse.json();
+              const fallbackResults = fallbackData.data || fallbackData.results || [];
+              const fallbackCombined = fallbackResults
+                .map((r: any) => r.markdown || "")
+                .filter((m: string) => m.length > 50)
+                .slice(0, 3)
+                .join("\n\n---\n\n");
+              if (fallbackCombined.length > 100) {
+                webContext = fallbackCombined.slice(0, 80000);
+                console.log("Fallback search found context, length:", webContext.length);
+              }
+            }
+          } catch (fallbackErr) {
+            console.error("Fallback search failed (non-blocking):", fallbackErr);
+          }
         }
       } catch (searchErr) {
         console.error("Firecrawl search failed (non-blocking):", searchErr);
@@ -158,7 +190,7 @@ CRITICAL RULES:
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
         tools: [raceResultsTool],
         tool_choice: { type: "function", function: { name: "submit_race_results" } },

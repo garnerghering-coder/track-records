@@ -64,7 +64,19 @@ serve(async (req) => {
     }
 
     // Call Lovable AI with tool calling to extract structured data
-    const systemPrompt = `You are a motorsport results data extractor. You receive raw race results text (from timing sheets, websites, PDFs, etc.) and extract structured data. Be precise with driver names, positions, car numbers, teams, and classes. If information is missing, use null. Always try to determine the event name, series, year, and location from context.${eventHint ? ` Event hint: ${eventHint}` : ""}${seriesHint ? ` Series hint: ${seriesHint}` : ""}`;
+    const systemPrompt = `You are a motorsport results data extractor with deep motorsport domain knowledge. You receive raw race results text (from timing sheets, websites, PDFs, etc.) and extract structured data. Be precise with driver names, positions, car numbers, teams, and classes. If information is missing, use null. Always try to determine the event name, series, year, and location from context.
+
+MOTORSPORT INTELLIGENCE RULES:
+- Use your knowledge of motorsport to infer and correct data. For example:
+  - Car #31 Cadillac V-Series.R in IMSA = Whelen Engineering Racing / Action Express Racing
+  - Car #10 Acura ARX-06 = Wayne Taylor Racing
+  - A "Cadillac LMDh" or "Porsche 963" implies GTP class in IMSA
+  - "Ferrari 296 GT3" implies GTD or GTD Pro class
+- Normalize team names to their official forms (e.g. "AXR" → "Action Express Racing", "WTR" → "Wayne Taylor Racing")
+- Infer race class from car type, team, and context when not explicitly stated
+- Correct common abbreviations and shorthand in driver names and team names
+- If a car manufacturer is listed but not a team, use your knowledge to fill in the team name
+${eventHint ? ` Event hint: ${eventHint}` : ""}${seriesHint ? ` Series hint: ${seriesHint}` : ""}`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -73,7 +85,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Extract the race results from this text:\n\n${rawText}` },

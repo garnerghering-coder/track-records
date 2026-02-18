@@ -206,3 +206,62 @@ export function getFlagForCountry(name: string | null | undefined): string | nul
   const match = COUNTRIES.find(c => c.name.toLowerCase() === lower);
   return match?.flag ?? null;
 }
+
+/** Demonym-to-ISO-code lookup for common motorsport nationalities */
+const DEMONYM_MAP: Record<string, string> = {
+  afghan: "AF", albanian: "AL", algerian: "DZ", american: "US", andorran: "AD",
+  angolan: "AO", argentine: "AR", argentinian: "AR", armenian: "AM", australian: "AU",
+  austrian: "AT", azerbaijani: "AZ", bahamian: "BS", bahraini: "BH", bangladeshi: "BD",
+  barbadian: "BB", belarusian: "BY", belgian: "BE", belizean: "BZ", beninese: "BJ",
+  bhutanese: "BT", bolivian: "BO", bosnian: "BA", botswanan: "BW", brazilian: "BR",
+  bruneian: "BN", bulgarian: "BG", burkinabe: "BF", burundian: "BI", cambodian: "KH",
+  cameroonian: "CM", canadian: "CA", "cape verdean": "CV", chadian: "TD", chilean: "CL",
+  chinese: "CN", colombian: "CO", comorian: "KM", congolese: "CG", "costa rican": "CR",
+  croatian: "HR", cuban: "CU", cypriot: "CY", czech: "CZ", danish: "DK",
+  djiboutian: "DJ", dominican: "DO", dutch: "NL", ecuadorian: "EC", egyptian: "EG",
+  emirati: "AE", english: "GB", eritrean: "ER", estonian: "EE", ethiopian: "ET",
+  fijian: "FJ", filipino: "PH", finnish: "FI", french: "FR", gabonese: "GA",
+  gambian: "GM", georgian: "GE", german: "DE", ghanaian: "GH", greek: "GR",
+  grenadian: "GD", guatemalan: "GT", guinean: "GN", guyanese: "GY", haitian: "HT",
+  honduran: "HN", hungarian: "HU", icelandic: "IS", indian: "IN", indonesian: "ID",
+  iranian: "IR", iraqi: "IQ", irish: "IE", israeli: "IL", italian: "IT",
+  jamaican: "JM", japanese: "JP", jordanian: "JO", kazakh: "KZ", kenyan: "KE",
+  kuwaiti: "KW", kyrgyz: "KG", laotian: "LA", latvian: "LV", lebanese: "LB",
+  liberian: "LR", libyan: "LY", liechtensteiner: "LI", lithuanian: "LT",
+  luxembourgish: "LU", malagasy: "MG", malawian: "MW", malaysian: "MY",
+  maldivian: "MV", malian: "ML", maltese: "MT", mauritanian: "MR", mauritian: "MU",
+  mexican: "MX", moldovan: "MD", monacan: "MC", monegasque: "MC", mongolian: "MN",
+  montenegrin: "ME", moroccan: "MA", mozambican: "MZ", namibian: "NA", nepalese: "NP",
+  "new zealander": "NZ", kiwi: "NZ", nicaraguan: "NI", nigerien: "NE", nigerian: "NG",
+  "north korean": "KP", "north macedonian": "MK", norwegian: "NO", omani: "OM",
+  pakistani: "PK", panamanian: "PA", paraguayan: "PY", peruvian: "PE",
+  polish: "PL", portuguese: "PT", qatari: "QA", romanian: "RO", russian: "RU",
+  rwandan: "RW", "salvadoran": "SV", samoan: "WS", "saudi": "SA", "saudi arabian": "SA",
+  senegalese: "SN", serbian: "RS", singaporean: "SG", slovak: "SK", slovenian: "SI",
+  somali: "SO", "south african": "ZA", "south korean": "KR", spanish: "ES",
+  "sri lankan": "LK", sudanese: "SD", surinamese: "SR", swedish: "SE", swiss: "CH",
+  syrian: "SY", taiwanese: "TW", tajik: "TJ", tanzanian: "TZ", thai: "TH",
+  togolese: "TG", trinidadian: "TT", tunisian: "TN", turkish: "TR", turkmen: "TM",
+  ugandan: "UG", ukrainian: "UA", uruguayan: "UY", uzbek: "UZ", venezuelan: "VE",
+  vietnamese: "VN", yemeni: "YE", zambian: "ZM", zimbabwean: "ZW",
+  scottish: "GB", welsh: "GB", british: "GB",
+};
+
+/** Get ISO country code from a nationality string, demonym, or country name */
+export function getCountryCode(nationality: string | null | undefined): string | null {
+  if (!nationality) return null;
+  const lower = nationality.toLowerCase().trim();
+
+  // Try demonym first
+  if (DEMONYM_MAP[lower]) return DEMONYM_MAP[lower];
+
+  // Try country name match
+  const match = COUNTRIES.find(c => c.name.toLowerCase() === lower);
+  if (match) return match.code;
+
+  // Try partial match on country name
+  const partial = COUNTRIES.find(c => c.name.toLowerCase().includes(lower) || lower.includes(c.name.toLowerCase()));
+  if (partial) return partial.code;
+
+  return null;
+}

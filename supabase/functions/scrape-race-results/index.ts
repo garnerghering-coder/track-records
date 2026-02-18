@@ -138,15 +138,15 @@ serve(async (req) => {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-2.5-flash",
         messages: [
           {
             role: "system",
-            content: `You are a motorsport data extractor. Today's date is ${today}. Extract structured race results from the provided web page content. Include ALL entries/cars, not just the top finishers. Be thorough and accurate.\n\nCRITICAL RULES:\n- Do NOT use "TBD", "To Be Determined", or any placeholder values for driver names, teams, or positions.\n- If actual data is not available on the page, omit that entry entirely.\n- Only include entries with real driver names and real data.`,
+            content: `You are a motorsport data extractor. Today's date is ${today}. Extract structured race results from the provided web page content.\n\nCRITICAL RULES:\n- Extract EVERY SINGLE entry/car/row from the results table. Do NOT summarize or skip entries.\n- Include ALL entries, not just the top finishers. If there are 60 cars, return 60 entries.\n- Do NOT use "TBD", "To Be Determined", or any placeholder values for driver names, teams, or positions.\n- If actual data is not available on the page, omit that entry entirely.\n- Only include entries with real driver names and real data.\n- Pay careful attention to tables, grids, and structured data on the page.`,
           },
           {
             role: "user",
-            content: `Extract race results from this page content:\n\n${markdown.slice(0, 30000)}`,
+            content: `Extract ALL race results from this page content. Make sure to include every single entry/car listed:\n\n${markdown.slice(0, 80000)}`,
           },
         ],
         tools: [raceResultsTool],
