@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -102,6 +102,7 @@ const Admin = () => {
   const [importSeriesHint, setImportSeriesHint] = useState("");
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [importPdfFile, setImportPdfFile] = useState<File | null>(null);
 
   // Generate Race
   const [generateRaceName, setGenerateRaceName] = useState("");
@@ -466,8 +467,8 @@ const Admin = () => {
   };
 
   const handleImportResults = async () => {
-    if (!importText.trim()) {
-      toast({ title: "Paste race results text first", variant: "destructive" });
+    if (!importText.trim() && !importPdfFile) {
+      toast({ title: "Paste race results text or upload a PDF", variant: "destructive" });
       return;
     }
     setImporting(true);
@@ -475,6 +476,18 @@ const Admin = () => {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
+
+      let pdfBase64: string | undefined;
+      if (importPdfFile) {
+        const buffer = await importPdfFile.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        pdfBase64 = btoa(binary);
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-race-results`,
         {
@@ -485,7 +498,8 @@ const Admin = () => {
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({
-            rawText: importText,
+            rawText: importText || undefined,
+            pdfBase64,
             eventHint: importEventHint || undefined,
             seriesHint: importSeriesHint || undefined,
           }),
@@ -504,6 +518,7 @@ const Admin = () => {
       setImportText("");
       setImportEventHint("");
       setImportSeriesHint("");
+      setImportPdfFile(null);
       fetchPendingEvents();
     } catch (err: any) {
       toast({ title: "Import error", description: err.message, variant: "destructive" });
@@ -1194,7 +1209,38 @@ const Admin = () => {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-card-foreground">Raw Results Text *</Label>
+                  <Label className="text-card-foreground">Upload PDF (optional)</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    <label className="flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-card cursor-pointer hover:bg-muted transition-colors text-sm">
+                      <Upload className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-card-foreground">{importPdfFile ? importPdfFile.name : "Choose PDF file"}</span>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            if (file.size > 20 * 1024 * 1024) {
+                              toast({ title: "File too large", description: "Max 20MB", variant: "destructive" });
+                              return;
+                            }
+                            setImportPdfFile(file);
+                            setImportText(""); // Clear text when PDF is selected
+                          }
+                        }}
+                      />
+                    </label>
+                    {importPdfFile && (
+                      <Button variant="ghost" size="sm" onClick={() => setImportPdfFile(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {!importPdfFile && (
+                <div>
+                  <Label className="text-card-foreground">Or Paste Raw Results Text</Label>
                   <Textarea
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
@@ -1202,7 +1248,8 @@ const Admin = () => {
                     className="min-h-[200px] font-mono text-xs"
                   />
                 </div>
-                <Button onClick={handleImportResults} disabled={importing || !importText.trim()} className="w-full">
+                )}
+                <Button onClick={handleImportResults} disabled={importing || (!importText.trim() && !importPdfFile)} className="w-full">
                   {importing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing with AI…</> : <><Sparkles className="h-4 w-4 mr-2" /> Process with AI</>}
                 </Button>
               </div>
