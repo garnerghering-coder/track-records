@@ -158,9 +158,6 @@ const SearchPage = () => {
                       <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
                         {driver.first_name} {driver.last_name}
                       </h3>
-                      {!driver.is_claimed && (
-                        <Badge variant="secondary" className="text-xs shrink-0">Unclaimed</Badge>
-                      )}
                     </div>
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       {driver.nationality && (
