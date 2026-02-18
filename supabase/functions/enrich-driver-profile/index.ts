@@ -13,8 +13,26 @@ serve(async (req) => {
   }
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+    // AI helper: try Groq first, fall back to Lovable AI on 429
+    async function callAI(body: Record<string, any>): Promise<Response> {
+      const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+      if (GROQ_KEY) {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
+        });
+        if (resp.status !== 429) return resp;
+        console.log("Groq rate limited, falling back to Lovable AI");
+      }
+      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_KEY) throw new Error("No AI provider available");
+      return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
+      });
+    }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -87,18 +105,11 @@ serve(async (req) => {
       const fullName = `${profile.first_name} ${profile.last_name}`;
 
       // Call AI to research this driver using JSON mode (more reliable than tool calling)
-      const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages: [
-            {
-              role: "system",
-              content: `You are a motorsport research assistant. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
+      const aiResponse = await callAI({
+        messages: [
+          {
+            role: "system",
+            content: `You are a motorsport research assistant. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
 
 Fields:
 - "nationality": string or null (e.g. "Danish", "British", "Brazilian")
@@ -111,27 +122,17 @@ Fields:
 - "social_linkedin": string or null (LinkedIn URL)
 
 Only return data you are confident about. If unsure about a field, set it to null.`,
-            },
-            {
-              role: "user",
-              content: `Research the racing driver "${fullName}".`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          max_tokens: 2048,
-        }),
+          },
+          {
+            role: "user",
+            content: `Research the racing driver "${fullName}".`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 2048,
       });
 
       if (!aiResponse.ok) {
-        const status = aiResponse.status;
-        if (status === 429) {
-          results.push({ id: profileId, name: fullName, error: "Rate limited" });
-          continue;
-        }
-        if (status === 401) {
-          results.push({ id: profileId, name: fullName, error: "Invalid API key" });
-          continue;
-        }
         results.push({ id: profileId, name: fullName, error: "AI call failed" });
         continue;
       }
