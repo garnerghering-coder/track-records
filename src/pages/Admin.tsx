@@ -10,11 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Camera } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
-import DriverPhotoUpload from "@/components/DriverPhotoUpload";
+
 import FlagImage from "@/components/FlagImage";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Tables } from "@/integrations/supabase/types";
@@ -64,7 +64,7 @@ const Admin = () => {
   const [driverNationality, setDriverNationality] = useState("");
   const [driverCategory, setDriverCategory] = useState<string>("other");
   const [driverBio, setDriverBio] = useState("");
-  const [driverPhotoUrl, setDriverPhotoUrl] = useState<string | null>(null);
+  
   const [creatingDriver, setCreatingDriver] = useState(false);
   const [raceResults, setRaceResults] = useState<RaceResultRow[]>([]);
 
@@ -75,7 +75,7 @@ const Admin = () => {
   const [editNationality, setEditNationality] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editBio, setEditBio] = useState("");
-  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
+  
   const [saving, setSaving] = useState(false);
 
   // Role management
@@ -115,7 +115,7 @@ const Admin = () => {
 
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
-  const [findingPhotoIds, setFindingPhotoIds] = useState<Set<string>>(new Set());
+  
   const [bulkEnriching, setBulkEnriching] = useState(false);
 
   // Bulk selection
@@ -308,7 +308,7 @@ const Admin = () => {
       nationality: driverNationality || null,
       primary_category: driverCategory as any,
       bio: driverBio || null,
-      photo_url: driverPhotoUrl,
+      
     }).select("id").single();
 
     if (error || !profile) {
@@ -336,7 +336,7 @@ const Admin = () => {
     }
 
     toast({ title: "Driver profile created", description: `${driverFirst} ${driverLast}` });
-    setDriverFirst(""); setDriverLast(""); setDriverNationality(""); setDriverCategory("other"); setDriverBio(""); setDriverPhotoUrl(null);
+    setDriverFirst(""); setDriverLast(""); setDriverNationality(""); setDriverCategory("other"); setDriverBio("");
     setRaceResults([]);
     setCreatingDriver(false);
     fetchDrivers();
@@ -349,7 +349,7 @@ const Admin = () => {
     setEditNationality(d.nationality || "");
     setEditCategory(d.primary_category || "other");
     setEditBio(d.bio || "");
-    setEditPhotoUrl(d.photo_url);
+    
   };
 
   const handleSaveEdit = async () => {
@@ -360,7 +360,7 @@ const Admin = () => {
       nationality: editNationality || null,
       primary_category: editCategory as any,
       bio: editBio || null,
-      photo_url: editPhotoUrl,
+      
     }).eq("id", editingDriver.id);
     setSaving(false);
     if (error) {
@@ -641,39 +641,6 @@ const Admin = () => {
     setEnrichingIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
   };
 
-  const handleFindDriverPhoto = async (driverId: string) => {
-    setFindingPhotoIds(prev => new Set(prev).add(driverId));
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/find-driver-photo`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({ driverProfileId: driverId }),
-        }
-      );
-
-      const result = await response.json();
-      if (!response.ok) {
-        toast({ title: "Photo search failed", description: result.error, variant: "destructive" });
-      } else if (result.photo_url) {
-        toast({ title: "Photo found!", description: "Driver photo has been updated." });
-        fetchDrivers();
-      } else if (result.message) {
-        toast({ title: result.message });
-      } else {
-        toast({ title: "No photo found", description: result.error || "Could not find a suitable photo.", variant: "destructive" });
-      }
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-    setFindingPhotoIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
-  };
 
   const handleBulkEnrich = async () => {
     const needsEnrich = drivers.filter(d => !d.nationality || !d.bio);
@@ -913,10 +880,6 @@ const Admin = () => {
             <div className="max-w-2xl rounded-xl border border-border bg-card p-6">
               <h2 className="font-display text-xl font-bold text-card-foreground mb-4">New Driver Profile</h2>
               <form onSubmit={handleCreateDriver} className="space-y-4">
-                <div>
-                  <Label className="text-card-foreground mb-2 block">Photo</Label>
-                  <DriverPhotoUpload currentUrl={driverPhotoUrl} onUploaded={setDriverPhotoUrl} />
-                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label htmlFor="dFirst" className="text-card-foreground">First Name</Label><Input id="dFirst" value={driverFirst} onChange={(e) => setDriverFirst(e.target.value)} required /></div>
                   <div><Label htmlFor="dLast" className="text-card-foreground">Last Name</Label><Input id="dLast" value={driverLast} onChange={(e) => setDriverLast(e.target.value)} required /></div>
@@ -1038,11 +1001,7 @@ const Admin = () => {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          {d.photo_url ? (
-                            <img src={d.photo_url} alt="" className="h-8 w-8 rounded-full object-cover" />
-                          ) : (
-                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">{d.first_name[0]}{d.last_name[0]}</div>
-                          )}
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">{d.first_name[0]}{d.last_name[0]}</div>
                           <span className="text-card-foreground font-medium">{d.first_name} {d.last_name}</span>
                         </div>
                       </td>
@@ -1055,9 +1014,6 @@ const Admin = () => {
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => handleEnrichDriver(d.id)} disabled={enrichingIds.has(d.id)} title="Enrich with AI">
                             {enrichingIds.has(d.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleFindDriverPhoto(d.id)} disabled={findingPhotoIds.has(d.id)} title="Find photo">
-                            {findingPhotoIds.has(d.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => navigate(`/driver/${d.id}`)}><Eye className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
@@ -1583,10 +1539,6 @@ const Admin = () => {
             <DialogTitle>Edit Driver Profile</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
-            <div>
-              <Label className="text-card-foreground mb-2 block">Photo</Label>
-              <DriverPhotoUpload currentUrl={editPhotoUrl} driverId={editingDriver?.id} onUploaded={setEditPhotoUrl} size="sm" />
-            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-card-foreground">First Name</Label><Input value={editFirst} onChange={(e) => setEditFirst(e.target.value)} required /></div>
               <div><Label className="text-card-foreground">Last Name</Label><Input value={editLast} onChange={(e) => setEditLast(e.target.value)} required /></div>
