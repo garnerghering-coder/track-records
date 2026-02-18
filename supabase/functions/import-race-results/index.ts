@@ -76,7 +76,31 @@ MOTORSPORT INTELLIGENCE RULES:
 - Infer race class from car type, team, and context when not explicitly stated
 - Correct common abbreviations and shorthand in driver names and team names
 - If a car manufacturer is listed but not a team, use your knowledge to fill in the team name
-${eventHint ? ` Event hint: ${eventHint}` : ""}${seriesHint ? ` Series hint: ${seriesHint}` : ""}`;
+${eventHint ? `- Event hint: ${eventHint}` : ""}${seriesHint ? `- Series hint: ${seriesHint}` : ""}
+
+You MUST respond with ONLY a valid JSON object (no markdown, no explanation) matching this exact schema:
+{
+  "event_name": "string",
+  "series_name": "string",
+  "season_year": number,
+  "location": "string or null",
+  "category": "one of: karting, single_seater, gt, touring_car, sports_car, rally, endurance, formula, stock_car, other, or null",
+  "entries": [
+    {
+      "finishing_position": number or null,
+      "class_position": number or null,
+      "car_number": "string or null",
+      "team_name": "string or null",
+      "driver_names": ["array of full driver name strings"],
+      "race_class": "string or null",
+      "laps_completed": number or null,
+      "gap_to_leader": "string or null",
+      "gap_to_class_leader": "string or null",
+      "pit_stops": number or null,
+      "status": "string or null (e.g. Finished, DNF, DNS, DSQ)"
+    }
+  ]
+}`;
 
     const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -86,63 +110,12 @@ ${eventHint ? ` Event hint: ${eventHint}` : ""}${seriesHint ? ` Series hint: ${s
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
+        max_tokens: 8192,
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Extract the race results from this text:\n\n${rawText}` },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "submit_race_results",
-              description: "Submit the extracted race results as structured data",
-              parameters: {
-                type: "object",
-                properties: {
-                  event_name: { type: "string", description: "Name of the race event" },
-                  series_name: { type: "string", description: "Name of the racing series" },
-                  season_year: { type: "number", description: "Year of the season" },
-                  location: { type: ["string", "null"], description: "Location/circuit name" },
-                  category: {
-                    type: ["string", "null"],
-                    enum: [
-                      "karting", "single_seater", "gt", "touring_car", "sports_car",
-                      "rally", "endurance", "formula", "stock_car", "other", null,
-                    ],
-                  },
-                  entries: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        finishing_position: { type: ["number", "null"] },
-                        class_position: { type: ["number", "null"] },
-                        car_number: { type: ["string", "null"] },
-                        team_name: { type: ["string", "null"] },
-                        driver_names: {
-                          type: "array",
-                          items: { type: "string" },
-                          description: "Full name(s) of driver(s) for this entry",
-                        },
-                        race_class: { type: ["string", "null"] },
-                        laps_completed: { type: ["number", "null"] },
-                        gap_to_leader: { type: ["string", "null"] },
-                        gap_to_class_leader: { type: ["string", "null"] },
-                        pit_stops: { type: ["number", "null"] },
-                        status: { type: ["string", "null"], description: "e.g. Finished, DNF, DNS, DSQ" },
-                      },
-                      required: ["driver_names"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["event_name", "series_name", "season_year", "entries"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "submit_race_results" } },
       }),
     });
 
@@ -169,16 +142,25 @@ ${eventHint ? ` Event hint: ${eventHint}` : ""}${seriesHint ? ` Series hint: ${s
     }
 
     const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
-      console.error("No tool call in AI response:", JSON.stringify(aiData));
+    const rawContent = aiData.choices?.[0]?.message?.content;
+    if (!rawContent) {
+      console.error("No content in AI response:", JSON.stringify(aiData));
       return new Response(JSON.stringify({ error: "AI did not return structured results" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const extracted = JSON.parse(toolCall.function.arguments);
+    let extracted;
+    try {
+      extracted = JSON.parse(rawContent);
+    } catch (parseErr) {
+      console.error("Failed to parse AI JSON:", rawContent.substring(0, 500));
+      return new Response(JSON.stringify({ error: "AI returned invalid JSON. Please try again." }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     console.log("Extracted data:", JSON.stringify(extracted));
 
     // Fetch all driver profiles for matching
