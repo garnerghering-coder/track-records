@@ -166,6 +166,57 @@ const Admin = () => {
   const [pendingEvents, setPendingEvents] = useState<PendingEvent[]>([]);
   const [approvingEntries, setApprovingEntries] = useState<Set<string>>(new Set());
 
+  // Inline editing for pending entries
+  const [editingCell, setEditingCell] = useState<{ entryId: string; field: string } | null>(null);
+  const [editingCellValue, setEditingCellValue] = useState("");
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventFields, setEditingEventFields] = useState<{ event_name: string; series_name: string; season_year: string; location: string; category: string }>({ event_name: "", series_name: "", season_year: "", location: "", category: "" });
+
+  const startEditCell = (entryId: string, field: string, currentValue: string | number | null) => {
+    setEditingCell({ entryId, field });
+    setEditingCellValue(currentValue?.toString() ?? "");
+  };
+
+  const handleUpdateEntry = async () => {
+    if (!editingCell) return;
+    const { entryId, field } = editingCell;
+    let value: any = editingCellValue.trim() || null;
+    if (field === "finishing_position" || field === "class_position" || field === "laps_completed" || field === "pit_stops") {
+      value = value ? parseInt(value) : null;
+    }
+    const { error } = await supabase.from("race_entries").update({ [field]: value }).eq("id", entryId);
+    if (error) {
+      toast({ title: "Error saving", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Entry updated" });
+      fetchPendingEvents();
+    }
+    setEditingCell(null);
+  };
+
+  const startEditEvent = (pe: PendingEvent) => {
+    setEditingEventId(pe.id);
+    setEditingEventFields({ event_name: pe.event_name, series_name: pe.series_name, season_year: pe.season_year.toString(), location: pe.location || "", category: pe.category || "other" });
+  };
+
+  const handleUpdateEvent = async () => {
+    if (!editingEventId) return;
+    const { error } = await supabase.from("race_events").update({
+      event_name: editingEventFields.event_name,
+      series_name: editingEventFields.series_name,
+      season_year: parseInt(editingEventFields.season_year) || new Date().getFullYear(),
+      location: editingEventFields.location || null,
+      category: (editingEventFields.category || "other") as any,
+    }).eq("id", editingEventId);
+    if (error) {
+      toast({ title: "Error saving event", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Event updated" });
+      fetchPendingEvents();
+    }
+    setEditingEventId(null);
+  };
+
   useEffect(() => { checkAdmin(); }, []);
 
   const checkAdmin = async () => {
@@ -1465,12 +1516,33 @@ const Admin = () => {
 
               {pendingEvents.map((pe) => (
                 <div key={pe.id} className="rounded-xl border border-border bg-card overflow-hidden">
-                  <div className="p-4 border-b border-border flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-card-foreground">{pe.event_name}</h3>
-                      <p className="text-sm text-muted-foreground">{pe.series_name} · {pe.season_year}{pe.location ? ` · ${pe.location}` : ""}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
+                  <div className="p-4 border-b border-border flex items-center justify-between flex-wrap gap-2">
+                    {editingEventId === pe.id ? (
+                      <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-2 mr-4">
+                        <Input value={editingEventFields.event_name} onChange={(e) => setEditingEventFields(f => ({ ...f, event_name: e.target.value }))} placeholder="Event Name" className="h-8 text-sm" />
+                        <Input value={editingEventFields.series_name} onChange={(e) => setEditingEventFields(f => ({ ...f, series_name: e.target.value }))} placeholder="Series" className="h-8 text-sm" />
+                        <Input value={editingEventFields.season_year} onChange={(e) => setEditingEventFields(f => ({ ...f, season_year: e.target.value }))} placeholder="Year" className="h-8 text-sm w-20" type="number" />
+                        <Input value={editingEventFields.location} onChange={(e) => setEditingEventFields(f => ({ ...f, location: e.target.value }))} placeholder="Location" className="h-8 text-sm" />
+                        <Select value={editingEventFields.category} onValueChange={(v) => setEditingEventFields(f => ({ ...f, category: v }))}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>{RACING_CATEGORIES.map(cat => <SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div>
+                        <h3 className="font-semibold text-card-foreground">{pe.event_name}</h3>
+                        <p className="text-sm text-muted-foreground">{pe.series_name} · {pe.season_year}{pe.location ? ` · ${pe.location}` : ""}</p>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {editingEventId === pe.id ? (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => setEditingEventId(null)} className="gap-1"><X className="h-3 w-3" /> Cancel</Button>
+                          <Button size="sm" onClick={handleUpdateEvent} className="gap-1"><Check className="h-3 w-3" /> Save</Button>
+                        </>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => startEditEvent(pe)} className="gap-1"><Pencil className="h-3 w-3" /> Edit</Button>
+                      )}
                       <Badge variant="secondary">{pe.pendingCount} pending</Badge>
                       <Button
                         size="sm"
@@ -1509,25 +1581,69 @@ const Admin = () => {
                       <tbody>
                         {pe.entries
                           .sort((a: any, b: any) => (a.finishing_position || 999) - (b.finishing_position || 999))
-                          .map((entry: any) => (
-                          <tr key={entry.id} className="border-b border-border/50">
-                            <td className="px-3 py-2 text-card-foreground font-medium">{entry.finishing_position ?? "—"}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{entry.car_number ?? "—"}</td>
-                            <td className="px-3 py-2 text-card-foreground">{entry.team_name ?? "—"}</td>
-                            <td className="px-3 py-2 text-card-foreground">
-                              {entry.race_entry_drivers?.length > 0
-                                ? entry.race_entry_drivers.map((red: any) =>
-                                    red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : "?"
-                                  ).join(", ")
-                                : <span className="text-muted-foreground italic">No matched drivers</span>
+                          .map((entry: any) => {
+                            const isEditing = (field: string) => editingCell?.entryId === entry.id && editingCell?.field === field;
+                            const renderCell = (field: string, value: any, extraClass?: string) => {
+                              if (isEditing(field)) {
+                                if (field === "status") {
+                                  return (
+                                    <td className="px-1 py-1">
+                                      <div className="flex items-center gap-1">
+                                        <Select value={editingCellValue} onValueChange={(v) => setEditingCellValue(v)}>
+                                          <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                                          <SelectContent>
+                                            {["Finished", "DNF", "DNS", "DSQ"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                          </SelectContent>
+                                        </Select>
+                                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingCell(null)}><X className="h-3 w-3" /></Button>
+                                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={handleUpdateEntry}><Check className="h-3 w-3" /></Button>
+                                      </div>
+                                    </td>
+                                  );
+                                }
+                                return (
+                                  <td className="px-1 py-1">
+                                    <Input
+                                      value={editingCellValue}
+                                      onChange={(e) => setEditingCellValue(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === "Enter") handleUpdateEntry(); if (e.key === "Escape") setEditingCell(null); }}
+                                      onBlur={handleUpdateEntry}
+                                      autoFocus
+                                      className="h-7 text-xs w-full min-w-[60px]"
+                                      type={field === "finishing_position" ? "number" : "text"}
+                                    />
+                                  </td>
+                                );
                               }
-                            </td>
-                            <td className="px-3 py-2 text-muted-foreground">{entry.race_class ?? "—"}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{entry.gap_to_leader ?? "—"}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{entry.status ?? "—"}</td>
-                            <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">{entry.notes ?? "—"}</td>
-                          </tr>
-                        ))}
+                              return (
+                                <td
+                                  className={`px-3 py-2 cursor-pointer hover:bg-accent/50 rounded transition-colors ${extraClass || "text-muted-foreground"}`}
+                                  onClick={() => startEditCell(entry.id, field, value)}
+                                >
+                                  {value ?? "—"}
+                                </td>
+                              );
+                            };
+                            return (
+                              <tr key={entry.id} className="border-b border-border/50">
+                                {renderCell("finishing_position", entry.finishing_position, "text-card-foreground font-medium")}
+                                {renderCell("car_number", entry.car_number)}
+                                {renderCell("team_name", entry.team_name, "text-card-foreground")}
+                                <td className="px-3 py-2 text-card-foreground">
+                                  {entry.race_entry_drivers?.length > 0
+                                    ? entry.race_entry_drivers.map((red: any) =>
+                                        red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : "?"
+                                      ).join(", ")
+                                    : <span className="text-muted-foreground italic">No matched drivers</span>
+                                  }
+                                </td>
+                                {renderCell("race_class", entry.race_class)}
+                                {renderCell("gap_to_leader", entry.gap_to_leader)}
+                                {renderCell("status", entry.status)}
+                                {renderCell("notes", entry.notes)}
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
