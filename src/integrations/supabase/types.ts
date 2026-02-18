@@ -160,6 +160,153 @@ export type Database = {
           },
         ]
       }
+      race_entries: {
+        Row: {
+          car_number: string | null
+          class_position: number | null
+          created_at: string
+          finishing_position: number | null
+          gap_to_class_leader: string | null
+          gap_to_leader: string | null
+          id: string
+          laps_completed: number | null
+          notes: string | null
+          organization_id: string | null
+          pit_stops: number | null
+          race_class: string | null
+          race_event_id: string
+          status: string | null
+          team_name: string | null
+          verification_status: Database["public"]["Enums"]["verification_status"]
+        }
+        Insert: {
+          car_number?: string | null
+          class_position?: number | null
+          created_at?: string
+          finishing_position?: number | null
+          gap_to_class_leader?: string | null
+          gap_to_leader?: string | null
+          id?: string
+          laps_completed?: number | null
+          notes?: string | null
+          organization_id?: string | null
+          pit_stops?: number | null
+          race_class?: string | null
+          race_event_id: string
+          status?: string | null
+          team_name?: string | null
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+        }
+        Update: {
+          car_number?: string | null
+          class_position?: number | null
+          created_at?: string
+          finishing_position?: number | null
+          gap_to_class_leader?: string | null
+          gap_to_leader?: string | null
+          id?: string
+          laps_completed?: number | null
+          notes?: string | null
+          organization_id?: string | null
+          pit_stops?: number | null
+          race_class?: string | null
+          race_event_id?: string
+          status?: string | null
+          team_name?: string | null
+          verification_status?: Database["public"]["Enums"]["verification_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_entries_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_entries_race_event_id_fkey"
+            columns: ["race_event_id"]
+            isOneToOne: false
+            referencedRelation: "race_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_entry_drivers: {
+        Row: {
+          created_at: string
+          driver_profile_id: string
+          id: string
+          race_entry_id: string
+        }
+        Insert: {
+          created_at?: string
+          driver_profile_id: string
+          id?: string
+          race_entry_id: string
+        }
+        Update: {
+          created_at?: string
+          driver_profile_id?: string
+          id?: string
+          race_entry_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "race_entry_drivers_driver_profile_id_fkey"
+            columns: ["driver_profile_id"]
+            isOneToOne: false
+            referencedRelation: "driver_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_entry_drivers_race_entry_id_fkey"
+            columns: ["race_entry_id"]
+            isOneToOne: false
+            referencedRelation: "race_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      race_events: {
+        Row: {
+          category: Database["public"]["Enums"]["racing_category"] | null
+          created_at: string
+          event_date: string | null
+          event_name: string
+          id: string
+          location: string | null
+          notes: string | null
+          season_year: number
+          series_name: string
+          updated_at: string
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          event_date?: string | null
+          event_name: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          season_year: number
+          series_name: string
+          updated_at?: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          event_date?: string | null
+          event_name?: string
+          id?: string
+          location?: string | null
+          notes?: string | null
+          season_year?: number
+          series_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       race_results: {
         Row: {
           category: Database["public"]["Enums"]["racing_category"] | null

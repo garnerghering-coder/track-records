@@ -3,10 +3,10 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search as SearchIcon, CheckCircle, Trophy } from "lucide-react";
+import { Search as SearchIcon, Trophy, MapPin, Calendar } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { getFlagForCountry } from "@/lib/countries";
 
 const categoryOptions = [
   { value: "all", label: "All Categories" },
@@ -26,42 +26,32 @@ const categoryLabels: Record<string, string> = Object.fromEntries(
   categoryOptions.filter(c => c.value !== "all").map(c => [c.value, c.label])
 );
 
-interface ResultRow {
+interface RaceEvent {
   id: string;
-  event_name: string | null;
+  event_name: string;
   series_name: string;
   season_year: number;
   category: string | null;
-  finishing_position: number | null;
-  championship_position: number | null;
-  notes: string | null;
-  verification_status: string;
-  driver_profiles: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    nationality: string | null;
-    photo_url: string | null;
-    primary_category: string | null;
-  };
+  location: string | null;
+  event_date: string | null;
 }
 
 const ResultsPage = () => {
-  const [results, setResults] = useState<ResultRow[]>([]);
+  const [events, setEvents] = useState<RaceEvent[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [yearFilter, setYearFilter] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchResults = async () => {
+    const fetchEvents = async () => {
       setLoading(true);
 
       let query = supabase
-        .from("race_results")
-        .select("id, event_name, series_name, season_year, category, finishing_position, championship_position, notes, verification_status, driver_profiles(id, first_name, last_name, nationality, photo_url, primary_category)")
+        .from("race_events")
+        .select("id, event_name, series_name, season_year, category, location, event_date")
         .order("season_year", { ascending: false })
-        .order("created_at", { ascending: false });
+        .order("event_date", { ascending: false });
 
       if (category !== "all") {
         query = query.eq("category", category as any);
@@ -71,37 +61,24 @@ const ResultsPage = () => {
       }
 
       const { data } = await query.limit(200);
+      let filtered = (data as RaceEvent[]) ?? [];
 
-      let filtered = (data as unknown as ResultRow[]) ?? [];
-
-      // Client-side filter by driver name or event/series name
       if (search) {
         const lower = search.toLowerCase();
-        filtered = filtered.filter(r => {
-          const driverName = `${r.driver_profiles.first_name} ${r.driver_profiles.last_name}`.toLowerCase();
-          const event = (r.event_name || "").toLowerCase();
-          const series = r.series_name.toLowerCase();
-          return driverName.includes(lower) || event.includes(lower) || series.includes(lower);
-        });
+        filtered = filtered.filter(e =>
+          e.event_name.toLowerCase().includes(lower) ||
+          e.series_name.toLowerCase().includes(lower) ||
+          (e.location || "").toLowerCase().includes(lower)
+        );
       }
 
-      setResults(filtered);
+      setEvents(filtered);
       setLoading(false);
     };
 
-    const debounce = setTimeout(fetchResults, 300);
+    const debounce = setTimeout(fetchEvents, 300);
     return () => clearTimeout(debounce);
   }, [search, category, yearFilter]);
-
-  // Group by event
-  const grouped = results.reduce<Record<string, ResultRow[]>>((acc, r) => {
-    const key = `${r.season_year}|${r.series_name}|${r.event_name || ""}`;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(r);
-    return acc;
-  }, {});
-
-  const groupKeys = Object.keys(grouped);
 
   return (
     <div className="min-h-screen bg-background">
@@ -116,7 +93,7 @@ const ResultsPage = () => {
             Race Results
           </h1>
           <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-            Search race results by driver name, event, series, category, or year.
+            Browse race events and view detailed classified results.
           </p>
         </div>
       </section>
@@ -127,7 +104,7 @@ const ResultsPage = () => {
           <div className="relative flex-1">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by driver, event, or series…"
+              placeholder="Search by event, series, or location…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -152,86 +129,45 @@ const ResultsPage = () => {
           />
         </div>
 
-        {/* Results */}
+        {/* Events list */}
         {loading ? (
-          <p className="text-center text-muted-foreground py-12">Loading results…</p>
-        ) : groupKeys.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">Loading events…</p>
+        ) : events.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-muted-foreground">No race results found matching your criteria.</p>
+            <p className="text-muted-foreground">No race events found matching your criteria.</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {groupKeys.map(key => {
-              const entries = grouped[key];
-              const first = entries[0];
-              const catLabel = first.category ? (categoryLabels[first.category] || first.category) : "";
-              // Sort by finishing position
-              const sorted = [...entries].sort((a, b) => (a.finishing_position ?? 999) - (b.finishing_position ?? 999));
-
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {events.map(ev => {
+              const catLabel = ev.category ? (categoryLabels[ev.category] || ev.category) : null;
               return (
-                <div key={key} className="rounded-lg border border-border bg-card overflow-hidden">
-                  <div className="px-5 py-4 border-b border-border bg-muted/30">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <Trophy className="h-5 w-5 text-primary shrink-0" />
-                      <h2 className="font-display text-lg font-semibold text-card-foreground">
-                        {first.event_name || first.series_name}
-                      </h2>
-                      {first.event_name && (
-                        <span className="text-sm text-muted-foreground">• {first.series_name}</span>
-                      )}
-                      <span className="text-sm text-muted-foreground">• {first.season_year}</span>
+                <Link
+                  key={ev.id}
+                  to={`/event/${ev.id}`}
+                  className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start gap-3">
+                    <Trophy className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
+                        {ev.event_name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-0.5 truncate">{ev.series_name}</p>
+                      <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+                        <span>{ev.season_year}</span>
+                        {ev.location && (
+                          <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {ev.location}</span>
+                        )}
+                        {ev.event_date && (
+                          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(ev.event_date).toLocaleDateString()}</span>
+                        )}
+                      </div>
                       {catLabel && (
-                        <span className="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{catLabel}</span>
+                        <Badge variant="secondary" className="mt-2 text-xs">{catLabel}</Badge>
                       )}
                     </div>
                   </div>
-                  <div className="divide-y divide-border/50">
-                    {sorted.map(r => {
-                      const flag = getFlagForCountry(r.driver_profiles.nationality);
-                      return (
-                        <Link
-                          key={r.id}
-                          to={`/driver/${r.driver_profiles.id}`}
-                          className="flex items-center gap-4 px-5 py-3 hover:bg-muted/30 transition-colors"
-                        >
-                          <div className="w-8 text-center shrink-0">
-                            {r.finishing_position != null ? (
-                              <span className={`font-display text-lg font-bold ${r.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
-                                {r.finishing_position}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">—</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {r.driver_profiles.photo_url ? (
-                              <img src={r.driver_profiles.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                            ) : (
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                                {r.driver_profiles.first_name[0]}{r.driver_profiles.last_name[0]}
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <span className="text-sm font-medium text-card-foreground">
-                                {flag && <span className="mr-1">{flag}</span>}
-                                {r.driver_profiles.first_name} {r.driver_profiles.last_name}
-                              </span>
-                            </div>
-                          </div>
-                          {r.championship_position != null && (
-                            <span className="text-xs text-muted-foreground shrink-0">Champ P{r.championship_position}</span>
-                          )}
-                          {r.verification_status === "verified" && (
-                            <CheckCircle className="h-4 w-4 text-primary shrink-0" />
-                          )}
-                          {r.notes && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[140px] hidden sm:block">{r.notes}</span>
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
+                </Link>
               );
             })}
           </div>

@@ -90,6 +90,8 @@ const DriverProfilePage = () => {
     setIsAdmin(!!data && data.length > 0);
   };
 
+  const [eventResults, setEventResults] = useState<any[]>([]);
+
   const fetchData = async () => {
     if (!id) return;
     const [profileRes, resultsRes] = await Promise.all([
@@ -98,6 +100,19 @@ const DriverProfilePage = () => {
     ]);
     setProfile(profileRes.data);
     setResults(resultsRes.data ?? []);
+
+    // Fetch events from new tables
+    const { data: junctions } = await supabase
+      .from("race_entry_drivers")
+      .select("race_entry_id, race_entries(id, race_event_id, team_name, car_number, race_class, finishing_position, class_position, laps_completed, status, race_events(id, event_name, series_name, season_year, category, location, event_date))")
+      .eq("driver_profile_id", id);
+
+    const evResults = (junctions || [])
+      .map((j: any) => j.race_entries)
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0));
+    setEventResults(evResults);
+
     setLoading(false);
   };
 
@@ -452,6 +467,45 @@ const DriverProfilePage = () => {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {/* Event-based results from new tables */}
+          {eventResults.length > 0 && (
+            <div className="mt-8">
+              <h2 className="font-display text-xl font-bold text-foreground mb-4">Event Results</h2>
+              <div className="space-y-3">
+                {eventResults.map((entry: any) => {
+                  const ev = entry.race_events;
+                  if (!ev) return null;
+                  const catLabel = ev.category ? (categoryLabels[ev.category] || ev.category) : null;
+                  return (
+                    <Link
+                      key={entry.id}
+                      to={`/event/${ev.id}`}
+                      className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-colors"
+                    >
+                      <div className="w-10 text-center shrink-0">
+                        {entry.finishing_position != null ? (
+                          <span className={`font-display text-lg font-bold ${entry.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
+                            P{entry.finishing_position}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-card-foreground truncate">{ev.event_name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{ev.series_name} • {ev.season_year}</p>
+                      </div>
+                      {entry.team_name && <span className="text-xs text-muted-foreground hidden sm:block">{entry.team_name}</span>}
+                      {entry.car_number && <span className="text-xs font-mono text-muted-foreground">#{entry.car_number}</span>}
+                      {entry.race_class && <Badge variant="secondary" className="text-xs">{entry.race_class}</Badge>}
+                      {catLabel && <Badge variant="secondary" className="text-xs hidden sm:inline-flex">{catLabel}</Badge>}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
