@@ -1,69 +1,82 @@
 
 
-## Remove Verified Checks + Fix Enrichment + Auto-Enrich on Import
+## Expand Abbreviated Driver Names Everywhere
 
-### 1. Remove Verified Checks from Search Page
+### Problem
+Race results often list drivers as "F. Nasr" instead of "Felipe Nasr". Currently the system stores that literally as `first_name: "F."`, and it stays that way forever. Additionally, "F. Nasr" fails to match an existing "Felipe Nasr" in the database, creating duplicates.
 
-Remove the "verified results" count logic from `src/pages/Search.tsx`:
-- Delete the query to `race_results` that filters by `verification_status = "verified"`
-- Remove the `verified_count` property from driver cards
-- Remove the green checkmark badge showing "X verified results"
+### Changes
 
-Also remove from `src/pages/DriverProfile.tsx` any verification badge filtering if present (the `VerificationBadge` component stays since it shows status, but we stop using it as a gate).
+#### 1. AI Import: Tell the AI to expand abbreviated names (import-race-results)
 
-### 2. Fix Enrichment Quality Issues
+Update the system prompt in `import-race-results/index.ts` to add a rule:
+- "ALWAYS expand abbreviated first names to their full form. For example, 'F. Nasr' should become 'Felipe Nasr', 'S. Bourdais' should become 'Sebastien Bourdais'. Use your motorsport knowledge to determine the correct full name."
 
-The AI sometimes returns the literal string `"null"` instead of JSON `null`. For example: `"nationality":"null"`. The code treats this as a valid value and writes it to the database.
+This handles the problem at the source -- most abbreviated names in race results belong to well-known drivers the AI already knows.
 
-**Fix in `enrich-driver-profile/index.ts`:**
-- After parsing the AI JSON, sanitize all fields: convert string `"null"`, `"unknown"`, `"N/A"`, empty strings to actual `null`
-- Improve the system prompt to be more aggressive about finding data -- remove "Only return data you are confident about" and instead tell the AI to try harder, use context clues from the driver name, and provide best-effort answers
-- Increase `max_tokens` to 4096 (currently 2048) to give the AI more room
+#### 2. AI Import: Better matching for abbreviated names (import-race-results)
 
-### 3. Auto-Enrich New Drivers on Import
+Even after the AI expands names, some may slip through. Add matching logic so "F. Nasr" matches an existing "Felipe Nasr":
+- When exact and partial matches fail, check if the incoming name looks abbreviated (first part is 1-2 chars or ends with a dot)
+- If so, check if any existing driver's last name matches AND their first name starts with the same letter
+- If exactly one match is found, use it
 
-When `import-race-results` creates new driver profiles (lines 289-303), it currently just inserts a bare `first_name` + `last_name`. After the import completes, it should automatically trigger enrichment for all newly created profiles.
+#### 3. Enrichment: Resolve abbreviated first names (enrich-driver-profile)
 
-**Changes to `import-race-results/index.ts`:**
-- After the import loop finishes, collect all newly created driver profile IDs
-- Call the `enrich-driver-profile` edge function internally (or inline the enrichment logic) for each new driver
-- This way every new driver gets enriched immediately without admin intervention
-
-The simplest approach: after the import response is built, make an internal HTTP call to the enrich function with the list of new driver IDs. Since the import already runs as an admin, it can pass the same auth token.
+Update the enrichment function to also ask the AI for the driver's full first name, and update `first_name` if the current one looks abbreviated (1-2 characters or ends with "."):
+- Add `"full_first_name"` to the AI response schema
+- After enrichment, if `profile.first_name` matches the pattern of an abbreviation (e.g. "F.", "F", "Ph.") AND the AI returned a `full_first_name`, update `first_name` in the database
 
 ### Technical Details
 
-**Search.tsx changes:**
-- Remove lines 59-75 (verified counts query)
-- Remove `verified_count` from driver type and card rendering
-- Remove the `CheckCircle` import if unused
+**import-race-results/index.ts -- System prompt addition (around line 99):**
+```
+- ALWAYS expand abbreviated first names to their full form using your motorsport knowledge.
+  Examples: "F. Nasr" -> "Felipe Nasr", "S. Bourdais" -> "Sebastien Bourdais", 
+  "K. Magnussen" -> "Kevin Magnussen". Never leave a name as just an initial.
+```
 
-**enrich-driver-profile/index.ts changes:**
-- Add sanitization after JSON parse:
+**import-race-results/index.ts -- Abbreviated name matching (after line 286):**
+
+After the existing partial match fails, add a new check:
 ```typescript
-// Sanitize string "null" values
-for (const key of Object.keys(enriched)) {
-  if (typeof enriched[key] === "string" && 
-      ["null", "unknown", "n/a", ""].includes(enriched[key].toLowerCase().trim())) {
-    enriched[key] = null;
+// Try abbreviated match: "F. Nasr" -> matches "Felipe Nasr"
+const firstPart = parts[0].replace(".", "");
+if (firstPart.length <= 2) {
+  const lastPart = parts[parts.length - 1];
+  const candidates: string[] = [];
+  let candidateId = "";
+  for (const [key, driverId] of driverMap.entries()) {
+    const keyParts = key.split(" ");
+    const keyLast = keyParts[keyParts.length - 1];
+    const keyFirst = keyParts[0];
+    if (keyLast === lastPart && keyFirst.startsWith(firstPart.toLowerCase())) {
+      candidates.push(key);
+      candidateId = driverId;
+    }
+  }
+  if (candidates.length === 1) {
+    matchedDriverIds.push(candidateId);
+    matchedCount++;
+    found = true;
   }
 }
 ```
-- Update system prompt to be more assertive about finding data
 
-**import-race-results/index.ts changes:**
-- After the import loop, if `createdCount > 0`, call the enrich function:
+**enrich-driver-profile/index.ts -- Add full_first_name to schema (line 118 area):**
+
+Add to the AI prompt fields:
+```
+- "full_first_name": string or null (the driver's full first name, especially important 
+  if the stored name is abbreviated like "F." or "S.")
+```
+
+Add to the update logic (after line 182):
 ```typescript
-if (createdDriverIds.length > 0) {
-  // Fire-and-forget enrichment for new drivers
-  fetch(`${SUPABASE_URL}/functions/v1/enrich-driver-profile`, {
-    method: "POST",
-    headers: {
-      Authorization: authHeader,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ driverProfileIds: createdDriverIds }),
-  }).catch(err => console.error("Auto-enrich failed:", err));
+// Fix abbreviated first names
+const isAbbreviated = profile.first_name.length <= 2 || profile.first_name.endsWith(".");
+if (isAbbreviated && enriched.full_first_name && enriched.full_first_name.length > 2) {
+  updates.first_name = enriched.full_first_name;
 }
 ```
 
