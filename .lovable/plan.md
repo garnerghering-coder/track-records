@@ -1,79 +1,73 @@
 
 
-## Fixes and New Features
+## Smarter AI Automation: Auto-Enrich Drivers and Auto-Generate Races
 
-### 1. Prevent Duplicate Race Events from AI Import
+### Overview
 
-**Problem:** When importing Rolex 24 results, the AI created two separate events with different categories (endurance vs sports_car).
+Two new backend functions that use AI to do the heavy lifting, so you barely need to type anything:
 
-**Fix:** Update the edge function (`supabase/functions/import-race-results/index.ts`) to check for an existing event with the same name, series, and year before inserting. If a match is found, add entries to the existing event instead of creating a new one. This prevents duplicates from partial imports or retries.
+1. **Auto-Enrich Driver Profiles** -- Whenever a driver is created (via import or manually), an AI function researches and fills in nationality, bio, primary category, date of birth, and social links automatically.
 
-### 2. Rename "Event Results" to "Race Results" on Driver Profile
+2. **Auto-Generate Race from Name** -- Enter just a race name (e.g. "2025 Rolex 24 at Daytona") and the AI researches and generates the full event with all entries, drivers, positions, teams, and classes -- all landing in the pending queue for review.
 
-**Problem:** On the driver profile page, results from the new tables show under a heading called "Event Results" separate from "Race Results."
+### Feature 1: Auto-Enrich Driver Profiles
 
-**Fix:** In `src/pages/DriverProfile.tsx`, merge both result sections under a single "Race Results" heading. The event-based results will be displayed alongside (or below) the legacy race_results data, all under the same heading.
+**How it works:**
+- New edge function `enrich-driver-profile` that takes a driver profile ID
+- Calls Lovable AI (Gemini Flash) with the driver's name and asks it to research and return: nationality, a short bio, date of birth, primary racing category, and social media URLs
+- Updates the driver profile with the AI-generated data (only fills in fields that are currently empty)
+- Called automatically after the import function creates new drivers, and also available as a manual "Enrich with AI" button in the Admin panel on any driver
 
-### 3. Add "All Races" Tab to Admin Panel
+**Admin UI changes:**
+- Add a sparkle/magic button next to each driver in the "All Drivers" tab that triggers enrichment
+- Add a "Bulk Enrich" button that enriches all drivers missing key info (nationality, bio, etc.)
+- After import completes, automatically enrich all newly created driver profiles
 
-**Problem:** There is no way for admins to browse all race events in the admin panel.
+### Feature 2: Auto-Generate Race from Name
 
-**Fix:** Add a new "All Races" tab in `src/pages/Admin.tsx` that lists all race events from the `race_events` table, similar to the "All Drivers" tab. Each row shows event name, series, year, category, location, entry count. Actions include: view (navigate to `/event/:id`), delete event (with confirmation).
+**How it works:**
+- New edge function `generate-race-event` that takes just a race/event name string
+- Calls Lovable AI with a prompt like: "Research the race event '[name]'. Return the full results including all entries with driver names, finishing positions, teams, car numbers, classes, gaps, laps, and status."
+- Uses the same tool-calling schema as the import function for structured output
+- Reuses the same database insertion logic: creates/finds the event, creates entries, matches/creates driver profiles, links everything
+- Everything lands as "pending" for admin review
 
-### 4. Add "Report" Button to Races and Driver Profiles
-
-**Problem:** Users cannot report incorrect information on driver profiles or race event pages.
-
-**Fix:**
-- Create a new `reports` database table to store user reports
-- Add a "Report" button on both the Event Detail page (`src/pages/EventDetail.tsx`) and the Driver Profile page (`src/pages/DriverProfile.tsx`)
-- Clicking opens a dialog where the user describes the issue
-- Reports appear in a new "Reports" tab in the Admin panel for review
+**Admin UI changes:**
+- Replace (or supplement) the current AI Import text area with a simpler "Generate Race" input: just type a race name and click "Generate"
+- The existing raw-text import stays available as an "Advanced Import" option for when you have timing sheet data to paste
+- Add the generated event to the pending queue automatically
 
 ### Technical Details
 
-**Database migration -- new `reports` table:**
-```sql
-CREATE TABLE public.reports (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  report_type text NOT NULL, -- 'driver' or 'event'
-  target_id uuid NOT NULL,   -- driver_profile.id or race_event.id
-  reporter_id uuid,          -- auth user id (nullable for anonymous)
-  message text NOT NULL,
-  status text NOT NULL DEFAULT 'pending', -- pending, reviewed, dismissed
-  reviewed_by uuid,
-  reviewed_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+**New edge function: `supabase/functions/enrich-driver-profile/index.ts`**
+- Accepts `{ driverProfileId: string }` (or `{ driverProfileIds: string[] }` for bulk)
+- Requires admin auth (same pattern as import function)
+- Calls Lovable AI with tool calling, tool schema:
+  - `nationality` (string, e.g. "Danish")
+  - `bio` (string, 2-3 sentence description of the driver's career)
+  - `date_of_birth` (string, ISO date or null)
+  - `primary_category` (enum matching existing racing categories)
+  - `social_website`, `social_instagram`, `social_twitter`, `social_linkedin` (URLs or null)
+- Updates `driver_profiles` row, only overwriting fields that are currently null/empty
+- Returns the enriched data so the UI can show what changed
 
-ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
-
--- Anyone can submit a report
-CREATE POLICY "Anyone can insert reports" ON public.reports
-  FOR INSERT WITH CHECK (true);
-
--- Users can view own reports
-CREATE POLICY "Users can view own reports" ON public.reports
-  FOR SELECT USING (reporter_id = auth.uid());
-
--- Admins can view all reports
-CREATE POLICY "Admins can view all reports" ON public.reports
-  FOR SELECT USING (has_role(auth.uid(), 'admin'));
-
--- Admins can update reports
-CREATE POLICY "Admins can update reports" ON public.reports
-  FOR UPDATE USING (has_role(auth.uid(), 'admin'));
-
--- Admins can delete reports
-CREATE POLICY "Admins can delete reports" ON public.reports
-  FOR DELETE USING (has_role(auth.uid(), 'admin'));
-```
+**New edge function: `supabase/functions/generate-race-event/index.ts`**
+- Accepts `{ eventName: string }`
+- Requires admin auth
+- Calls Lovable AI with a research prompt and the same `submit_race_results` tool schema used by import
+- Reuses the same DB insertion logic: check for existing event, create entries, match/create drivers, link via junction table
+- After inserting, calls the enrich function for any newly created drivers
+- Returns event ID and summary
 
 **Files modified:**
-- `supabase/functions/import-race-results/index.ts` -- Add duplicate event detection (check by event_name + series_name + season_year before inserting)
-- `src/pages/DriverProfile.tsx` -- Rename "Event Results" heading to merge under "Race Results"; add Report button with dialog
-- `src/pages/EventDetail.tsx` -- Add Report button with dialog
-- `src/pages/Admin.tsx` -- Add "All Races" tab with event listing and delete; add "Reports" tab showing pending reports with dismiss/review actions; fetch `race_events` and `reports` on load
+- `src/pages/Admin.tsx` -- Add "Generate Race" input field in the AI Import tab (simple name-only input above the existing text area); add "Enrich" button per driver in All Drivers tab; add "Bulk Enrich" button; wire up the new edge function calls
+- `supabase/config.toml` -- Register two new functions with `verify_jwt = false`
+
+**Files created:**
+- `supabase/functions/enrich-driver-profile/index.ts`
+- `supabase/functions/generate-race-event/index.ts`
+
+**No database changes needed** -- all fields already exist on `driver_profiles` and `race_events`.
 
 **No new dependencies needed.**
 
