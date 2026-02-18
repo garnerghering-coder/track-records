@@ -8,7 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 
 type AuthMode = "login" | "signup";
-type RoleChoice = "driver" | "team_sponsor";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -16,12 +15,10 @@ const Auth = () => {
   const { toast } = useToast();
 
   const [mode, setMode] = useState<AuthMode>(searchParams.get("signup") ? "signup" : "login");
-  const [role, setRole] = useState<RoleChoice>(searchParams.get("role") === "team" ? "team_sponsor" : "driver");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [orgName, setOrgName] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -50,16 +47,11 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
-    const metadata: Record<string, string> = { role, first_name: firstName, last_name: lastName };
-    if (role === "team_sponsor" && orgName) {
-      metadata.org_name = orgName;
-    }
-
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: metadata,
+        data: { first_name: firstName, last_name: lastName },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -83,60 +75,22 @@ const Auth = () => {
                 {mode === "login" ? "Welcome Back" : "Join TrackRecord"}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "login" ? "Sign in to your account" : "Create your account to get started"}
+                {mode === "login" ? "Sign in to your account" : "Create your account and start contributing"}
               </p>
             </div>
 
-            {mode === "signup" && (
-              <div className="mb-6">
-                <Label className="text-sm font-medium text-card-foreground mb-2 block">I am a…</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setRole("driver")}
-                    className={`rounded-lg border p-3 text-center text-sm font-medium transition-colors ${
-                      role === "driver"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    🏁 Driver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole("team_sponsor")}
-                    className={`rounded-lg border p-3 text-center text-sm font-medium transition-colors ${
-                      role === "team_sponsor"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    🏢 Team / Sponsor
-                  </button>
-                </div>
-              </div>
-            )}
-
             <form onSubmit={mode === "login" ? handleLogin : handleSignup} className="space-y-4">
               {mode === "signup" && (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="firstName" className="text-card-foreground">First Name</Label>
-                      <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-                    </div>
-                    <div>
-                      <Label htmlFor="lastName" className="text-card-foreground">Last Name</Label>
-                      <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-                    </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="firstName" className="text-card-foreground">First Name</Label>
+                    <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
                   </div>
-                  {role === "team_sponsor" && (
-                    <div>
-                      <Label htmlFor="orgName" className="text-card-foreground">Organization Name</Label>
-                      <Input id="orgName" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Optional" />
-                    </div>
-                  )}
-                </>
+                  <div>
+                    <Label htmlFor="lastName" className="text-card-foreground">Last Name</Label>
+                    <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+                  </div>
+                </div>
               )}
               <div>
                 <Label htmlFor="email" className="text-card-foreground">Email</Label>

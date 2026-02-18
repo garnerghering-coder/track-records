@@ -13,6 +13,9 @@ import Admin from "./pages/Admin";
 import Submit from "./pages/Submit";
 import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
+import Teams from "./pages/Teams";
+import TeamProfile from "./pages/TeamProfile";
+import Contribute from "./pages/Contribute";
 
 const queryClient = new QueryClient();
 
@@ -31,7 +34,9 @@ const App = () => (
           <Route path="/driver/:id" element={<DriverProfile />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/submit" element={<Submit />} />
-          <Route path="/submit" element={<Submit />} />
+          <Route path="/teams" element={<Teams />} />
+          <Route path="/team/:id" element={<TeamProfile />} />
+          <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

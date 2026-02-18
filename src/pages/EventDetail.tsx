@@ -27,6 +27,7 @@ interface DriverInfo {
 interface EntryWithDrivers {
   id: string;
   team_name: string | null;
+  team_profile_id: string | null;
   organization_id: string | null;
   car_number: string | null;
   race_class: string | null;
@@ -237,7 +238,13 @@ const EventDetailPage = () => {
                         </TableCell>
                         <TableCell>
                           {entry.team_name ? (
-                            <span className="text-card-foreground font-medium">{entry.team_name}</span>
+                            entry.team_profile_id ? (
+                              <Link to={`/team/${entry.team_profile_id}`} className="text-primary hover:underline font-medium">
+                                {entry.team_name}
+                              </Link>
+                            ) : (
+                              <span className="text-card-foreground font-medium">{entry.team_name}</span>
+                            )
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
