@@ -97,6 +97,7 @@ MOTORSPORT INTELLIGENCE RULES:
 - Normalize team names to their official forms (e.g. "AXR" → "Action Express Racing", "WTR" → "Wayne Taylor Racing")
 - Infer race class from car type, team, and context when not explicitly stated
 - Correct common abbreviations and shorthand in driver names and team names
+- ALWAYS expand abbreviated first names to their full form using your motorsport knowledge. Examples: "F. Nasr" -> "Felipe Nasr", "S. Bourdais" -> "Sebastien Bourdais", "K. Magnussen" -> "Kevin Magnussen". Never leave a name as just an initial.
 - If a car manufacturer is listed but not a team, use your knowledge to fill in the team name
 ${eventHint ? `- Event hint: ${eventHint}` : ""}${seriesHint ? `- Series hint: ${seriesHint}` : ""}
 
@@ -282,6 +283,27 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
                 matchedCount++;
                 found = true;
                 break;
+              }
+            }
+          }
+          // Try abbreviated match: "F. Nasr" -> matches "Felipe Nasr"
+          if (!found && parts.length >= 2) {
+            const firstPart = parts[0].replace(".", "");
+            if (firstPart.length <= 2) {
+              const lastPart = parts[parts.length - 1];
+              const candidates: { key: string; id: string }[] = [];
+              for (const [key, driverId] of driverMap.entries()) {
+                const keyParts = key.split(" ");
+                const keyLast = keyParts[keyParts.length - 1];
+                const keyFirst = keyParts[0];
+                if (keyLast === lastPart && keyFirst.startsWith(firstPart.toLowerCase())) {
+                  candidates.push({ key, id: driverId });
+                }
+              }
+              if (candidates.length === 1) {
+                matchedDriverIds.push(candidates[0].id);
+                matchedCount++;
+                found = true;
               }
             }
           }
