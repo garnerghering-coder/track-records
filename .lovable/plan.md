@@ -1,76 +1,42 @@
 
 
-## Remove Lovable Branding + Smart AI Fallback (Groq-first, Lovable AI backup)
+## Fix "Import error: failed to fetch"
 
-### 1. Remove Lovable Branding from `index.html`
+### Root Cause
 
-Update all meta tags to use "TrackRecord" branding:
-- Title: "TrackRecord - Motorsport Driver Profiles"
-- Description: "The verified motorsport driver profile platform."
-- Author: "TrackRecord"
-- OG tags updated, Lovable OG images removed
-- Twitter `@Lovable` reference removed
-- TODO comments removed
+The `import-race-results` edge function crashes on boot because `npm:pdf-parse/lib/pdf-parse.js` is not a valid export path in the `pdf-parse` package when running in Deno's edge runtime. The function never starts, so every request returns a network-level "failed to fetch" error.
 
-The "Edit in Lovable" button in the bottom-right is a platform feature -- go to **Settings** in Lovable and toggle **"Hide 'Lovable' Badge"** (requires a paid plan). It cannot be removed through code.
+### Fix
 
-### 2. Smart AI Fallback in All 4 Edge Functions
+Replace the `pdf-parse` import with `npm:pdf-parse` (default entry point). If that also fails in the edge runtime, fall back to a simpler approach: use the `pdf-lib` library (`npm:pdf-lib`) to check the PDF is valid, but rely on a different text extraction method.
 
-The pattern for each function: try Groq first, and if it returns a 429 (rate limit), automatically retry the same request using the Lovable AI gateway instead.
+The most reliable approach for Deno edge functions is to use `npm:pdfjs-dist` or simply change the import to `npm:pdf-parse` (without the subpath).
 
-**Functions to update:**
-- `enrich-driver-profile` -- uses JSON mode
-- `generate-race-event` -- uses tool calling
-- `import-race-results` -- uses JSON mode
-- `scrape-race-results` -- uses tool calling
+**File: `supabase/functions/import-race-results/index.ts`**
 
-**How it works in each function:**
+1. Change the import from:
+   ```typescript
+   import pdf from "npm:pdf-parse/lib/pdf-parse.js";
+   ```
+   to:
+   ```typescript
+   import pdf from "npm:pdf-parse";
+   ```
 
-```text
-1. Build the request body (messages, tools, etc.)
-2. Try Groq (api.groq.com, GROQ_API_KEY, llama-3.3-70b-versatile)
-3. If response is 429:
-   - Log "Groq rate limited, falling back to Lovable AI"
-   - Retry same request to ai.gateway.lovable.dev with LOVABLE_API_KEY and google/gemini-2.5-flash
-4. If Groq succeeds, use that response
-5. Next request starts with Groq again (no persistent state needed)
-```
+2. If that still fails in the edge runtime, switch to an alternative: extract PDF text using the Lovable AI gateway's multimodal capabilities by sending the PDF as base64 directly to the AI model (Gemini supports PDF input), eliminating the need for a separate PDF parsing library entirely.
 
-This means Groq is always the first choice. Lovable AI only kicks in when Groq is temporarily unavailable. Since each edge function invocation is independent, there's no state to manage -- it just tries Groq first every time.
+### Recommended Approach: Drop pdf-parse, use AI directly
 
-### Technical Details
+Since Gemini 2.5 Flash natively accepts PDF content, the cleanest fix is:
+- Remove the `pdf-parse` dependency entirely
+- When a PDF is uploaded, send the base64 PDF directly to the AI model as part of the prompt
+- This eliminates the brittle npm dependency and lets the AI read the PDF natively
 
-A shared helper pattern will be added near the top of each function:
-
-```typescript
-async function callAI(body: Record<string, any>): Promise<Response> {
-  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-  const groqBody = { ...body, model: "llama-3.3-70b-versatile" };
-
-  if (GROQ_API_KEY) {
-    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify(groqBody),
-    });
-    if (resp.status !== 429) return resp;
-    console.log("Groq rate limited, falling back to Lovable AI");
-  }
-
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("No AI provider available");
-
-  const lovableBody = { ...body, model: "google/gemini-2.5-flash" };
-  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify(lovableBody),
-  });
-}
-```
-
-Each function's existing `fetch("https://api.groq.com/...")` call gets replaced with `callAI({ messages, ... })`. The error handling for non-429 errors (401, 500, etc.) stays the same but the error messages become generic ("AI processing failed") instead of Groq-specific.
-
-The initial check `if (!GROQ_API_KEY) throw new Error(...)` is also removed since the function can now work without Groq.
+**Changes to `supabase/functions/import-race-results/index.ts`:**
+- Remove `import pdf from "npm:pdf-parse/lib/pdf-parse.js"`
+- Remove the PDF text extraction block
+- When `pdfBase64` is provided, include it in the AI request as a file attachment (Gemini supports `inline_data` with `application/pdf` mime type)
+- Keep the `rawText` path unchanged for plain text input
 
 ### No database changes needed
+
