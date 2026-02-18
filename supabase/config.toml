@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.scheduled-import]
 verify_jwt = false
+
+[functions.direct-import]
+verify_jwt = false
