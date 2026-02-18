@@ -11,6 +11,7 @@ import EventDetail from "./pages/EventDetail";
 import DriverProfile from "./pages/DriverProfile";
 import Admin from "./pages/Admin";
 import Submit from "./pages/Submit";
+import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,8 @@ const App = () => (
           <Route path="/driver/:id" element={<DriverProfile />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/submit" element={<Submit />} />
+          <Route path="/submit" element={<Submit />} />
+          <Route path="/privacy" element={<Privacy />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
