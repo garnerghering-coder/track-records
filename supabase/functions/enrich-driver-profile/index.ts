@@ -112,6 +112,7 @@ serve(async (req) => {
             content: `You are a motorsport research assistant with extensive knowledge of racing drivers worldwide. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
 
 Fields:
+- "full_first_name": string or null (the driver's full first name — especially important if the stored name is abbreviated like "F." or "S." — e.g. for "F. Nasr" return "Felipe")
 - "nationality": string or null (e.g. "Danish", "British", "Brazilian")
 - "bio": string or null (2-3 sentence biography of their racing career)
 - "date_of_birth": string or null (ISO format YYYY-MM-DD)
@@ -180,6 +181,12 @@ IMPORTANT RULES:
       if ((force || !profile.social_instagram) && enriched.social_instagram) updates.social_instagram = enriched.social_instagram;
       if ((force || !profile.social_twitter) && enriched.social_twitter) updates.social_twitter = enriched.social_twitter;
       if ((force || !profile.social_linkedin) && enriched.social_linkedin) updates.social_linkedin = enriched.social_linkedin;
+
+      // Fix abbreviated first names (e.g. "F." -> "Felipe")
+      const isAbbreviated = profile.first_name.length <= 2 || profile.first_name.endsWith(".");
+      if (isAbbreviated && enriched.full_first_name && enriched.full_first_name.length > 2) {
+        updates.first_name = enriched.full_first_name;
+      }
 
       if (Object.keys(updates).length > 0) {
         const { error: updateError } = await adminClient
