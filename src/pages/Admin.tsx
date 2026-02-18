@@ -9,11 +9,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
 import DriverPhotoUpload from "@/components/DriverPhotoUpload";
 import { getFlagForCountry } from "@/lib/countries";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Tables } from "@/integrations/supabase/types";
 
 type DriverProfile = Tables<"driver_profiles">;
@@ -84,6 +85,26 @@ const Admin = () => {
   // Existing data
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
+
+  // Event-based race results
+  const [eventName, setEventName] = useState("");
+  const [seriesName, setSeriesName] = useState("");
+  const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
+  const [eventCategory, setEventCategory] = useState<string>("other");
+  const [driverSearch, setDriverSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<DriverProfile[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+
+  interface EventResultEntry {
+    key: string;
+    driver: DriverProfile;
+    finishing_position: string;
+    championship_position: string;
+    notes: string;
+  }
+  const [eventEntries, setEventEntries] = useState<EventResultEntry[]>([]);
+  const [savingEvent, setSavingEvent] = useState(false);
 
   useEffect(() => { checkAdmin(); }, []);
 
@@ -239,6 +260,85 @@ const Admin = () => {
     fetchDrivers();
   };
 
+  // Driver search for event results
+  const handleDriverSearch = async (query: string) => {
+    setDriverSearch(query);
+    if (query.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const terms = query.trim().split(/\s+/);
+    let q = supabase.from("driver_profiles").select("*");
+    if (terms.length >= 2) {
+      q = q.or(`first_name.ilike.%${terms[0]}%,last_name.ilike.%${terms[terms.length - 1]}%`);
+    } else {
+      q = q.or(`first_name.ilike.%${terms[0]}%,last_name.ilike.%${terms[0]}%`);
+    }
+    const { data } = await q.limit(10);
+    setSearchResults(data || []);
+    setSearching(false);
+    setSearchOpen(true);
+  };
+
+  const addDriverToEvent = (driver: DriverProfile) => {
+    if (eventEntries.some(e => e.driver.id === driver.id)) return;
+    setEventEntries(prev => [...prev, {
+      key: crypto.randomUUID(),
+      driver,
+      finishing_position: "",
+      championship_position: "",
+      notes: "",
+    }]);
+    setDriverSearch("");
+    setSearchResults([]);
+    setSearchOpen(false);
+  };
+
+  const updateEventEntry = (key: string, field: string, value: string) => {
+    setEventEntries(prev => prev.map(e => e.key === key ? { ...e, [field]: value } : e));
+  };
+
+  const removeEventEntry = (key: string) => {
+    setEventEntries(prev => prev.filter(e => e.key !== key));
+  };
+
+  const handleSaveEventResults = async () => {
+    if (!seriesName.trim()) {
+      toast({ title: "Series name required", variant: "destructive" });
+      return;
+    }
+    if (eventEntries.length === 0) {
+      toast({ title: "Add at least one driver", variant: "destructive" });
+      return;
+    }
+    setSavingEvent(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from("race_results").insert(
+      eventEntries.map(e => ({
+        driver_profile_id: e.driver.id,
+        season_year: parseInt(seasonYear) || new Date().getFullYear(),
+        series_name: seriesName.trim(),
+        event_name: eventName.trim() || null,
+        category: (eventCategory || "other") as any,
+        finishing_position: e.finishing_position ? parseInt(e.finishing_position) : null,
+        championship_position: e.championship_position ? parseInt(e.championship_position) : null,
+        notes: e.notes || null,
+        verification_status: "verified" as const,
+        submitted_by: session?.user.id || null,
+        verified_by: session?.user.id || null,
+        verified_at: new Date().toISOString(),
+      }))
+    );
+    setSavingEvent(false);
+    if (error) {
+      toast({ title: "Error saving results", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Results saved", description: `${eventEntries.length} verified result(s) added.` });
+      setEventEntries([]);
+      setEventName("");
+      setSeriesName("");
+      setSeasonYear(new Date().getFullYear().toString());
+      setEventCategory("other");
+    }
+  };
   const handleGrantRole = async (e: React.FormEvent) => {
     e.preventDefault();
     setGrantingRole(true);
@@ -269,6 +369,7 @@ const Admin = () => {
             <TabsTrigger value="claims">
               Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
             </TabsTrigger>
+            <TabsTrigger value="race-results">Race Results</TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
@@ -441,6 +542,138 @@ const Admin = () => {
                   {claims.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No claim requests yet.</td></tr>}
                 </tbody>
               </table>
+            </div>
+          </TabsContent>
+
+          {/* ── Race Results ── */}
+          <TabsContent value="race-results">
+            <div className="max-w-3xl rounded-xl border border-border bg-card p-6">
+              <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Enter Event Results</h2>
+              <p className="text-sm text-muted-foreground mb-6">Fill in the event details, search for drivers to add, then save. Results are automatically verified.</p>
+
+              <div className="space-y-4 mb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-card-foreground">Event Name</Label>
+                    <Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. 24 Hours of Daytona" />
+                  </div>
+                  <div>
+                    <Label className="text-card-foreground">Series Name *</Label>
+                    <Input value={seriesName} onChange={(e) => setSeriesName(e.target.value)} placeholder="e.g. IMSA WeatherTech" required />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-card-foreground">Season Year</Label>
+                    <Input value={seasonYear} onChange={(e) => setSeasonYear(e.target.value)} type="number" />
+                  </div>
+                  <div>
+                    <Label className="text-card-foreground">Category</Label>
+                    <Select value={eventCategory} onValueChange={setEventCategory}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>))}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <Label className="text-card-foreground font-semibold mb-3 block">Add Drivers</Label>
+                <div className="relative mb-4">
+                  <Popover open={searchOpen && searchResults.length > 0} onOpenChange={setSearchOpen}>
+                    <PopoverTrigger asChild>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={driverSearch}
+                          onChange={(e) => handleDriverSearch(e.target.value)}
+                          placeholder="Search driver by name…"
+                          className="pl-9"
+                        />
+                        {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />}
+                      </div>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                      <div className="max-h-[240px] overflow-y-auto p-1">
+                        {searchResults.map((d) => {
+                          const flag = getFlagForCountry(d.nationality);
+                          const alreadyAdded = eventEntries.some(e => e.driver.id === d.id);
+                          return (
+                            <button
+                              key={d.id}
+                              disabled={alreadyAdded}
+                              onClick={() => addDriverToEvent(d)}
+                              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              {d.photo_url ? (
+                                <img src={d.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                              ) : (
+                                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">{d.first_name[0]}{d.last_name[0]}</div>
+                              )}
+                              <div className="flex-1 text-left">
+                                <span className="font-medium text-popover-foreground">{d.first_name} {d.last_name}</span>
+                                <span className="ml-2 text-xs text-muted-foreground capitalize">{d.primary_category?.replace(/_/g, " ")}</span>
+                              </div>
+                              {flag && <span className="text-base">{flag}</span>}
+                              {alreadyAdded && <Check className="h-4 w-4 text-primary" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {eventEntries.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">Search and select drivers above to add them to this event.</p>
+                )}
+
+                <div className="space-y-3">
+                  {eventEntries.map((entry, i) => {
+                    const flag = getFlagForCountry(entry.driver.nationality);
+                    return (
+                      <div key={entry.key} className="rounded-lg border border-border/50 bg-muted/20 p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            {entry.driver.photo_url ? (
+                              <img src={entry.driver.photo_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+                            ) : (
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">{entry.driver.first_name[0]}{entry.driver.last_name[0]}</div>
+                            )}
+                            <div>
+                              <span className="text-sm font-medium text-card-foreground">{flag && <span className="mr-1">{flag}</span>}{entry.driver.first_name} {entry.driver.last_name}</span>
+                              <span className="ml-2 text-xs text-muted-foreground capitalize">{entry.driver.primary_category?.replace(/_/g, " ")}</span>
+                            </div>
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeEventEntry(entry.key)}>
+                            <X className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Finishing Position</Label>
+                            <Input value={entry.finishing_position} onChange={(e) => updateEventEntry(entry.key, "finishing_position", e.target.value)} type="number" placeholder="e.g. 1" />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Championship Position</Label>
+                            <Input value={entry.championship_position} onChange={(e) => updateEventEntry(entry.key, "championship_position", e.target.value)} type="number" placeholder="Optional" />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Notes</Label>
+                            <Input value={entry.notes} onChange={(e) => updateEventEntry(entry.key, "notes", e.target.value)} placeholder="Optional" />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {eventEntries.length > 0 && (
+                  <Button onClick={handleSaveEventResults} disabled={savingEvent} className="w-full mt-4">
+                    {savingEvent ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : `Save ${eventEntries.length} Result(s) as Verified`}
+                  </Button>
+                )}
+              </div>
             </div>
           </TabsContent>
 
