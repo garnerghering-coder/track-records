@@ -1,71 +1,86 @@
 
 
-## Three Admin Improvements: Edit Drivers on Entries, Data Anomaly Flags, and Date Sorting
+## Visual Overhaul + Dismissable Flags
 
-### 1. Edit Drivers on Race Entries (Admin)
+### 1. Dismissable Flags in the Flags Tab
 
-Currently, when you expand a race event in the Admin "All Races" or "Pending" tabs, you can inline-edit position, car number, team, class, gap, status, and notes -- but the Driver(s) column is read-only text. You need to be able to change which drivers are linked to an entry.
+Add a "Dismiss" button next to "View" on each flag. Dismissed flags are stored in localStorage (keyed by `entryId + type`) so they persist across sessions but don't need a database table. Dismissed flags are hidden from the list and the count updates accordingly. A "Show dismissed" toggle lets you review and un-dismiss if needed.
 
-**What changes:**
-- The Driver(s) column in `renderEntriesTable` becomes clickable for admins
-- Clicking it opens a small inline editor that shows the currently linked drivers with remove buttons, plus a search input to add new drivers
-- Adding a driver creates a `race_entry_drivers` junction row; removing deletes it
-- The search uses existing `driver_profiles` data to find drivers by name
+**File:** `src/components/FlagsTab.tsx`
+- Add a `dismissed` state set, initialized from `localStorage`
+- Filter out dismissed flags from display
+- Add a "Dismiss" button on each flag row
+- Add a "Show dismissed (N)" toggle at the top to reveal them with an "Restore" button
 
-### 2. Data Anomaly Flags (New Admin Tab)
+### 2. Color Scheme Overhaul: Red to Purple
 
-Add a new "Flags" tab in the Admin dashboard that automatically detects data quality issues. Initially it will detect:
+The logos use a vibrant purple (#B44AFF / ~270 75% 65%) with black and white. The current theme uses red (`0 85% 50%`) as the primary color. We will swap all primary color references to purple.
 
-- **Duplicate entry in same event**: A driver appears in multiple entries within the same race event (e.g., finishing in two different cars -- usually an error)
-- **Missing drivers**: Entries with no linked drivers at all
-- **Missing positions**: Entries with no finishing position
+**File:** `src/index.css`
+- Light mode: `--primary: 270 75% 65%` (the logo purple)
+- Dark mode: `--primary: 270 75% 65%` (same purple works on dark)
+- Update `--ring` to match
+- Update `--sidebar-ring` and `--sidebar-primary` to match
+- Keep `--destructive` as red (it's for errors, separate from brand)
 
-Each flagged item shows the event name, the problematic entry, and a "View" button that navigates to the event in the All Races tab for editing. Flags are computed client-side from the already-fetched data (entries + junctions).
+**File:** `src/pages/Index.tsx`
+- Update the CTA section gradient from red tones to purple tones: `hsl(0 60% 20%)` becomes `hsl(270 40% 20%)`
 
-**Detection approach:**
-- Fetch all race entries with their driver junctions grouped by event
-- For each event, check if any driver_profile_id appears in more than one entry
-- Check for entries with zero drivers
-- Check for entries with null finishing_position
+### 3. Hero Section: Photo Background Instead of Gradient
 
-### 3. Sort Race Results by Date + Show Date on Driver Profile Cards
+Replace the CSS gradient hero background with a photo of GT cars racing. We will use AI image generation to create a dramatic GT racing photo, upload it to the public folder, and use it as a background image with a dark overlay for text readability.
 
-On the Driver Profile page, event result cards currently sort by `season_year` descending and don't show the event date.
+**File:** `src/pages/Index.tsx`
+- Remove the `style={{ background: "linear-gradient(...)" }}` from the hero section
+- Replace with a background image + dark overlay approach
+- Remove the bottom white gradient fade (`h-32` div at the bottom of the hero)
+- Add a subtle dark overlay so white text remains readable
 
-**What changes:**
-- Sort `eventResults` by `event_date` (falling back to `season_year`) in descending order so most recent races appear first
-- Add the event date to each result card, displayed as a small date string next to the series/year info
-- The date is already available from the `race_events` join (`ev.event_date`)
+### 4. Embed Logo Images
+
+Copy the uploaded logos into `src/assets/` and use them in the Header and Footer instead of the current "TR" text badge.
+
+**Files:** `src/components/Header.tsx`, `src/components/Footer.tsx`
+- Replace the `<div className="flex h-8 w-8 ..."><span>TR</span></div>` with an `<img>` using the TR icon logo
+- Import from `@/assets/TR_1600_x_1080_px.png`
 
 ### Technical Details
 
-**Admin.tsx -- renderEntriesTable driver editing:**
-- Replace the static driver name `<td>` with a clickable cell
-- On click, show an inline panel with:
-  - Current drivers listed with X buttons to remove (deletes from `race_entry_drivers`)
-  - A text input that filters `drivers` state array by name
-  - Clicking a search result inserts into `race_entry_drivers`
-- After any change, refresh the entries table
+**CSS variable changes in `src/index.css`:**
+```
+--primary: 270 75% 65%;
+--ring: 270 75% 65%;
+--sidebar-primary: 270 75% 65%;  (dark mode)
+--sidebar-ring: 270 75% 65%;
+```
 
-**Admin.tsx -- New "Flags" tab:**
-- Add a new tab trigger "Flags" with a badge count
-- On tab activation, fetch all entries with driver junctions across all events
-- Run anomaly detection:
-  ```
-  For each event:
-    Group entries by event_id
-    For each driver in the event, check if they appear in multiple entries
-    Flag entries with 0 drivers
-    Flag entries with null finishing_position
-  ```
-- Display flags in categorized sections with links to edit
+**Hero section in `src/pages/Index.tsx`:**
+- Use AI-generated GT racing image saved to `public/images/hero-racing.jpg`
+- Structure: `<section className="relative ..."><div className="absolute inset-0"><img src="/images/hero-racing.jpg" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/60" /></div>...content...</section>`
+- Remove the bottom gradient fade div entirely
 
-**DriverProfile.tsx -- Date sorting and display:**
-- Change the sort on line 114 from sorting by `season_year` to sorting by `event_date` (with `season_year` as fallback)
-- Add `event_date` display to the card (line 498 area), showing it as a formatted date next to the existing series/year text
+**FlagsTab dismiss logic:**
+```typescript
+const [dismissed, setDismissed] = useState<Set<string>>(() => {
+  const stored = localStorage.getItem("dismissedFlags");
+  return stored ? new Set(JSON.parse(stored)) : new Set();
+});
+
+const dismissFlag = (key: string) => {
+  const next = new Set(dismissed).add(key);
+  setDismissed(next);
+  localStorage.setItem("dismissedFlags", JSON.stringify([...next]));
+};
+```
 
 **Files to modify:**
-- `src/pages/Admin.tsx` -- Add driver editing in entries table, add Flags tab
-- `src/pages/DriverProfile.tsx` -- Sort by date, show date on cards
+- `src/index.css` -- Primary color swap to purple
+- `src/pages/Index.tsx` -- Hero image, remove gradient fade, update CTA gradient
+- `src/components/Header.tsx` -- Use logo image
+- `src/components/Footer.tsx` -- Use logo image
+- `src/components/FlagsTab.tsx` -- Add dismiss/restore functionality
 
-**No database changes needed.**
+**Files to create:**
+- AI-generated hero image at `public/images/hero-racing.jpg`
+- Copy logos to `src/assets/`
+
