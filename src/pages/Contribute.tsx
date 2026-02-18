@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -26,12 +26,19 @@ const categoryLabels: Record<string, string> = {
   endurance: "Endurance", formula: "Formula", stock_car: "Stock Car", other: "Other",
 };
 
+const STATUS_OPTIONS = ["Finished", "DNF", "DNS", "DSQ", "DQ", "Running"];
+
 interface EntryRow {
   key: string;
   finishing_position: string;
-  driver_names: string;
-  team_name: string;
+  class_position: string;
   car_number: string;
+  team_name: string;
+  driver_names: string;
+  laps_completed: string;
+  gap_to_leader: string;
+  gap_to_class_leader: string;
+  pit_stops: string;
   race_class: string;
   status: string;
 }
@@ -39,12 +46,89 @@ interface EntryRow {
 const emptyEntry = (): EntryRow => ({
   key: crypto.randomUUID(),
   finishing_position: "",
-  driver_names: "",
-  team_name: "",
+  class_position: "",
   car_number: "",
+  team_name: "",
+  driver_names: "",
+  laps_completed: "",
+  gap_to_leader: "",
+  gap_to_class_leader: "",
+  pit_stops: "",
   race_class: "",
   status: "",
 });
+
+// Autocomplete hook
+function useAutocomplete(fetchFn: (q: string) => Promise<string[]>) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout>();
+
+  const onChange = (val: string) => {
+    setQuery(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!val.trim()) { setSuggestions([]); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      const results = await fetchFn(val.trim());
+      setSuggestions(results);
+      setOpen(results.length > 0);
+    }, 250);
+  };
+
+  const select = (val: string) => {
+    setQuery(val);
+    setOpen(false);
+  };
+
+  const close = () => setOpen(false);
+
+  return { query, setQuery, suggestions, open, onChange, select, close };
+}
+
+// Autocomplete input component
+function AutocompleteInput({ value, onValueChange, placeholder, fetchFn, className }: {
+  value: string; onValueChange: (v: string) => void; placeholder?: string; fetchFn: (q: string) => Promise<string[]>; className?: string;
+}) {
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout>();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleChange = (val: string) => {
+    onValueChange(val);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!val.trim()) { setSuggestions([]); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      const results = await fetchFn(val.trim());
+      setSuggestions(results);
+      setOpen(results.length > 0);
+    }, 250);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input value={value} onChange={e => handleChange(e.target.value)} placeholder={placeholder} className={className} />
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-md">
+          {suggestions.map((s, i) => (
+            <button key={i} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent transition-colors text-popover-foreground" onClick={() => { onValueChange(s); setOpen(false); }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ContributePage = () => {
   const navigate = useNavigate();
@@ -104,6 +188,25 @@ const ContributePage = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  // Autocomplete fetchers
+  const fetchDriverSuggestions = async (q: string): Promise<string[]> => {
+    const lower = `%${q}%`;
+    const { data } = await supabase.from("driver_profiles").select("first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(8);
+    return (data || []).map((d: any) => `${d.first_name} ${d.last_name}`);
+  };
+
+  const fetchTeamSuggestions = async (q: string): Promise<string[]> => {
+    const { data } = await supabase.from("team_profiles" as any).select("name").ilike("name", `%${q}%`).limit(8) as any;
+    return ((data || []) as any[]).map((t: any) => t.name);
+  };
+
+  const fetchSeriesSuggestions = async (q: string): Promise<string[]> => {
+    const { data } = await supabase.from("race_events").select("series_name").ilike("series_name", `%${q}%`).limit(20);
+    if (!data) return [];
+    const unique = [...new Set(data.map((e: any) => e.series_name))];
+    return unique.slice(0, 8);
+  };
+
   const fetchContributions = async () => {
     if (!session) return;
     setLoadingContributions(true);
@@ -125,6 +228,10 @@ const ContributePage = () => {
     return false;
   };
 
+  const updateEntry = (index: number, field: keyof EntryRow, value: string) => {
+    setEntries(prev => prev.map((e, i) => i === index ? { ...e, [field]: value } : e));
+  };
+
   // Submit Race Results
   const handleSubmitResults = async () => {
     if (!session || !seriesName.trim() || !eventName.trim()) return;
@@ -136,7 +243,6 @@ const ContributePage = () => {
 
     setSubmittingResults(true);
 
-    // Submit event creation
     await supabase.from("edit_queue" as any).insert({
       submitted_by: session.user.id,
       edit_type: "create_event",
@@ -150,9 +256,14 @@ const ContributePage = () => {
         category: eventCategory,
         entries: entries.map(e => ({
           finishing_position: e.finishing_position ? parseInt(e.finishing_position) : null,
-          driver_names: e.driver_names.split(",").map(n => n.trim()).filter(Boolean),
-          team_name: e.team_name || null,
+          class_position: e.class_position ? parseInt(e.class_position) : null,
           car_number: e.car_number || null,
+          team_name: e.team_name || null,
+          driver_names: e.driver_names.split(",").map(n => n.trim()).filter(Boolean),
+          laps_completed: e.laps_completed ? parseInt(e.laps_completed) : null,
+          gap_to_leader: e.gap_to_leader || null,
+          gap_to_class_leader: e.gap_to_class_leader || null,
+          pit_stops: e.pit_stops ? parseInt(e.pit_stops) : null,
           race_class: e.race_class || null,
           status: e.status || null,
         })),
@@ -265,7 +376,6 @@ const ContributePage = () => {
     const tableMap: Record<string, string> = { driver: "driver_profiles", team: "team_profiles", event: "race_events" };
     const editTypeMap: Record<string, string> = { driver: "edit_driver", team: "edit_team", event: "edit_event" };
 
-    // Build previous_data snapshot
     const previousData: Record<string, any> = {};
     for (const key of Object.keys(editFields)) {
       previousData[key] = editingItem[key] ?? null;
@@ -313,10 +423,13 @@ const ContributePage = () => {
 
           {/* ADD RACE RESULTS */}
           <TabsContent value="add-results">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4 max-w-4xl">
+            <div className="rounded-lg border border-border bg-card p-6 space-y-4">
               <h2 className="font-display text-lg font-semibold text-card-foreground">Add Race Results</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label className="text-card-foreground text-xs">Series Name *</Label><Input value={seriesName} onChange={e => setSeriesName(e.target.value)} placeholder="e.g. IMSA WeatherTech" /></div>
+              <div className="grid grid-cols-2 gap-4 max-w-2xl">
+                <div>
+                  <Label className="text-card-foreground text-xs">Series Name *</Label>
+                  <AutocompleteInput value={seriesName} onValueChange={setSeriesName} placeholder="e.g. IMSA WeatherTech" fetchFn={fetchSeriesSuggestions} />
+                </div>
                 <div><Label className="text-card-foreground text-xs">Event Name *</Label><Input value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Rolex 24 at Daytona" /></div>
                 <div><Label className="text-card-foreground text-xs">Season Year</Label><Input type="number" value={seasonYear} onChange={e => setSeasonYear(e.target.value)} /></div>
                 <div><Label className="text-card-foreground text-xs">Event Date</Label><Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></div>
@@ -332,18 +445,57 @@ const ContributePage = () => {
 
               <div className="space-y-2">
                 <Label className="text-card-foreground text-xs">Entries</Label>
-                {entries.map((entry, i) => (
-                  <div key={entry.key} className="grid grid-cols-6 gap-2 items-end">
-                    <Input placeholder="Pos" value={entry.finishing_position} onChange={e => { const next = [...entries]; next[i] = { ...entry, finishing_position: e.target.value }; setEntries(next); }} />
-                    <Input placeholder="Driver(s), comma-sep" className="col-span-2" value={entry.driver_names} onChange={e => { const next = [...entries]; next[i] = { ...entry, driver_names: e.target.value }; setEntries(next); }} />
-                    <Input placeholder="Team" value={entry.team_name} onChange={e => { const next = [...entries]; next[i] = { ...entry, team_name: e.target.value }; setEntries(next); }} />
-                    <Input placeholder="Class" value={entry.race_class} onChange={e => { const next = [...entries]; next[i] = { ...entry, race_class: e.target.value }; setEntries(next); }} />
-                    <div className="flex gap-1">
-                      <Input placeholder="Status" value={entry.status} onChange={e => { const next = [...entries]; next[i] = { ...entry, status: e.target.value }; setEntries(next); }} />
-                      {entries.length > 1 && <Button variant="ghost" size="icon" onClick={() => setEntries(entries.filter((_, idx) => idx !== i))}><Trash2 className="h-4 w-4" /></Button>}
-                    </div>
-                  </div>
-                ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-muted-foreground border-b border-border">
+                        <th className="text-left py-1 px-1 font-medium w-14">Pos</th>
+                        <th className="text-left py-1 px-1 font-medium w-14">Cls Pos</th>
+                        <th className="text-left py-1 px-1 font-medium w-16">Car #</th>
+                        <th className="text-left py-1 px-1 font-medium w-40">Team</th>
+                        <th className="text-left py-1 px-1 font-medium min-w-[200px]">Driver(s) *</th>
+                        <th className="text-left py-1 px-1 font-medium w-16">Laps</th>
+                        <th className="text-left py-1 px-1 font-medium w-20">Gap</th>
+                        <th className="text-left py-1 px-1 font-medium w-20">Cls Gap</th>
+                        <th className="text-left py-1 px-1 font-medium w-14">Pits</th>
+                        <th className="text-left py-1 px-1 font-medium w-20">Class</th>
+                        <th className="text-left py-1 px-1 font-medium w-28">Status</th>
+                        <th className="w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry, i) => (
+                        <tr key={entry.key} className="border-b border-border/50">
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Pos" value={entry.finishing_position} onChange={e => updateEntry(i, "finishing_position", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Cls" value={entry.class_position} onChange={e => updateEntry(i, "class_position", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="#" value={entry.car_number} onChange={e => updateEntry(i, "car_number", e.target.value)} /></td>
+                          <td className="py-1 px-1">
+                            <AutocompleteInput value={entry.team_name} onValueChange={v => updateEntry(i, "team_name", v)} placeholder="Team" fetchFn={fetchTeamSuggestions} className="h-8 text-xs" />
+                          </td>
+                          <td className="py-1 px-1">
+                            <AutocompleteInput value={entry.driver_names} onValueChange={v => updateEntry(i, "driver_names", v)} placeholder="Driver(s), comma-sep" fetchFn={fetchDriverSuggestions} className="h-8 text-xs" />
+                          </td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Laps" value={entry.laps_completed} onChange={e => updateEntry(i, "laps_completed", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Gap" value={entry.gap_to_leader} onChange={e => updateEntry(i, "gap_to_leader", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Cls Gap" value={entry.gap_to_class_leader} onChange={e => updateEntry(i, "gap_to_class_leader", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Pits" value={entry.pit_stops} onChange={e => updateEntry(i, "pit_stops", e.target.value)} /></td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Class" value={entry.race_class} onChange={e => updateEntry(i, "race_class", e.target.value)} /></td>
+                          <td className="py-1 px-1">
+                            <Select value={entry.status} onValueChange={v => updateEntry(i, "status", v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                              <SelectContent>
+                                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-1 px-1">
+                            {entries.length > 1 && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntries(entries.filter((_, idx) => idx !== i))}><Trash2 className="h-3.5 w-3.5" /></Button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <Button variant="outline" size="sm" onClick={() => setEntries([...entries, emptyEntry()])} className="gap-1"><Plus className="h-3 w-3" /> Add Entry</Button>
               </div>
 

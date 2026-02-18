@@ -176,6 +176,30 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_team_duplicates: {
+        Row: {
+          dismissed_at: string
+          dismissed_by: string | null
+          id: string
+          team_id_1: string
+          team_id_2: string
+        }
+        Insert: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+          team_id_1: string
+          team_id_2: string
+        }
+        Update: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+          team_id_1?: string
+          team_id_2?: string
+        }
+        Relationships: []
+      }
       driver_profiles: {
         Row: {
           bio: string | null

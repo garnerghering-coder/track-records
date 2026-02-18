@@ -18,6 +18,7 @@ import CountrySelect from "@/components/CountrySelect";
 
 import FlagImage from "@/components/FlagImage";
 import DuplicatesTab from "@/components/DuplicatesTab";
+import TeamDuplicatesTab from "@/components/TeamDuplicatesTab";
 import FlagsTab from "@/components/FlagsTab";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -100,6 +101,7 @@ const Admin = () => {
   // Reports
   const [reports, setReports] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
+  const [teamDuplicateCount, setTeamDuplicateCount] = useState(0);
   const [flagCount, setFlagCount] = useState(0);
 
   // Driver editing on entries
@@ -1468,6 +1470,9 @@ Here are the results to parse:
             <TabsTrigger value="edit-queue">
               <PenLine className="h-3.5 w-3.5 mr-1" /> Edit Queue {editQueue.filter((e: any) => e.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{editQueue.filter((e: any) => e.status === "pending").length}</span>}
             </TabsTrigger>
+            <TabsTrigger value="team-duplicates">
+              <Users className="h-3.5 w-3.5 mr-1" /> Team Dupes {teamDuplicateCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{teamDuplicateCount}</span>}
+            </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
@@ -2478,6 +2483,11 @@ Here are the results to parse:
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          {/* ── Team Duplicates ── */}
+          <TabsContent value="team-duplicates">
+            <TeamDuplicatesTab onRefresh={() => { fetchRaceEvents(); }} onGroupCountChange={setTeamDuplicateCount} />
           </TabsContent>
 
           {/* ── Manage Roles ── */}

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import logoIcon from "@/assets/logo-icon.png";
+import logoFull from "@/assets/logo-full.png";
 
 const Footer = () => {
   return (
@@ -7,9 +7,8 @@ const Footer = () => {
       <div className="container">
         <div className="grid gap-8 md:grid-cols-3">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <img src={logoIcon} alt="TrackRecord" className="h-7 w-auto" />
-              <span className="font-display text-lg font-bold tracking-wider">TrackRecord</span>
+            <div className="flex items-center mb-3">
+              <img src={logoFull} alt="TrackRecord" className="h-7 w-auto" />
             </div>
             <p className="text-sm text-muted-foreground">
               The verified motorsport driver profile platform.
