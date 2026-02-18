@@ -1,66 +1,71 @@
 
 
-## Add Duplicate Driver Detection and Merge Tab
+## Three Admin Improvements: Edit Drivers on Entries, Data Anomaly Flags, and Date Sorting
 
-### Overview
-Add a new "Duplicates" tab to the Admin Dashboard that automatically detects potential duplicate driver profiles and lets you merge them or dismiss false positives.
+### 1. Edit Drivers on Race Entries (Admin)
 
-### Duplicate Detection Logic
-Drivers are flagged as potential duplicates when:
-- Exact match on `last_name` (case-insensitive) AND first name starts with the same letter (catches "F. Nasr" vs "Felipe Nasr")
-- Exact match on both `first_name` and `last_name` (case-insensitive)
-- Groups are formed so you see clusters of 2+ drivers that look like the same person
+Currently, when you expand a race event in the Admin "All Races" or "Pending" tabs, you can inline-edit position, car number, team, class, gap, status, and notes -- but the Driver(s) column is read-only text. You need to be able to change which drivers are linked to an entry.
 
-### UI Design
-- New tab: **Duplicates** with a badge count of detected groups
-- Each group shows a card with all candidate profiles side-by-side, displaying: name, nationality, bio snippet, number of race entries, whether claimed
-- Two actions per group:
-  - **Merge**: Pick a "primary" profile (defaults to the one with more data or the claimed one). All race entry links from the secondary profiles get reassigned to the primary. Secondary profiles are deleted.
-  - **Not Duplicates / Dismiss**: Mark the pair as "not duplicates" so they stop appearing. This uses a small `dismissed_duplicates` table to persist dismissals.
+**What changes:**
+- The Driver(s) column in `renderEntriesTable` becomes clickable for admins
+- Clicking it opens a small inline editor that shows the currently linked drivers with remove buttons, plus a search input to add new drivers
+- Adding a driver creates a `race_entry_drivers` junction row; removing deletes it
+- The search uses existing `driver_profiles` data to find drivers by name
 
-### Database Changes
-One new table to track dismissed duplicate pairs so they don't keep reappearing:
+### 2. Data Anomaly Flags (New Admin Tab)
 
-```sql
-CREATE TABLE public.dismissed_duplicates (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  driver_id_1 uuid NOT NULL,
-  driver_id_2 uuid NOT NULL,
-  dismissed_at timestamptz NOT NULL DEFAULT now(),
-  dismissed_by uuid,
-  UNIQUE (driver_id_1, driver_id_2)
-);
+Add a new "Flags" tab in the Admin dashboard that automatically detects data quality issues. Initially it will detect:
 
-ALTER TABLE public.dismissed_duplicates ENABLE ROW LEVEL SECURITY;
+- **Duplicate entry in same event**: A driver appears in multiple entries within the same race event (e.g., finishing in two different cars -- usually an error)
+- **Missing drivers**: Entries with no linked drivers at all
+- **Missing positions**: Entries with no finishing position
 
-CREATE POLICY "Admins can manage dismissed duplicates"
-  ON public.dismissed_duplicates FOR ALL
-  USING (has_role(auth.uid(), 'admin'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
-```
+Each flagged item shows the event name, the problematic entry, and a "View" button that navigates to the event in the All Races tab for editing. Flags are computed client-side from the already-fetched data (entries + junctions).
 
-### Merge Logic (client-side, admin-only)
-When merging driver A (keep) and driver B (remove):
-1. Update all `race_entry_drivers` rows where `driver_profile_id = B` to point to A
-2. Update all `race_results` rows where `driver_profile_id = B` to point to A
-3. Copy any non-null fields from B to A if A's field is null (nationality, bio, photo, socials, etc.)
-4. Delete driver B
+**Detection approach:**
+- Fetch all race entries with their driver junctions grouped by event
+- For each event, check if any driver_profile_id appears in more than one entry
+- Check for entries with zero drivers
+- Check for entries with null finishing_position
+
+### 3. Sort Race Results by Date + Show Date on Driver Profile Cards
+
+On the Driver Profile page, event result cards currently sort by `season_year` descending and don't show the event date.
+
+**What changes:**
+- Sort `eventResults` by `event_date` (falling back to `season_year`) in descending order so most recent races appear first
+- Add the event date to each result card, displayed as a small date string next to the series/year info
+- The date is already available from the `race_events` join (`ev.event_date`)
 
 ### Technical Details
 
+**Admin.tsx -- renderEntriesTable driver editing:**
+- Replace the static driver name `<td>` with a clickable cell
+- On click, show an inline panel with:
+  - Current drivers listed with X buttons to remove (deletes from `race_entry_drivers`)
+  - A text input that filters `drivers` state array by name
+  - Clicking a search result inserts into `race_entry_drivers`
+- After any change, refresh the entries table
+
+**Admin.tsx -- New "Flags" tab:**
+- Add a new tab trigger "Flags" with a badge count
+- On tab activation, fetch all entries with driver junctions across all events
+- Run anomaly detection:
+  ```
+  For each event:
+    Group entries by event_id
+    For each driver in the event, check if they appear in multiple entries
+    Flag entries with 0 drivers
+    Flag entries with null finishing_position
+  ```
+- Display flags in categorized sections with links to edit
+
+**DriverProfile.tsx -- Date sorting and display:**
+- Change the sort on line 114 from sorting by `season_year` to sorting by `event_date` (with `season_year` as fallback)
+- Add `event_date` display to the card (line 498 area), showing it as a formatted date next to the existing series/year text
+
 **Files to modify:**
-- `src/pages/Admin.tsx` -- Add state, fetch logic, duplicate detection algorithm, merge handler, dismiss handler, and new TabsContent with the duplicates UI
+- `src/pages/Admin.tsx` -- Add driver editing in entries table, add Flags tab
+- `src/pages/DriverProfile.tsx` -- Sort by date, show date on cards
 
-**New migration:**
-- Create `dismissed_duplicates` table with RLS
-
-**Duplicate detection algorithm (runs client-side on the already-fetched `drivers` array):**
-```typescript
-// Group drivers by normalized last name
-// Within each group, find pairs where first names match or one is an abbreviation of the other
-// Filter out dismissed pairs
-// Return groups of 2+ potential duplicates
-```
-
-**Tab placement:** After "All Drivers" tab, before "Claims"
-
+**No database changes needed.**
