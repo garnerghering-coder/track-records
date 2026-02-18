@@ -1,43 +1,43 @@
 
 
-## Edit Verified Race Results and Remove "Race Results" Tab
+## Fix Unreliable Driver Enrichment
 
-### What Changes
+### Root Cause
 
-1. **Remove the "Race Results" tab** from the admin tabs -- the manual event entry form is redundant since AI Import covers this workflow.
+The `enrich-driver-profile` edge function uses Groq's **tool calling** mode, which is non-deterministic. Sometimes the AI returns `null` for fields it actually knows (nationality, bio, etc.). When that happens:
 
-2. **Add an "Edit" button to each race in the "All Races" tab** that opens an inline expanded view showing all entries for that event, with the same click-to-edit behavior already built for the Pending tab. This lets you fix any detail on any race, whether it was AI-imported or manually created.
+1. The profile has empty fields (e.g., no nationality, no bio)
+2. The AI returns `null` for those same fields
+3. The update logic sees `!profile.nationality && enriched.nationality` -- both are falsy, so no update
+4. The function reports "0 fields updated" and the toast says "All fields already populated"
 
-3. **Add an "Edit" button on the public Event Detail page** (visible only to admins) that links directly to the race's edit view in the admin panel.
+This is the exact same Groq tool-calling reliability issue that was already fixed for the `import-race-results` function.
 
-### How Editing Works in All Races
+### Solution
 
-- Click the **pencil icon** on any race row to expand it and load its entries
-- The expanded section shows the same table as the Pending tab: position, car number, team, drivers, class, gap, status, notes
-- Click any cell to edit it inline (same click-to-edit pattern already built)
-- Event-level details (name, series, year, location, category) are also editable via an "Edit Event" button in the expanded header
-- Changes save immediately to the database
+Apply the same fix: switch from **tool calling** to **JSON mode** in the Groq API call. This is more reliable and consistent.
 
-### Technical Details
+Additionally, add a `force` option so admins can re-enrich a driver even if fields are already populated (useful for correcting bad AI data).
+
+### Changes
+
+**File: `supabase/functions/enrich-driver-profile/index.ts`**
+
+1. Remove `tools` and `tool_choice` parameters from the Groq API request
+2. Update the system prompt to instruct the model to return ONLY a JSON object with the expected fields (nationality, bio, date_of_birth, primary_category, social links)
+3. Add `response_format: { type: "json_object" }` to enforce JSON output
+4. Add `max_tokens: 2048` for reliability
+5. Change response parsing from `choices[0].message.tool_calls[0].function.arguments` to `JSON.parse(choices[0].message.content)`
+6. Add try/catch around JSON parsing
+7. Accept an optional `force: true` parameter in the request body -- when set, overwrite existing fields instead of skipping them
 
 **File: `src/pages/Admin.tsx`**
 
-- Remove the `race-results` TabsTrigger and TabsContent block (the manual entry form ~lines 915, 1154-1383)
-- Remove associated state variables: `eventName`, `seriesName`, `seasonYear`, `eventCategory`, `eventLocation`, `eventDate`, `eventNotes`, `eventEntries`, `savingEvent`, `activeEntryKey`, `driverSearch`, `searchResults`, `searchOpen`, `searching`, and the manual entry helper functions (`addEntryRow`, `addDriverToEntry`, `removeDriverFromEntry`, `updateEventEntry`, `removeEventEntry`, `handleSaveEventResults`, `handleDriverSearch`)
-- Add `expandedEventId` state to track which race row is expanded for editing
-- When expanded, fetch that event's entries with drivers (reusing the same query pattern from `fetchPendingEvents`)
-- Add `expandedEntries` state to hold the loaded entries
-- Reuse existing `editingCell`, `editingCellValue`, `startEditCell`, `handleUpdateEntry` for cell editing -- these already work on `race_entries` table
-- Reuse existing `editingEventId`, `editingEventFields`, `startEditEvent`, `handleUpdateEvent` for event header editing -- these already work on `race_events` table
-- In the All Races table, add a pencil button per row that sets `expandedEventId` and fetches entries
-- Below the row, render a collapsible section with the entries table (same structure as pending tab)
+8. Add a "Force Re-enrich" option: when a single enrich returns 0 fields updated, show a follow-up toast action or add a separate button that calls the function with `force: true`
+9. Update `handleEnrichDriver` to accept an optional `force` parameter and pass it in the request body
 
-**File: `src/pages/EventDetail.tsx`**
+### Why This Fixes It
 
-- Add admin detection (same pattern as Header.tsx -- check `user_roles` for admin)
-- If admin, show an "Edit in Admin" button in the event header that links to `/admin?edit={eventId}`
-- On the Admin page, check URL params on load -- if `edit` param exists, auto-switch to "All Races" tab and expand that event
-
-### No database changes needed
-
-All updates use existing RLS policies (admin can update `race_entries` and `race_events`).
+- JSON mode is deterministic and reliable -- the model consistently returns all fields it knows about
+- The `force` option gives admins a fallback to overwrite stale or incorrect AI data
+- No database changes needed
