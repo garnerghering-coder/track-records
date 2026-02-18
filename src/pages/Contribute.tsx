@@ -118,7 +118,7 @@ function AutocompleteInput({ value, onValueChange, placeholder, fetchFn, classNa
     <div ref={containerRef} className="relative">
       <Input value={value} onChange={e => handleChange(e.target.value)} placeholder={placeholder} className={className} />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-md">
+        <div className="absolute z-[9999] top-full left-0 min-w-[220px] mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-lg" style={{ position: "absolute" }}>
           {suggestions.map((s, i) => (
             <button key={i} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent transition-colors text-popover-foreground" onClick={() => { onValueChange(s); setOpen(false); }}>
               {s}
@@ -445,7 +445,7 @@ const ContributePage = () => {
 
               <div className="space-y-2">
                 <Label className="text-card-foreground text-xs">Entries</Label>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto" style={{ overflow: "visible" }}>
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-xs text-muted-foreground border-b border-border">

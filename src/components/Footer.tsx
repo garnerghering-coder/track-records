@@ -8,7 +8,7 @@ const Footer = () => {
         <div className="grid gap-8 md:grid-cols-3">
           <div>
             <div className="flex items-center mb-3">
-              <img src={logoFull} alt="TrackRecord" className="h-7 w-auto" />
+              <img src={logoFull} alt="Track Records" className="h-7 w-auto" />
             </div>
             <p className="text-sm text-muted-foreground">
               The verified motorsport driver profile platform.
@@ -33,7 +33,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} TrackRecord. All rights reserved.
+          © {new Date().getFullYear()} Track Records. All rights reserved.
         </div>
       </div>
     </footer>

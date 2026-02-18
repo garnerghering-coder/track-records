@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Globe, Users, Trophy } from "lucide-react";
+import { ArrowLeft, Globe, Car, Trophy } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
@@ -126,7 +126,7 @@ const TeamProfilePage = () => {
               {team.logo_url ? (
                 <img src={team.logo_url} alt={team.name} className="h-full w-full object-cover" />
               ) : (
-                <Users className="h-10 w-10 text-primary" />
+                <Car className="h-10 w-10 text-primary" />
               )}
             </div>
             <div>

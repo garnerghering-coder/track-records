@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search as SearchIcon, Users } from "lucide-react";
+import { Search as SearchIcon, Car } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
@@ -124,7 +124,7 @@ const TeamsPage = () => {
                     {team.logo_url ? (
                       <img src={team.logo_url} alt={team.name} className="h-full w-full object-cover" />
                     ) : (
-                      <Users className="h-6 w-6 text-primary" />
+                      <Car className="h-6 w-6 text-primary" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
