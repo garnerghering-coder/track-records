@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import pdf from "npm:pdf-parse/lib/pdf-parse.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,9 +73,28 @@ serve(async (req) => {
       });
     }
 
-    const { rawText, eventHint, seriesHint } = await req.json();
+    const { rawText: rawTextInput, pdfBase64, eventHint, seriesHint } = await req.json();
+
+    let rawText = rawTextInput;
+
+    // If PDF was uploaded, extract text from it
+    if (pdfBase64 && typeof pdfBase64 === "string") {
+      try {
+        const pdfBuffer = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
+        const pdfData = await pdf(pdfBuffer);
+        rawText = pdfData.text;
+        console.log(`Extracted ${rawText.length} chars from PDF (${pdfData.numpages} pages)`);
+      } catch (pdfErr) {
+        console.error("PDF parse error:", pdfErr);
+        return new Response(JSON.stringify({ error: "Failed to parse PDF file. Make sure it's a valid PDF." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (!rawText || typeof rawText !== "string" || rawText.trim().length < 10) {
-      return new Response(JSON.stringify({ error: "rawText is required (min 10 chars)" }), {
+      return new Response(JSON.stringify({ error: "rawText or pdfBase64 is required (min 10 chars)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -120,7 +140,7 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
 }`;
 
     const aiResponse = await callAI({
-      max_tokens: 8192,
+      max_tokens: 16384,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -138,11 +158,20 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
     }
 
     const aiData = await aiResponse.json();
+    const finishReason = aiData.choices?.[0]?.finish_reason;
     const rawContent = aiData.choices?.[0]?.message?.content;
     if (!rawContent) {
       console.error("No content in AI response:", JSON.stringify(aiData));
       return new Response(JSON.stringify({ error: "AI did not return structured results" }), {
         status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (finishReason === "length") {
+      console.error("AI response truncated (finish_reason=length)");
+      return new Response(JSON.stringify({ error: "The results are too large for a single import. Try splitting into smaller chunks (e.g. by class or by top-20)." }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
