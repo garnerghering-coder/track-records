@@ -109,7 +109,7 @@ serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a motorsport research assistant. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
+            content: `You are a motorsport research assistant with extensive knowledge of racing drivers worldwide. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
 
 Fields:
 - "nationality": string or null (e.g. "Danish", "British", "Brazilian")
@@ -121,15 +121,21 @@ Fields:
 - "social_twitter": string or null (Twitter/X URL)
 - "social_linkedin": string or null (LinkedIn URL)
 
-Only return data you are confident about. If unsure about a field, set it to null.`,
+IMPORTANT RULES:
+- Try your hardest to find information. Use context clues from the driver's name (e.g. surname origin) to infer nationality.
+- Every racing driver should at minimum have a nationality and a short bio. If the driver has raced in any known series, describe it.
+- If a driver's name suggests a particular origin (e.g. Italian surname, Japanese name), provide your best estimate for nationality.
+- Write a bio even for lesser-known drivers based on whatever you know or can reasonably infer about their racing activity.
+- For fields you truly cannot determine, use JSON null (not the string "null").
+- NEVER return the string "null" — always use actual JSON null.`,
           },
           {
             role: "user",
-            content: `Research the racing driver "${fullName}".`,
+            content: `Research the racing driver "${fullName}". Provide as much information as you can find.`,
           },
         ],
         response_format: { type: "json_object" },
-        max_tokens: 2048,
+        max_tokens: 4096,
       });
 
       if (!aiResponse.ok) {
@@ -151,6 +157,15 @@ Only return data you are confident about. If unsure about a field, set it to nul
         results.push({ id: profileId, name: fullName, error: "AI returned invalid JSON" });
         continue;
       }
+
+      // Sanitize string "null" values that AI sometimes returns
+      for (const key of Object.keys(enriched)) {
+        if (typeof enriched[key] === "string" &&
+            ["null", "unknown", "n/a", "none", ""].includes(enriched[key].toLowerCase().trim())) {
+          enriched[key] = null;
+        }
+      }
+
       console.log(`Enriched ${fullName}:`, JSON.stringify(enriched));
 
       // Update fields: if force, overwrite all; otherwise only empty/null fields
