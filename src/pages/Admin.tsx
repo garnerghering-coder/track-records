@@ -157,6 +157,11 @@ const Admin = () => {
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
 
+  // Bulk entry editing
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+  const [bulkField, setBulkField] = useState("race_class");
+  const [bulkValue, setBulkValue] = useState("");
+
   // Pending approval queue
   interface PendingEvent {
     id: string;
@@ -204,6 +209,43 @@ const Admin = () => {
       if (expandedEventId) fetchExpandedEntries(expandedEventId);
     }
     setEditingCell(null);
+  };
+
+  const BULK_EDITABLE_COLUMNS = [
+    { value: "race_class", label: "Class" },
+    { value: "status", label: "Status" },
+    { value: "team_name", label: "Team" },
+    { value: "car_number", label: "Car #" },
+    { value: "gap_to_leader", label: "Gap to Leader" },
+    { value: "gap_to_class_leader", label: "Gap to Class Leader" },
+    { value: "notes", label: "Notes" },
+    { value: "finishing_position", label: "Position" },
+    { value: "class_position", label: "Class Position" },
+    { value: "laps_completed", label: "Laps" },
+    { value: "pit_stops", label: "Pit Stops" },
+  ];
+
+  const handleBulkUpdateEntries = async (clearField = false) => {
+    if (selectedEntryIds.size === 0) return;
+    const numericFields = ["finishing_position", "class_position", "laps_completed", "pit_stops"];
+    let value: any = clearField ? null : (bulkValue.trim() || null);
+    if (!clearField && value && numericFields.includes(bulkField)) {
+      value = parseInt(value);
+      if (isNaN(value)) { toast({ title: "Invalid number", variant: "destructive" }); return; }
+    }
+    const { error } = await supabase
+      .from("race_entries")
+      .update({ [bulkField]: value } as any)
+      .in("id", Array.from(selectedEntryIds));
+    if (error) {
+      toast({ title: "Bulk update failed", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: clearField ? "Field cleared" : "Bulk update applied", description: `${selectedEntryIds.size} entries updated.` });
+      setSelectedEntryIds(new Set());
+      setBulkValue("");
+      fetchPendingEvents();
+      if (expandedEventId) fetchExpandedEntries(expandedEventId);
+    }
   };
 
   const startEditEvent = (ev: { id: string; event_name: string; series_name: string; season_year: number; location: string | null; category: string | null }) => {
@@ -641,6 +683,7 @@ const Admin = () => {
   };
 
   const toggleExpandEvent = (eventId: string) => {
+    setSelectedEntryIds(new Set());
     if (expandedEventId === eventId) {
       setExpandedEventId(null);
       setExpandedEntries([]);
@@ -1172,40 +1215,114 @@ Here are the results to parse:
   };
 
   // Shared entries table for pending and expanded All Races
-  const renderEntriesTable = (entries: any[]) => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b border-border bg-muted/50">
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pos</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Car #</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Team</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Driver(s)</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Gap</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries
-            .sort((a: any, b: any) => (a.finishing_position || 999) - (b.finishing_position || 999))
-            .map((entry: any) => (
-              <tr key={entry.id} className="border-b border-border/50">
-                {renderCell(entry, "finishing_position", entry.finishing_position, "text-card-foreground font-medium")}
-                {renderCell(entry, "car_number", entry.car_number)}
-                {renderCell(entry, "team_name", entry.team_name, "text-card-foreground")}
-                {renderDriverCell(entry)}
-                {renderCell(entry, "race_class", entry.race_class)}
-                {renderCell(entry, "gap_to_leader", entry.gap_to_leader)}
-                {renderCell(entry, "status", entry.status)}
-                {renderCell(entry, "notes", entry.notes)}
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const renderEntriesTable = (entries: any[]) => {
+    const entryIds = entries.map((e: any) => e.id);
+    const allSelected = entryIds.length > 0 && entryIds.every(id => selectedEntryIds.has(id));
+    const someSelected = entryIds.some(id => selectedEntryIds.has(id));
+
+    return (
+      <div className="overflow-x-auto">
+        {someSelected && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted/60 border-b border-border flex-wrap">
+            <span className="text-xs font-medium text-card-foreground">{selectedEntryIds.size} selected</span>
+            <Select value={bulkField} onValueChange={setBulkField}>
+              <SelectTrigger className="h-7 text-xs w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {BULK_EDITABLE_COLUMNS.map(col => (
+                  <SelectItem key={col.value} value={col.value}>{col.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {bulkField === "status" ? (
+              <Select value={bulkValue} onValueChange={setBulkValue}>
+                <SelectTrigger className="h-7 text-xs w-28"><SelectValue placeholder="New value" /></SelectTrigger>
+                <SelectContent>
+                  {["Finished", "DNF", "DNS", "DSQ"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={bulkValue}
+                onChange={(e) => setBulkValue(e.target.value)}
+                placeholder="New value"
+                className="h-7 text-xs w-32"
+                type={["finishing_position", "class_position", "laps_completed", "pit_stops"].includes(bulkField) ? "number" : "text"}
+              />
+            )}
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleBulkUpdateEntries(false)} disabled={!bulkValue.trim()}>
+              Apply
+            </Button>
+            <Button size="sm" variant="outline" className="h-7 text-xs text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleBulkUpdateEntries(true)}>
+              Clear Field
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedEntryIds(new Set())}>
+              Deselect All
+            </Button>
+          </div>
+        )}
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border bg-muted/50">
+              <th className="px-2 py-2 w-8">
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setSelectedEntryIds(prev => {
+                        const next = new Set(prev);
+                        entryIds.forEach(id => next.add(id));
+                        return next;
+                      });
+                    } else {
+                      setSelectedEntryIds(prev => {
+                        const next = new Set(prev);
+                        entryIds.forEach(id => next.delete(id));
+                        return next;
+                      });
+                    }
+                  }}
+                />
+              </th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pos</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Car #</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Team</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Driver(s)</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Gap</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries
+              .sort((a: any, b: any) => (a.finishing_position || 999) - (b.finishing_position || 999))
+              .map((entry: any) => (
+                <tr key={entry.id} className={`border-b border-border/50 ${selectedEntryIds.has(entry.id) ? "bg-primary/5" : ""}`}>
+                  <td className="px-2 py-2">
+                    <Checkbox
+                      checked={selectedEntryIds.has(entry.id)}
+                      onCheckedChange={(checked) => {
+                        const next = new Set(selectedEntryIds);
+                        if (checked) next.add(entry.id); else next.delete(entry.id);
+                        setSelectedEntryIds(next);
+                      }}
+                    />
+                  </td>
+                  {renderCell(entry, "finishing_position", entry.finishing_position, "text-card-foreground font-medium")}
+                  {renderCell(entry, "car_number", entry.car_number)}
+                  {renderCell(entry, "team_name", entry.team_name, "text-card-foreground")}
+                  {renderDriverCell(entry)}
+                  {renderCell(entry, "race_class", entry.race_class)}
+                  {renderCell(entry, "gap_to_leader", entry.gap_to_leader)}
+                  {renderCell(entry, "status", entry.status)}
+                  {renderCell(entry, "notes", entry.notes)}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   if (loading) {
     return (<div className="min-h-screen bg-background"><Header /><div className="flex min-h-screen items-center justify-center pt-16"><p className="text-muted-foreground">Checking permissions…</p></div></div>);
@@ -1221,7 +1338,7 @@ Here are the results to parse:
         <h1 className="font-display text-3xl font-bold text-foreground mb-2">Admin Dashboard</h1>
         <p className="text-muted-foreground mb-8">Manage drivers, roles, and platform data.</p>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedEntryIds(new Set()); }} className="w-full">
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="create-driver">Create Driver</TabsTrigger>
             <TabsTrigger value="drivers">All Drivers ({drivers.length})</TabsTrigger>
