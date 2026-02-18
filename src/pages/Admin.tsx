@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
 import DriverPhotoUpload from "@/components/DriverPhotoUpload";
-import { getFlagForCountry } from "@/lib/countries";
+import FlagImage from "@/components/FlagImage";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -146,6 +147,10 @@ const Admin = () => {
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [bulkEnriching, setBulkEnriching] = useState(false);
+
+  // Bulk selection
+  const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
 
   // Pending approval queue
   interface PendingEvent {
@@ -770,17 +775,58 @@ const Admin = () => {
 
   const handleRejectEvent = async (eventId: string) => {
     setApprovingEntries(prev => new Set(prev).add(eventId));
-    const { error } = await supabase
-      .from("race_entries")
-      .update({ verification_status: "rejected" as const })
-      .eq("race_event_id", eventId)
-      .eq("verification_status", "pending");
+    try {
+      // 1. Get all entries for this event
+      const { data: entries } = await supabase
+        .from("race_entries")
+        .select("id")
+        .eq("race_event_id", eventId);
+      const entryIds = (entries || []).map(e => e.id);
 
-    if (error) {
-      toast({ title: "Error rejecting", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Entries rejected" });
+      // 2. Get all driver links and collect driver IDs
+      let driverProfileIds: string[] = [];
+      if (entryIds.length > 0) {
+        const { data: junctions } = await supabase
+          .from("race_entry_drivers")
+          .select("driver_profile_id")
+          .in("race_entry_id", entryIds);
+        driverProfileIds = [...new Set((junctions || []).map(j => j.driver_profile_id))];
+
+        // 3. Delete junction rows
+        await supabase.from("race_entry_drivers").delete().in("race_entry_id", entryIds);
+      }
+
+      // 4. Delete entries
+      await supabase.from("race_entries").delete().eq("race_event_id", eventId);
+
+      // 5. Delete the event
+      await supabase.from("race_events").delete().eq("id", eventId);
+
+      // 6. Clean up orphaned unclaimed drivers
+      for (const driverId of driverProfileIds) {
+        const { data: driver } = await supabase
+          .from("driver_profiles")
+          .select("is_claimed")
+          .eq("id", driverId)
+          .single();
+        if (driver && !driver.is_claimed) {
+          const { data: remaining } = await supabase
+            .from("race_entry_drivers")
+            .select("id")
+            .eq("driver_profile_id", driverId)
+            .limit(1);
+          if (!remaining || remaining.length === 0) {
+            await supabase.from("driver_profiles").delete().eq("id", driverId);
+          }
+        }
+      }
+
+      toast({ title: "Event rejected and fully deleted" });
       fetchPendingEvents();
+      fetchRaceEvents();
+      fetchDrivers();
+    } catch (err: any) {
+      toast({ title: "Error rejecting", description: err.message, variant: "destructive" });
     }
     setApprovingEntries(prev => { const n = new Set(prev); n.delete(eventId); return n; });
   };
@@ -892,16 +938,51 @@ const Admin = () => {
 
           {/* ── All Drivers ── */}
           <TabsContent value="drivers">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h2 className="font-display text-xl font-bold text-foreground">All Drivers</h2>
-              <Button variant="outline" size="sm" onClick={handleBulkEnrich} disabled={bulkEnriching}>
-                {bulkEnriching ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
-              </Button>
+              <div className="flex items-center gap-2">
+                {selectedDriverIds.size > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Trash className="h-3.5 w-3.5 mr-1" /> Delete Selected ({selectedDriverIds.size})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {selectedDriverIds.size} driver(s)?</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete the selected driver profiles. This cannot be undone.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                          for (const dId of selectedDriverIds) {
+                            await handleDelete(dId);
+                          }
+                          setSelectedDriverIds(new Set());
+                        }}>Delete All</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" size="sm" onClick={handleBulkEnrich} disabled={bulkEnriching}>
+                  {bulkEnriching ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+                </Button>
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
+                    <th className="px-2 py-3 w-10">
+                      <Checkbox
+                        checked={drivers.length > 0 && selectedDriverIds.size === drivers.length}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedDriverIds(new Set(drivers.map(d => d.id)));
+                          else setSelectedDriverIds(new Set());
+                        }}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Driver</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Nationality</th>
@@ -911,9 +992,18 @@ const Admin = () => {
                 </thead>
                 <tbody>
                   {drivers.map((d) => {
-                    const flag = getFlagForCountry(d.nationality);
                     return (
                       <tr key={d.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-2 py-3">
+                          <Checkbox
+                            checked={selectedDriverIds.has(d.id)}
+                            onCheckedChange={(checked) => {
+                              const next = new Set(selectedDriverIds);
+                              if (checked) next.add(d.id); else next.delete(d.id);
+                              setSelectedDriverIds(next);
+                            }}
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             {d.photo_url ? (
@@ -925,7 +1015,7 @@ const Admin = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground capitalize">{d.primary_category?.replace(/_/g, " ") ?? "—"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{flag && <span className="mr-1">{flag}</span>}{d.nationality ?? "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground"><span className="inline-flex items-center gap-1"><FlagImage nationality={d.nationality} size={16} /> {d.nationality ?? "—"}</span></td>
                         <td className="px-4 py-3">
                           <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${d.is_claimed ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>{d.is_claimed ? "Yes" : "No"}</span>
                         </td>
@@ -956,7 +1046,7 @@ const Admin = () => {
                       </tr>
                     );
                   })}
-                  {drivers.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No drivers yet.</td></tr>}
+                  {drivers.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No drivers yet.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1099,10 +1189,9 @@ const Admin = () => {
                         <Label className="text-xs text-muted-foreground mb-1 block">Drivers</Label>
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           {entry.drivers.map(d => {
-                            const flag = getFlagForCountry(d.nationality);
                             return (
                               <span key={d.id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-xs px-2.5 py-1">
-                                {flag && <span>{flag}</span>}
+                                <FlagImage nationality={d.nationality} size={12} />
                                 {d.first_name} {d.last_name}
                                 <button type="button" onClick={() => removeDriverFromEntry(entry.key, d.id)} className="ml-0.5 hover:text-destructive"><X className="h-3 w-3" /></button>
                               </span>
@@ -1126,7 +1215,6 @@ const Admin = () => {
                           <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                             <div className="max-h-[200px] overflow-y-auto p-1">
                               {searchResults.map((d) => {
-                                const flag = getFlagForCountry(d.nationality);
                                 const alreadyAdded = entry.drivers.some(ed => ed.id === d.id);
                                 return (
                                   <button
@@ -1141,7 +1229,7 @@ const Admin = () => {
                                       <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">{d.first_name[0]}{d.last_name[0]}</div>
                                     )}
                                     <span className="font-medium text-popover-foreground text-xs">{d.first_name} {d.last_name}</span>
-                                    {flag && <span className="text-sm">{flag}</span>}
+                                    <FlagImage nationality={d.nationality} size={14} />
                                     {alreadyAdded && <Check className="h-3 w-3 text-primary" />}
                                   </button>
                                 );
@@ -1450,10 +1538,45 @@ const Admin = () => {
 
           {/* ── All Races ── */}
           <TabsContent value="all-races">
+            {selectedEventIds.size > 0 && (
+              <div className="mb-4">
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      <Trash className="h-3.5 w-3.5 mr-1" /> Delete Selected ({selectedEventIds.size})
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete {selectedEventIds.size} event(s)?</AlertDialogTitle>
+                      <AlertDialogDescription>This will permanently delete the selected events and all their entries. This cannot be undone.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                        for (const eId of selectedEventIds) {
+                          await handleDeleteEvent(eId);
+                        }
+                        setSelectedEventIds(new Set());
+                      }}>Delete All</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
+                    <th className="px-2 py-3 w-10">
+                      <Checkbox
+                        checked={raceEvents.length > 0 && selectedEventIds.size === raceEvents.length}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedEventIds(new Set(raceEvents.map((ev: any) => ev.id)));
+                          else setSelectedEventIds(new Set());
+                        }}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Event</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Series</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Year</th>
@@ -1466,6 +1589,16 @@ const Admin = () => {
                 <tbody>
                   {raceEvents.map((ev: any) => (
                     <tr key={ev.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-2 py-3">
+                        <Checkbox
+                          checked={selectedEventIds.has(ev.id)}
+                          onCheckedChange={(checked) => {
+                            const next = new Set(selectedEventIds);
+                            if (checked) next.add(ev.id); else next.delete(ev.id);
+                            setSelectedEventIds(next);
+                          }}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-card-foreground font-medium">{ev.event_name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{ev.series_name}</td>
                       <td className="px-4 py-3 text-muted-foreground">{ev.season_year}</td>
@@ -1494,7 +1627,7 @@ const Admin = () => {
                       </td>
                     </tr>
                   ))}
-                  {raceEvents.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No race events yet.</td></tr>}
+                  {raceEvents.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No race events yet.</td></tr>}
                 </tbody>
               </table>
             </div>

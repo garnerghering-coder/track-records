@@ -15,7 +15,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CountrySelect from "@/components/CountrySelect";
 import DriverPhotoUpload from "@/components/DriverPhotoUpload";
-import { getFlagForCountry } from "@/lib/countries";
+import FlagImage from "@/components/FlagImage";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -233,7 +233,7 @@ const DriverProfilePage = () => {
   }
 
   const verifiedCount = results.filter(r => r.verification_status === "verified").length;
-  const flag = getFlagForCountry(profile.nationality);
+  const flag = null; // replaced by FlagImage component
 
   return (
     <div className="min-h-screen bg-background">
@@ -261,7 +261,7 @@ const DriverProfilePage = () => {
                   {!profile.is_claimed && <Badge variant="secondary" className="text-xs">Unclaimed</Badge>}
                 </div>
                 <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-                  {profile.nationality && <span>{flag ?? "🌍"} {profile.nationality}</span>}
+                  {profile.nationality && <span className="inline-flex items-center gap-1"><FlagImage nationality={profile.nationality} size={16} /> {profile.nationality}</span>}
                   {profile.primary_category && <span>{categoryLabels[profile.primary_category] || profile.primary_category}</span>}
                   {profile.license_grade && <span>License: {profile.license_grade}</span>}
                   <span>{verifiedCount} verified result{verifiedCount !== 1 ? "s" : ""}</span>
