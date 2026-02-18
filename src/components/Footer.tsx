@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import logoIcon from "@/assets/logo-icon.png";
 
 const Footer = () => {
   return (
@@ -7,9 +8,7 @@ const Footer = () => {
         <div className="grid gap-8 md:grid-cols-3">
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="flex h-7 w-7 items-center justify-center rounded bg-primary">
-                <span className="font-display text-xs font-bold text-primary-foreground">TR</span>
-              </div>
+              <img src={logoIcon} alt="TrackRecord" className="h-7 w-auto" />
               <span className="font-display text-lg font-bold tracking-wider">TrackRecord</span>
             </div>
             <p className="text-sm text-muted-foreground">
