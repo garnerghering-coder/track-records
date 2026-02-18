@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Search as SearchIcon, CheckCircle } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
@@ -29,7 +28,7 @@ const categoryOptions = [
 const categoryLabels: Record<string, string> = Object.fromEntries(categoryOptions.filter(c => c.value !== "all").map(c => [c.value, c.label]));
 
 const SearchPage = () => {
-  const [drivers, setDrivers] = useState<(DriverProfile & { verified_count: number })[]>([]);
+  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [nationality, setNationality] = useState("");
@@ -54,27 +53,7 @@ const SearchPage = () => {
       query = query.order("updated_at", { ascending: false });
 
       const { data } = await query;
-      const profiles = data ?? [];
-
-      // Fetch verified counts
-      const profileIds = profiles.map(p => p.id);
-      let verifiedCounts: Record<string, number> = {};
-
-      if (profileIds.length > 0) {
-        const { data: resultsData } = await supabase
-          .from("race_results")
-          .select("driver_profile_id")
-          .in("driver_profile_id", profileIds)
-          .eq("verification_status", "verified");
-
-        if (resultsData) {
-          resultsData.forEach(r => {
-            verifiedCounts[r.driver_profile_id] = (verifiedCounts[r.driver_profile_id] || 0) + 1;
-          });
-        }
-      }
-
-      setDrivers(profiles.map(p => ({ ...p, verified_count: verifiedCounts[p.id] || 0 })));
+      setDrivers(data ?? []);
       setLoading(false);
     };
 
@@ -161,12 +140,6 @@ const SearchPage = () => {
                       )}
                       {driver.primary_category && <span>{categoryLabels[driver.primary_category] || driver.primary_category}</span>}
                     </div>
-                    {driver.verified_count > 0 && (
-                      <div className="mt-2 flex items-center gap-1 text-xs text-primary">
-                        <CheckCircle className="h-3 w-3" />
-                        {driver.verified_count} verified result{driver.verified_count !== 1 ? "s" : ""}
-                      </div>
-                    )}
                   </div>
                 </div>
               </Link>

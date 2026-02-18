@@ -252,6 +252,7 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
     const unmatchedNames: string[] = [];
     let createdCount = 0;
     const createdNames: string[] = [];
+    const createdDriverIds: string[] = [];
 
     // Insert entries one by one to link drivers
     for (const entry of extracted.entries || []) {
@@ -301,6 +302,7 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
               driverMap.set(normalized, newDriver.id);
               createdCount++;
               createdNames.push(name);
+              createdDriverIds.push(newDriver.id);
             } else {
               unmatchedForEntry.push(name);
               unmatchedCount++;
@@ -349,6 +351,18 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
           })));
         if (juncError) console.error("Junction insert error:", juncError);
       }
+    }
+
+    // Fire-and-forget enrichment for newly created drivers
+    if (createdDriverIds.length > 0) {
+      fetch(`${SUPABASE_URL}/functions/v1/enrich-driver-profile`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader!,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ driverProfileIds: createdDriverIds }),
+      }).catch(err => console.error("Auto-enrich failed:", err));
     }
 
     return new Response(
