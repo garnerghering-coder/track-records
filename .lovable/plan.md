@@ -1,105 +1,34 @@
 
 
-## Direct JSON Import (No AI Required)
+## Bulk Column Edit for Race Entries
 
-### Concept
+### What It Does
 
-Add a "Direct Import" mode to the Admin page that lets you:
-1. Copy a ready-made JSON template from the admin UI
-2. Paste it into ChatGPT / Claude / any AI yourself
-3. Get back structured JSON
-4. Paste the JSON back into the admin UI
-5. It imports directly -- no backend AI calls, no API keys needed
+Adds the ability to select multiple race entries within an event and bulk-edit (or clear) a specific column for all of them at once. For example, you can select all entries and clear the "Class" column, or set all statuses to "Finished".
 
-### What Changes
+### How It Works
 
-**1. New Edge Function: `supabase/functions/direct-import/index.ts`**
+1. **Checkboxes on every entry row** -- A checkbox appears on each row in the entries table (used in both Pending and All Races expanded views). A "select all" checkbox in the header selects/deselects all entries for that event.
 
-A new backend function that accepts pre-structured JSON (same schema the AI currently outputs) and does the import logic (create event, match/create drivers, insert entries, fire enrichment). This is essentially the second half of `import-race-results` -- everything after the AI call -- extracted into its own function. No AI calls whatsoever.
+2. **Bulk action bar** -- When one or more entries are selected, a toolbar appears above the table with:
+   - A dropdown to pick which column to edit (Class, Status, Team, Car #, Gap, Notes, etc.)
+   - An input/select for the new value (or leave empty to clear the field)
+   - An "Apply to Selected" button
+   - A "Clear Field" button (shortcut to set the value to null for all selected)
 
-Input payload:
-```json
-{
-  "event_name": "Monaco Grand Prix",
-  "series_name": "Formula 1",
-  "season_year": 2025,
-  "location": "Monte Carlo",
-  "category": "formula",
-  "entries": [
-    {
-      "finishing_position": 1,
-      "car_number": "1",
-      "team_name": "Red Bull Racing",
-      "driver_names": ["Max Verstappen"],
-      "race_class": null,
-      "laps_completed": 78,
-      "status": "Finished"
-    }
-  ]
-}
-```
-
-**2. Admin UI: New tab or mode within "AI Import" tab**
-
-Add a toggle/sub-tab in the existing AI Import section with two modes:
-- **AI Import** (existing) -- paste raw text, AI parses it
-- **Direct JSON Import** (new) -- paste pre-structured JSON, no AI
-
-The Direct Import mode will include:
-- A "Copy Template" button that copies the JSON schema + instructions to clipboard (ready to paste into ChatGPT)
-- A JSON textarea for pasting the structured result back
-- Basic client-side validation (is it valid JSON? does it have `entries`?)
-- An "Import" button that sends it to the new `direct-import` function
-
-**3. File: `src/pages/Admin.tsx`**
-
-- Add state for the direct import mode (`directJsonText`, `directImporting`)
-- Add a sub-tab toggle within the ai-import tab content
-- Add the template copy button + JSON textarea + import button
-- Add the handler that calls the new `direct-import` edge function
-
-### The Copyable Template/Prompt
-
-The "Copy Template" button will copy something like:
-
-```
-Parse these race results into this exact JSON format. Return ONLY valid JSON, no explanation:
-
-{
-  "event_name": "string",
-  "series_name": "string",
-  "season_year": number,
-  "location": "string or null",
-  "category": "one of: karting, single_seater, gt, touring_car, sports_car, rally, endurance, formula, stock_car, other",
-  "entries": [
-    {
-      "finishing_position": number or null,
-      "class_position": number or null,
-      "car_number": "string or null",
-      "team_name": "string or null",
-      "driver_names": ["array of full driver name strings"],
-      "race_class": "string or null",
-      "laps_completed": number or null,
-      "gap_to_leader": "string or null",
-      "gap_to_class_leader": "string or null",
-      "pit_stops": number or null,
-      "status": "Finished, DNF, DNS, or DSQ"
-    }
-  ]
-}
-
-Here are the results to parse:
-[PASTE YOUR RESULTS HERE]
-```
+3. **Database update** -- Clicking "Apply" runs a single Supabase update targeting all selected entry IDs for the chosen field.
 
 ### Technical Details
 
-- The `direct-import` edge function reuses the same driver matching logic from `import-race-results` (exact match, partial match, abbreviated match, auto-create)
-- Admin auth check is identical to `import-race-results`
-- The function skips all AI calls entirely -- it just validates the JSON structure and runs the database inserts
-- Client-side validation checks for valid JSON and presence of `entries` array before sending
-- `supabase/config.toml` gets a `[functions.direct-import]` entry with `verify_jwt = false`
+**File: `src/pages/Admin.tsx`**
 
-### No Database Changes
+- Add state: `selectedEntryIds: Set<string>`, `bulkField: string`, `bulkValue: string`
+- Add a "select all" checkbox in the entries table header and per-row checkboxes in `renderEntriesTable`
+- Add a bulk action bar rendered above the table when `selectedEntryIds.size > 0`
+- Add a `handleBulkUpdateEntries` function that calls `supabase.from("race_entries").update({ [bulkField]: value }).in("id", [...selectedEntryIds])`, then refreshes the data and clears selection
+- The editable columns will be: `race_class`, `status`, `team_name`, `car_number`, `gap_to_leader`, `gap_to_class_leader`, `notes`, `finishing_position`, `class_position`, `laps_completed`, `pit_stops`
+- Status field uses a Select dropdown; all others use a text/number input
+- Selection resets when switching between events or tabs
 
-No new tables or migrations needed. The function writes to the same `race_events`, `race_entries`, and `race_entry_drivers` tables.
+No database changes needed -- this uses the existing `race_entries` table and existing admin RLS policies.
+
