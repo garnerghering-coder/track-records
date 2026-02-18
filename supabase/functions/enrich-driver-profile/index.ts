@@ -54,14 +54,15 @@ serve(async (req) => {
       });
     }
 
-    const body = await req.json();
-    const driverProfileIds: string[] = body.driverProfileIds
-      ? body.driverProfileIds
-      : body.driverProfileId
-        ? [body.driverProfileId]
-        : [];
+      const body = await req.json();
+      const force = body.force === true;
+      const driverProfileIds: string[] = body.driverProfileIds
+        ? body.driverProfileIds
+        : body.driverProfileId
+          ? [body.driverProfileId]
+          : [];
 
-    if (driverProfileIds.length === 0) {
+      if (driverProfileIds.length === 0) {
       return new Response(JSON.stringify({ error: "driverProfileId or driverProfileIds required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -85,7 +86,7 @@ serve(async (req) => {
 
       const fullName = `${profile.first_name} ${profile.last_name}`;
 
-      // Call AI to research this driver
+      // Call AI to research this driver using JSON mode (more reliable than tool calling)
       const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -97,54 +98,27 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: "You are a motorsport research assistant. Given a racing driver's name, research and return factual information about them. Only return data you are confident about. If unsure about a field, return null for it.",
+              content: `You are a motorsport research assistant. Given a racing driver's name, return ONLY a JSON object with the following fields. Do NOT include any text outside the JSON object.
+
+Fields:
+- "nationality": string or null (e.g. "Danish", "British", "Brazilian")
+- "bio": string or null (2-3 sentence biography of their racing career)
+- "date_of_birth": string or null (ISO format YYYY-MM-DD)
+- "primary_category": one of "karting", "single_seater", "gt", "touring_car", "sports_car", "rally", "endurance", "formula", "stock_car", "other", or null
+- "social_website": string or null (personal website URL)
+- "social_instagram": string or null (Instagram URL)
+- "social_twitter": string or null (Twitter/X URL)
+- "social_linkedin": string or null (LinkedIn URL)
+
+Only return data you are confident about. If unsure about a field, set it to null.`,
             },
             {
               role: "user",
-              content: `Research the racing driver "${fullName}". Return their nationality, a brief 2-3 sentence bio about their racing career, date of birth, primary racing category, and any known social media or website URLs.`,
+              content: `Research the racing driver "${fullName}".`,
             },
           ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "submit_driver_info",
-                description: "Submit researched driver profile information",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    nationality: {
-                      type: ["string", "null"],
-                      description: "Driver's nationality, e.g. 'Danish', 'British', 'Brazilian'",
-                    },
-                    bio: {
-                      type: ["string", "null"],
-                      description: "2-3 sentence biography of the driver's racing career",
-                    },
-                    date_of_birth: {
-                      type: ["string", "null"],
-                      description: "ISO date string (YYYY-MM-DD) or null if unknown",
-                    },
-                    primary_category: {
-                      type: ["string", "null"],
-                      enum: [
-                        "karting", "single_seater", "gt", "touring_car", "sports_car",
-                        "rally", "endurance", "formula", "stock_car", "other", null,
-                      ],
-                      description: "Primary racing category",
-                    },
-                    social_website: { type: ["string", "null"], description: "Personal website URL" },
-                    social_instagram: { type: ["string", "null"], description: "Instagram URL" },
-                    social_twitter: { type: ["string", "null"], description: "Twitter/X URL" },
-                    social_linkedin: { type: ["string", "null"], description: "LinkedIn URL" },
-                  },
-                  required: ["nationality", "bio", "date_of_birth", "primary_category"],
-                  additionalProperties: false,
-                },
-              },
-            },
-          ],
-          tool_choice: { type: "function", function: { name: "submit_driver_info" } },
+          response_format: { type: "json_object" },
+          max_tokens: 2048,
         }),
       });
 
@@ -163,27 +137,33 @@ serve(async (req) => {
       }
 
       const aiData = await aiResponse.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall?.function?.arguments) {
+      const rawContent = aiData.choices?.[0]?.message?.content;
+      if (!rawContent) {
         results.push({ id: profileId, name: fullName, error: "AI returned no data" });
         continue;
       }
 
-      const enriched = JSON.parse(toolCall.function.arguments);
+      let enriched: any;
+      try {
+        enriched = JSON.parse(rawContent);
+      } catch {
+        results.push({ id: profileId, name: fullName, error: "AI returned invalid JSON" });
+        continue;
+      }
       console.log(`Enriched ${fullName}:`, JSON.stringify(enriched));
 
-      // Only update fields that are currently empty/null
+      // Update fields: if force, overwrite all; otherwise only empty/null fields
       const updates: Record<string, any> = {};
-      if (!profile.nationality && enriched.nationality) updates.nationality = enriched.nationality;
-      if (!profile.bio && enriched.bio) updates.bio = enriched.bio;
-      if (!profile.date_of_birth && enriched.date_of_birth) updates.date_of_birth = enriched.date_of_birth;
-      if ((!profile.primary_category || profile.primary_category === "other") && enriched.primary_category && enriched.primary_category !== "other") {
+      if ((force || !profile.nationality) && enriched.nationality) updates.nationality = enriched.nationality;
+      if ((force || !profile.bio) && enriched.bio) updates.bio = enriched.bio;
+      if ((force || !profile.date_of_birth) && enriched.date_of_birth) updates.date_of_birth = enriched.date_of_birth;
+      if ((force || !profile.primary_category || profile.primary_category === "other") && enriched.primary_category && enriched.primary_category !== "other") {
         updates.primary_category = enriched.primary_category;
       }
-      if (!profile.social_website && enriched.social_website) updates.social_website = enriched.social_website;
-      if (!profile.social_instagram && enriched.social_instagram) updates.social_instagram = enriched.social_instagram;
-      if (!profile.social_twitter && enriched.social_twitter) updates.social_twitter = enriched.social_twitter;
-      if (!profile.social_linkedin && enriched.social_linkedin) updates.social_linkedin = enriched.social_linkedin;
+      if ((force || !profile.social_website) && enriched.social_website) updates.social_website = enriched.social_website;
+      if ((force || !profile.social_instagram) && enriched.social_instagram) updates.social_instagram = enriched.social_instagram;
+      if ((force || !profile.social_twitter) && enriched.social_twitter) updates.social_twitter = enriched.social_twitter;
+      if ((force || !profile.social_linkedin) && enriched.social_linkedin) updates.social_linkedin = enriched.social_linkedin;
 
       if (Object.keys(updates).length > 0) {
         const { error: updateError } = await adminClient

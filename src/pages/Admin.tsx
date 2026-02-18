@@ -594,7 +594,7 @@ const Admin = () => {
     setImportingUrl(false);
   };
 
-  const handleEnrichDriver = async (driverId: string) => {
+  const handleEnrichDriver = async (driverId: string, force = false) => {
     setEnrichingIds(prev => new Set(prev).add(driverId));
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -607,7 +607,7 @@ const Admin = () => {
             Authorization: `Bearer ${session?.access_token}`,
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
-          body: JSON.stringify({ driverProfileId: driverId }),
+          body: JSON.stringify({ driverProfileId: driverId, force }),
         }
       );
 
@@ -617,7 +617,21 @@ const Admin = () => {
       } else {
         const r = result.results?.[0];
         const fields = r?.fieldsUpdated?.length || 0;
-        toast({ title: fields > 0 ? `Enriched ${r.name}` : `No new data for ${r.name}`, description: fields > 0 ? `Updated: ${r.fieldsUpdated.join(", ")}` : "All fields already populated." });
+        if (fields > 0) {
+          toast({ title: `Enriched ${r.name}`, description: `Updated: ${r.fieldsUpdated.join(", ")}` });
+        } else if (!force) {
+          toast({
+            title: `No new data for ${r.name}`,
+            description: "Try force re-enrich to overwrite existing data.",
+            action: (
+              <Button variant="outline" size="sm" onClick={() => handleEnrichDriver(driverId, true)}>
+                Force Re-enrich
+              </Button>
+            ),
+          });
+        } else {
+          toast({ title: `No new data for ${r.name}`, description: "AI returned no additional information." });
+        }
         fetchDrivers();
       }
     } catch (err: any) {
