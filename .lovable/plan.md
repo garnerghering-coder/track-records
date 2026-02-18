@@ -1,64 +1,111 @@
 
+## Combined Improvements: AI Speed, Scraping Quality, Motorsport Intelligence, Flags, Reject Logic, and Bulk Delete
 
-## Add Web Search and URL Scraping for Race Data
+### 1. Speed Up All AI Calls
 
-### Problem
-The AI model (Gemini Flash) has a knowledge cutoff and can't find results for very recent races. You need two ways to get fresh data: automatic web search and paste-a-URL scraping.
+Switch the AI model from `google/gemini-3-flash-preview` (slow preview) to `google/gemini-2.5-flash` (production-ready, faster) in all four edge functions:
+- `generate-race-event/index.ts`
+- `scrape-race-results/index.ts`
+- `import-race-results/index.ts`
+- `enrich-driver-profile/index.ts`
 
-### Solution
+This should noticeably reduce response times.
 
-#### 1. Connect Firecrawl (URL Scraping)
-Connect the Firecrawl connector to this project. This gives the edge functions access to a web scraping API that can read any results page you paste in.
+### 2. Improve URL Scraping Quality
 
-#### 2. New Edge Function: `scrape-race-results`
-A new backend function that:
-- Accepts a `{ url: string }` payload
-- Uses Firecrawl to scrape the page content as markdown
-- Feeds that markdown into the AI (Gemini Flash) with the same `submit_race_results` tool-calling schema
-- Inserts the structured results into the database (same logic as `generate-race-event`)
-- Everything lands as "pending" for review
+In `scrape-race-results/index.ts`:
+- Increase the markdown sent to the AI from 30,000 to 80,000 characters to capture full results pages
+- Enhance the system prompt to stress extracting ALL table rows, every car/entry, not just summarizing
 
-#### 3. Update `generate-race-event` with Web Search
-Upgrade the existing function to use a two-step approach:
-- **Step 1**: Use Firecrawl's search API to find recent results pages for the given race name (e.g., searching "2026 Rolex 24 at Daytona results")
-- **Step 2**: Scrape the top result to get actual timing data as markdown
-- **Step 3**: Feed that real data into the AI for structured extraction (instead of relying on the AI's training data alone)
-- This means the "Generate Race" feature now works for races that happened yesterday, not just ones in the AI's training data
+### 3. Improve Name-Based Search (generate-race-event)
 
-Also update the system prompt with date context and anti-TBD rules (the fix from the previous plan).
+In `generate-race-event/index.ts`:
+- Improve the Firecrawl search query to `"{eventName} full race results classification {year}"` for better hits
+- If the first search returns no useful content, try a fallback search with simplified terms
+- Increase scraped content limit from 40,000 to 80,000 characters
 
-#### 4. Admin UI Updates
-In the AI Import tab of `src/pages/Admin.tsx`:
-- Add a **"Import from URL"** section: a URL input field and "Import" button. Paste a link to any results page and the system scrapes and extracts it.
-- The existing "Generate Race from Name" input stays, but now it searches the web first for better accuracy.
-- The existing "Advanced Import" text area for pasting raw text remains unchanged.
+### 4. Motorsport Intelligence for Raw Text Import
+
+In `import-race-results/index.ts`:
+- Update the system prompt to instruct the AI to use motorsport domain knowledge: infer team names from car numbers (e.g., #31 Cadillac = Whelen Engineering Racing), normalize team names to official forms, infer class from car type/team, and correct abbreviations
+
+### 5. Flag Images Instead of Emojis
+
+**New file: `src/components/FlagImage.tsx`**
+- A component that renders flag images from `flagcdn.com` (a free flag CDN) using ISO country codes
+- Props: `nationality: string | null`, `size?: number` (default 20)
+- Falls back to a globe icon if nationality is unknown
+
+**Updated: `src/lib/countries.ts`**
+- Add a `getCountryCode(nationality: string): string | null` function that maps nationality strings (like "Danish", "American", "Brazilian") and country names to ISO codes
+
+**Updated UI files** -- replace all `getFlagForCountry()` emoji usage with `<FlagImage>`:
+- `src/pages/Admin.tsx` (driver table, entry driver tags, search results)
+- `src/pages/DriverProfile.tsx` (profile header)
+- `src/pages/Search.tsx` (search results)
+- `src/pages/EventDetail.tsx` (entry driver links)
+
+### 6. Reject = Full Delete
+
+Update `handleRejectEvent` in `Admin.tsx` to fully remove all data instead of just marking entries as "rejected":
+- Delete all `race_entry_drivers` rows for the event's entries
+- Collect the `driver_profile_id` values from those junction rows
+- Delete all `race_entries` rows for the event
+- Delete the `race_events` row itself
+- For each linked driver where `is_claimed = false`, check if they have any remaining `race_entry_drivers` links; if not, delete that auto-created driver profile too
+- Refresh all relevant lists afterward
+
+### 7. Bulk Select and Delete for Drivers and Races
+
+**All Drivers tab:**
+- Add a `selectedDriverIds` state (Set)
+- Add a checkbox column to the table with a "select all" checkbox in the header
+- Show a "Delete Selected (N)" button when any are checked, with a confirmation dialog
+- Bulk delete removes each selected driver, then clears the selection
+
+**All Races tab:**
+- Add a `selectedEventIds` state (Set)
+- Same checkbox column and select-all pattern
+- "Delete Selected (N)" button with confirmation dialog
+- Uses the existing `handleDeleteEvent` logic for each selected event
+
+---
 
 ### Technical Details
 
-**Connector setup:**
-- Connect Firecrawl via the connector system (provides `FIRECRAWL_API_KEY` as an environment variable)
+**Edge function changes (model swap + prompt improvements):**
 
-**New file: `supabase/functions/scrape-race-results/index.ts`**
-- Admin auth check (same pattern as other functions)
-- Calls Firecrawl scrape API: `POST https://api.firecrawl.dev/v1/scrape` with `{ url, formats: ['markdown'], onlyMainContent: true }`
-- Passes scraped markdown to Lovable AI with the `submit_race_results` tool schema
-- Reuses the same DB insertion logic (create event, entries, match/create drivers, link junctions)
-- Auto-enriches newly created drivers
+| File | Changes |
+|------|---------|
+| `generate-race-event/index.ts` | Model to `gemini-2.5-flash`, improved search query with year + "full results classification", fallback search, content limit to 80k |
+| `scrape-race-results/index.ts` | Model to `gemini-2.5-flash`, markdown slice to 80k, prompt emphasizes ALL entries |
+| `import-race-results/index.ts` | Model to `gemini-2.5-flash`, system prompt adds motorsport knowledge instructions (team name inference, class inference, abbreviation normalization) |
+| `enrich-driver-profile/index.ts` | Model to `gemini-2.5-flash` |
 
-**Modified file: `supabase/functions/generate-race-event/index.ts`**
-- Before calling the AI, search the web using Firecrawl search: `POST https://api.firecrawl.dev/v1/search` with query `"${eventName} race results"`
-- If search returns results, scrape the top result for markdown content
-- Include the scraped content in the AI prompt as context: "Here is data from a results page: [markdown]. Extract structured race results from this."
-- Fall back to AI-only generation if Firecrawl key is not configured or search returns nothing
-- Add current date to system prompt and reject TBD/placeholder entries
+**New file: `src/components/FlagImage.tsx`**
+- Takes `nationality` prop, calls `getCountryCode()` to get ISO code
+- Renders `<img src="https://flagcdn.com/w40/{code}.png" width={size} height={size} />` with inline styling
+- Falls back to Globe icon from lucide-react
 
-**Modified file: `src/pages/Admin.tsx`**
-- Add `importUrl` state and `handleImportFromUrl` function
-- Add URL input field with "Import from URL" button in the AI Import tab
-- Wire it to call the `scrape-race-results` edge function
+**Updated: `src/lib/countries.ts`**
+- New export: `getCountryCode(nationality: string): string | null`
+- Maps demonyms ("Danish" -> "DK", "American" -> "US", "Brazilian" -> "BR", etc.) and country names to their ISO codes using the existing COUNTRIES array plus a demonym lookup table
 
-**Updated file: `supabase/config.toml`**
-- Register `scrape-race-results` function with `verify_jwt = false`
+**Updated: `src/pages/Admin.tsx`**
+- Import `FlagImage` component, add `Checkbox` import
+- Replace all `getFlagForCountry()` calls with `<FlagImage nationality={...} />`
+- `handleRejectEvent`: full cascade delete (junction rows -> entries -> event -> orphaned unclaimed drivers)
+- New state: `selectedDriverIds`, `selectedEventIds` (both `Set<string>`)
+- Drivers table: checkbox column with select-all, "Delete Selected" button with AlertDialog
+- Races table: checkbox column with select-all, "Delete Selected" button with AlertDialog
+
+**Updated: `src/pages/DriverProfile.tsx`**
+- Replace `getFlagForCountry()` with `<FlagImage>`
+
+**Updated: `src/pages/Search.tsx`**
+- Replace `getFlagForCountry()` with `<FlagImage>`
+
+**Updated: `src/pages/EventDetail.tsx`**
+- Replace `getFlagForCountry()` with `<FlagImage>`
 
 **No database changes needed.**
-
