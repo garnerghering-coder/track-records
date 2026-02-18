@@ -2,3 +2,9 @@ project_id = "ywgfgetfdaefjxdtezei"
 
 [functions.import-race-results]
 verify_jwt = false
+
+[functions.enrich-driver-profile]
+verify_jwt = false
+
+[functions.generate-race-event]
+verify_jwt = false

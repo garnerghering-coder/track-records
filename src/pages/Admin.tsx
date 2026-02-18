@@ -133,6 +133,15 @@ const Admin = () => {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
+  // Generate Race
+  const [generateRaceName, setGenerateRaceName] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generateResult, setGenerateResult] = useState<any>(null);
+
+  // Enrich
+  const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
+  const [bulkEnriching, setBulkEnriching] = useState(false);
+
   // Pending approval queue
   interface PendingEvent {
     id: string;
@@ -585,6 +594,116 @@ const Admin = () => {
     setImporting(false);
   };
 
+  const handleGenerateRace = async () => {
+    if (!generateRaceName.trim()) {
+      toast({ title: "Enter a race name", variant: "destructive" });
+      return;
+    }
+    setGenerating(true);
+    setGenerateResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-race-event`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ eventName: generateRaceName }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Generation failed", description: result.error || "Unknown error", variant: "destructive" });
+        setGenerating(false);
+        return;
+      }
+
+      setGenerateResult(result);
+      toast({ title: "Race generated!", description: `${result.entriesCount} entries created as pending.` });
+      setGenerateRaceName("");
+      fetchPendingEvents();
+      fetchRaceEvents();
+      fetchDrivers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setGenerating(false);
+  };
+
+  const handleEnrichDriver = async (driverId: string) => {
+    setEnrichingIds(prev => new Set(prev).add(driverId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-driver-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ driverProfileId: driverId }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      } else {
+        const r = result.results?.[0];
+        const fields = r?.fieldsUpdated?.length || 0;
+        toast({ title: fields > 0 ? `Enriched ${r.name}` : `No new data for ${r.name}`, description: fields > 0 ? `Updated: ${r.fieldsUpdated.join(", ")}` : "All fields already populated." });
+        fetchDrivers();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setEnrichingIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
+  };
+
+  const handleBulkEnrich = async () => {
+    const needsEnrich = drivers.filter(d => !d.nationality || !d.bio);
+    if (needsEnrich.length === 0) {
+      toast({ title: "All drivers already enriched" });
+      return;
+    }
+    setBulkEnriching(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-driver-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ driverProfileIds: needsEnrich.map(d => d.id) }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Bulk enrichment failed", description: result.error, variant: "destructive" });
+      } else {
+        const updated = result.results?.filter((r: any) => r.fieldsUpdated?.length > 0).length || 0;
+        toast({ title: "Bulk enrichment complete", description: `${updated} of ${needsEnrich.length} drivers updated.` });
+        fetchDrivers();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setBulkEnriching(false);
+  };
+
   const handleApproveEvent = async (eventId: string) => {
     setApprovingEntries(prev => new Set(prev).add(eventId));
     const { error } = await supabase
@@ -726,6 +845,12 @@ const Admin = () => {
 
           {/* ── All Drivers ── */}
           <TabsContent value="drivers">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-xl font-bold text-foreground">All Drivers</h2>
+              <Button variant="outline" size="sm" onClick={handleBulkEnrich} disabled={bulkEnriching}>
+                {bulkEnriching ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+              </Button>
+            </div>
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
@@ -759,6 +884,9 @@ const Admin = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichDriver(d.id)} disabled={enrichingIds.has(d.id)} title="Enrich with AI">
+                              {enrichingIds.has(d.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                            </Button>
                             <Button variant="ghost" size="sm" onClick={() => navigate(`/driver/${d.id}`)}><Eye className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="sm" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
                             <AlertDialog>
@@ -1035,11 +1163,52 @@ const Admin = () => {
 
           {/* ── AI Import ── */}
           <TabsContent value="ai-import">
-            <div className="max-w-3xl rounded-xl border border-border bg-card p-6">
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-5 w-5 text-primary" />
-                <h2 className="font-display text-xl font-bold text-card-foreground">AI Results Import</h2>
+            <div className="max-w-3xl space-y-6">
+              {/* Generate Race from Name */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold text-card-foreground">Generate Race from Name</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">Just type a race name and the AI will research and generate the full results with all entries, drivers, teams, and classes.</p>
+                <div className="flex gap-3">
+                  <Input
+                    value={generateRaceName}
+                    onChange={(e) => setGenerateRaceName(e.target.value)}
+                    placeholder='e.g. "2025 Rolex 24 at Daytona" or "2024 Monaco Grand Prix"'
+                    className="flex-1"
+                    onKeyDown={(e) => e.key === "Enter" && !generating && handleGenerateRace()}
+                  />
+                  <Button onClick={handleGenerateRace} disabled={generating || !generateRaceName.trim()}>
+                    {generating ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Generating…</> : <><Sparkles className="h-4 w-4 mr-2" /> Generate</>}
+                  </Button>
+                </div>
+                {generateResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <h3 className="font-semibold text-card-foreground mb-2">Generation Summary</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-muted-foreground">Event:</div>
+                      <div className="text-card-foreground">{generateResult.eventName}</div>
+                      <div className="text-muted-foreground">Series:</div>
+                      <div className="text-card-foreground">{generateResult.seriesName}</div>
+                      <div className="text-muted-foreground">Entries:</div>
+                      <div className="text-card-foreground">{generateResult.entriesCount}</div>
+                      <div className="text-muted-foreground">Drivers matched:</div>
+                      <div className="text-card-foreground">{generateResult.matchedDrivers}</div>
+                      <div className="text-muted-foreground">Drivers created:</div>
+                      <div className="text-card-foreground">{generateResult.createdDrivers}</div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
+                  </div>
+                )}
               </div>
+
+              {/* Advanced: Raw Text Import */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-5 w-5 text-muted-foreground" />
+                  <h2 className="font-display text-xl font-bold text-card-foreground">Advanced: Raw Text Import</h2>
+                </div>
               <p className="text-sm text-muted-foreground mb-6">Paste raw race results from a timing page, PDF, or any source. The AI will extract structured data and create pending entries for your review.</p>
 
               <div className="space-y-4">
@@ -1093,6 +1262,7 @@ const Admin = () => {
                   <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
                 </div>
               )}
+              </div>
             </div>
           </TabsContent>
 
