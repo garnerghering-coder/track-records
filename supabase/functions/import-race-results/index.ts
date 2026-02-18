@@ -203,6 +203,8 @@ serve(async (req) => {
     let matchedCount = 0;
     let unmatchedCount = 0;
     const unmatchedNames: string[] = [];
+    let createdCount = 0;
+    const createdNames: string[] = [];
 
     // Insert entries one by one to link drivers
     for (const entry of extracted.entries || []) {
@@ -236,9 +238,27 @@ serve(async (req) => {
             }
           }
           if (!found) {
-            unmatchedForEntry.push(name);
-            unmatchedCount++;
-            unmatchedNames.push(name);
+            // Auto-create a new driver profile
+            const nameParts = name.trim().split(/\s+/);
+            const firstName = nameParts[0];
+            const lastName = nameParts.slice(1).join(" ") || nameParts[0];
+
+            const { data: newDriver } = await adminClient
+              .from("driver_profiles")
+              .insert({ first_name: firstName, last_name: lastName, is_claimed: false })
+              .select("id")
+              .single();
+
+            if (newDriver) {
+              matchedDriverIds.push(newDriver.id);
+              driverMap.set(normalized, newDriver.id);
+              createdCount++;
+              createdNames.push(name);
+            } else {
+              unmatchedForEntry.push(name);
+              unmatchedCount++;
+              unmatchedNames.push(name);
+            }
           }
         }
       }
@@ -293,6 +313,8 @@ serve(async (req) => {
         matchedDrivers: matchedCount,
         unmatchedDrivers: unmatchedCount,
         unmatchedNames,
+        createdDrivers: createdCount,
+        createdNames,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
