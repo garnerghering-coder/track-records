@@ -1,73 +1,64 @@
 
 
-## Smarter AI Automation: Auto-Enrich Drivers and Auto-Generate Races
+## Add Web Search and URL Scraping for Race Data
 
-### Overview
+### Problem
+The AI model (Gemini Flash) has a knowledge cutoff and can't find results for very recent races. You need two ways to get fresh data: automatic web search and paste-a-URL scraping.
 
-Two new backend functions that use AI to do the heavy lifting, so you barely need to type anything:
+### Solution
 
-1. **Auto-Enrich Driver Profiles** -- Whenever a driver is created (via import or manually), an AI function researches and fills in nationality, bio, primary category, date of birth, and social links automatically.
+#### 1. Connect Firecrawl (URL Scraping)
+Connect the Firecrawl connector to this project. This gives the edge functions access to a web scraping API that can read any results page you paste in.
 
-2. **Auto-Generate Race from Name** -- Enter just a race name (e.g. "2025 Rolex 24 at Daytona") and the AI researches and generates the full event with all entries, drivers, positions, teams, and classes -- all landing in the pending queue for review.
+#### 2. New Edge Function: `scrape-race-results`
+A new backend function that:
+- Accepts a `{ url: string }` payload
+- Uses Firecrawl to scrape the page content as markdown
+- Feeds that markdown into the AI (Gemini Flash) with the same `submit_race_results` tool-calling schema
+- Inserts the structured results into the database (same logic as `generate-race-event`)
+- Everything lands as "pending" for review
 
-### Feature 1: Auto-Enrich Driver Profiles
+#### 3. Update `generate-race-event` with Web Search
+Upgrade the existing function to use a two-step approach:
+- **Step 1**: Use Firecrawl's search API to find recent results pages for the given race name (e.g., searching "2026 Rolex 24 at Daytona results")
+- **Step 2**: Scrape the top result to get actual timing data as markdown
+- **Step 3**: Feed that real data into the AI for structured extraction (instead of relying on the AI's training data alone)
+- This means the "Generate Race" feature now works for races that happened yesterday, not just ones in the AI's training data
 
-**How it works:**
-- New edge function `enrich-driver-profile` that takes a driver profile ID
-- Calls Lovable AI (Gemini Flash) with the driver's name and asks it to research and return: nationality, a short bio, date of birth, primary racing category, and social media URLs
-- Updates the driver profile with the AI-generated data (only fills in fields that are currently empty)
-- Called automatically after the import function creates new drivers, and also available as a manual "Enrich with AI" button in the Admin panel on any driver
+Also update the system prompt with date context and anti-TBD rules (the fix from the previous plan).
 
-**Admin UI changes:**
-- Add a sparkle/magic button next to each driver in the "All Drivers" tab that triggers enrichment
-- Add a "Bulk Enrich" button that enriches all drivers missing key info (nationality, bio, etc.)
-- After import completes, automatically enrich all newly created driver profiles
-
-### Feature 2: Auto-Generate Race from Name
-
-**How it works:**
-- New edge function `generate-race-event` that takes just a race/event name string
-- Calls Lovable AI with a prompt like: "Research the race event '[name]'. Return the full results including all entries with driver names, finishing positions, teams, car numbers, classes, gaps, laps, and status."
-- Uses the same tool-calling schema as the import function for structured output
-- Reuses the same database insertion logic: creates/finds the event, creates entries, matches/creates driver profiles, links everything
-- Everything lands as "pending" for admin review
-
-**Admin UI changes:**
-- Replace (or supplement) the current AI Import text area with a simpler "Generate Race" input: just type a race name and click "Generate"
-- The existing raw-text import stays available as an "Advanced Import" option for when you have timing sheet data to paste
-- Add the generated event to the pending queue automatically
+#### 4. Admin UI Updates
+In the AI Import tab of `src/pages/Admin.tsx`:
+- Add a **"Import from URL"** section: a URL input field and "Import" button. Paste a link to any results page and the system scrapes and extracts it.
+- The existing "Generate Race from Name" input stays, but now it searches the web first for better accuracy.
+- The existing "Advanced Import" text area for pasting raw text remains unchanged.
 
 ### Technical Details
 
-**New edge function: `supabase/functions/enrich-driver-profile/index.ts`**
-- Accepts `{ driverProfileId: string }` (or `{ driverProfileIds: string[] }` for bulk)
-- Requires admin auth (same pattern as import function)
-- Calls Lovable AI with tool calling, tool schema:
-  - `nationality` (string, e.g. "Danish")
-  - `bio` (string, 2-3 sentence description of the driver's career)
-  - `date_of_birth` (string, ISO date or null)
-  - `primary_category` (enum matching existing racing categories)
-  - `social_website`, `social_instagram`, `social_twitter`, `social_linkedin` (URLs or null)
-- Updates `driver_profiles` row, only overwriting fields that are currently null/empty
-- Returns the enriched data so the UI can show what changed
+**Connector setup:**
+- Connect Firecrawl via the connector system (provides `FIRECRAWL_API_KEY` as an environment variable)
 
-**New edge function: `supabase/functions/generate-race-event/index.ts`**
-- Accepts `{ eventName: string }`
-- Requires admin auth
-- Calls Lovable AI with a research prompt and the same `submit_race_results` tool schema used by import
-- Reuses the same DB insertion logic: check for existing event, create entries, match/create drivers, link via junction table
-- After inserting, calls the enrich function for any newly created drivers
-- Returns event ID and summary
+**New file: `supabase/functions/scrape-race-results/index.ts`**
+- Admin auth check (same pattern as other functions)
+- Calls Firecrawl scrape API: `POST https://api.firecrawl.dev/v1/scrape` with `{ url, formats: ['markdown'], onlyMainContent: true }`
+- Passes scraped markdown to Lovable AI with the `submit_race_results` tool schema
+- Reuses the same DB insertion logic (create event, entries, match/create drivers, link junctions)
+- Auto-enriches newly created drivers
 
-**Files modified:**
-- `src/pages/Admin.tsx` -- Add "Generate Race" input field in the AI Import tab (simple name-only input above the existing text area); add "Enrich" button per driver in All Drivers tab; add "Bulk Enrich" button; wire up the new edge function calls
-- `supabase/config.toml` -- Register two new functions with `verify_jwt = false`
+**Modified file: `supabase/functions/generate-race-event/index.ts`**
+- Before calling the AI, search the web using Firecrawl search: `POST https://api.firecrawl.dev/v1/search` with query `"${eventName} race results"`
+- If search returns results, scrape the top result for markdown content
+- Include the scraped content in the AI prompt as context: "Here is data from a results page: [markdown]. Extract structured race results from this."
+- Fall back to AI-only generation if Firecrawl key is not configured or search returns nothing
+- Add current date to system prompt and reject TBD/placeholder entries
 
-**Files created:**
-- `supabase/functions/enrich-driver-profile/index.ts`
-- `supabase/functions/generate-race-event/index.ts`
+**Modified file: `src/pages/Admin.tsx`**
+- Add `importUrl` state and `handleImportFromUrl` function
+- Add URL input field with "Import from URL" button in the AI Import tab
+- Wire it to call the `scrape-race-results` edge function
 
-**No database changes needed** -- all fields already exist on `driver_profiles` and `race_events`.
+**Updated file: `supabase/config.toml`**
+- Register `scrape-race-results` function with `verify_jwt = false`
 
-**No new dependencies needed.**
+**No database changes needed.**
 
