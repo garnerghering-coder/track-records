@@ -10,7 +10,7 @@ const benefits = [
   {
     icon: Shield,
     title: "Verified Results",
-    description: "Every race result can be admin-verified, giving teams and sponsors confidence in the data they see.",
+    description: "Every race result is community-submitted and admin-verified, ensuring accuracy and trust.",
   },
   {
     icon: Search,
@@ -24,8 +24,8 @@ const benefits = [
   },
   {
     icon: Users,
-    title: "Claim Your Profile",
-    description: "Profiles can exist before drivers join. Claim yours and take control of your career narrative.",
+    title: "Community Driven",
+    description: "Anyone can contribute race data, add drivers, and help build the most complete motorsport database.",
   },
 ];
 
@@ -53,13 +53,13 @@ const Index = () => {
               <span className="text-primary">Verified.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg font-body text-white/70">
-              TrackRecord gives motorsport drivers a verified, data-driven profile.
-              Teams and sponsors search and discover talent backed by real results.
+              The community-driven motorsport database. Contribute race results,
+              discover drivers and teams, all backed by verified data.
             </p>
             <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <Link to="/auth?signup=true">
+              <Link to="/contribute">
                 <Button size="lg" className="gap-2 text-base font-semibold px-8">
-                  Create Your Profile <ChevronRight className="h-4 w-4" />
+                  Start Contributing <ChevronRight className="h-4 w-4" />
                 </Button>
               </Link>
               <Link to="/search">
@@ -119,8 +119,8 @@ const Index = () => {
           </h2>
           <div className="grid gap-12 md:grid-cols-3">
             {[
-              { step: "01", title: "Create or Claim", desc: "Sign up as a driver and create your profile — or claim an existing one that's already been seeded." },
-              { step: "02", title: "Add Results", desc: "Log your race results with series, season, and finishing data. Results are submitted for admin verification." },
+              { step: "01", title: "Join the Community", desc: "Sign up for free and start contributing race data, driver profiles, and team info." },
+              { step: "02", title: "Add & Verify", desc: "Submit race results, add drivers and teams. Admins review and verify contributions." },
               { step: "03", title: "Get Discovered", desc: "Teams and sponsors search the platform to find drivers by category, nationality, and verified performance." },
             ].map((item, i) => (
               <motion.div
@@ -156,21 +156,21 @@ const Index = () => {
                 Ready to Build Your Track Record?
               </h2>
               <p className="mt-4 max-w-lg mx-auto text-white/70">
-                Join the platform where your racing career speaks for itself — verified, discoverable, professional.
+                Join the platform where motorsport data is built by the community — verified, discoverable, professional.
               </p>
               <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                 <Link to="/auth?signup=true">
                   <Button size="lg" className="gap-2 px-8 font-semibold">
-                    <CheckCircle className="h-4 w-4" /> Sign Up as a Driver
+                    <CheckCircle className="h-4 w-4" /> Sign Up Free
                   </Button>
                 </Link>
-                <Link to="/auth?signup=true&role=team">
+                <Link to="/contribute">
                   <Button
                     size="lg"
                     variant="ghost"
                     className="px-8 border border-white/20 text-white hover:bg-white/10"
                   >
-                    I'm a Team / Sponsor
+                    Start Contributing
                   </Button>
                 </Link>
               </div>

@@ -248,6 +248,51 @@ export type Database = {
         }
         Relationships: []
       }
+      edit_queue: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          edit_type: string
+          id: string
+          previous_data: Json | null
+          proposed_data: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_by: string
+          target_id: string | null
+          target_table: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          edit_type: string
+          id?: string
+          previous_data?: Json | null
+          proposed_data: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by: string
+          target_id?: string | null
+          target_table: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          edit_type?: string
+          id?: string
+          previous_data?: Json | null
+          proposed_data?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_by?: string
+          target_id?: string | null
+          target_table?: string
+        }
+        Relationships: []
+      }
       import_sources: {
         Row: {
           created_at: string
@@ -378,6 +423,7 @@ export type Database = {
           race_event_id: string
           status: string | null
           team_name: string | null
+          team_profile_id: string | null
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
         Insert: {
@@ -396,6 +442,7 @@ export type Database = {
           race_event_id: string
           status?: string | null
           team_name?: string | null
+          team_profile_id?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
         Update: {
@@ -414,6 +461,7 @@ export type Database = {
           race_event_id?: string
           status?: string | null
           team_name?: string | null
+          team_profile_id?: string | null
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
         Relationships: [
@@ -429,6 +477,13 @@ export type Database = {
             columns: ["race_event_id"]
             isOneToOne: false
             referencedRelation: "race_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_entries_team_profile_id_fkey"
+            columns: ["team_profile_id"]
+            isOneToOne: false
+            referencedRelation: "team_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -603,6 +658,48 @@ export type Database = {
           reviewed_by?: string | null
           status?: string
           target_id?: string
+        }
+        Relationships: []
+      }
+      team_profiles: {
+        Row: {
+          bio: string | null
+          created_at: string
+          id: string
+          logo_url: string | null
+          name: string
+          nationality: string | null
+          primary_category:
+            | Database["public"]["Enums"]["racing_category"]
+            | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name: string
+          nationality?: string | null
+          primary_category?:
+            | Database["public"]["Enums"]["racing_category"]
+            | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          name?: string
+          nationality?: string | null
+          primary_category?:
+            | Database["public"]["Enums"]["racing_category"]
+            | null
+          updated_at?: string
+          website?: string | null
         }
         Relationships: []
       }

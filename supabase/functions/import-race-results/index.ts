@@ -190,6 +190,16 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
       driverMap.set(`${d.first_name.toLowerCase()} ${d.last_name.toLowerCase()}`, d.id);
     }
 
+    // Fetch all team profiles for matching
+    const { data: allTeams } = await adminClient
+      .from("team_profiles")
+      .select("id, name");
+
+    const teamMap = new Map<string, string>();
+    for (const t of allTeams || []) {
+      teamMap.set(t.name.toLowerCase(), t.id);
+    }
+
     // Check for existing event with same name, series, and year
     const eventNameVal = extracted.event_name || eventHint || "Unknown Event";
     const seriesNameVal = extracted.series_name || seriesHint || "Unknown Series";
@@ -320,11 +330,19 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
         ? `Unmatched drivers: ${unmatchedForEntry.join(", ")}`
         : null;
 
+      // Match team_profile_id
+      let teamProfileId: string | null = null;
+      if (entry.team_name) {
+        const normalizedTeam = entry.team_name.trim().toLowerCase();
+        teamProfileId = teamMap.get(normalizedTeam) || null;
+      }
+
       const { data: insertedEntry, error: entryError } = await adminClient
         .from("race_entries")
         .insert({
           race_event_id: raceEvent.id,
           team_name: entry.team_name || null,
+          team_profile_id: teamProfileId,
           car_number: entry.car_number || null,
           race_class: entry.race_class || null,
           finishing_position: entry.finishing_position ?? null,

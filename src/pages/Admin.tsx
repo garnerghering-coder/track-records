@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson, PenLine, Undo2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
@@ -152,6 +152,11 @@ const Admin = () => {
   // Community Submissions
   const [communitySubmissions, setCommunitySubmissions] = useState<any[]>([]);
   const [approvingSubmission, setApprovingSubmission] = useState<string | null>(null);
+
+  // Edit Queue
+  const [editQueue, setEditQueue] = useState<any[]>([]);
+  const [editQueueLoading, setEditQueueLoading] = useState(false);
+  const [approvingQueueId, setApprovingQueueId] = useState<string | null>(null);
 
   // Bulk selection
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
@@ -298,6 +303,7 @@ const Admin = () => {
     fetchReports();
     fetchImportSources();
     fetchCommunitySubmissions();
+    fetchEditQueue();
   };
 
   const fetchDrivers = async () => {
@@ -956,6 +962,98 @@ Here are the results to parse:
     setEnrichingIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
   };
 
+  const fetchEditQueue = async () => {
+    setEditQueueLoading(true);
+    const { data } = await supabase.from("edit_queue" as any).select("*").order("created_at", { ascending: false });
+    if (data) setEditQueue(data as any[]);
+    setEditQueueLoading(false);
+  };
+
+  const handleApproveQueueItem = async (item: any) => {
+    setApprovingQueueId(item.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      if (item.edit_type === "create_driver") {
+        await supabase.from("driver_profiles").insert({
+          first_name: item.proposed_data.first_name,
+          last_name: item.proposed_data.last_name,
+          nationality: item.proposed_data.nationality || null,
+          primary_category: item.proposed_data.primary_category || "other",
+          bio: item.proposed_data.bio || null,
+          is_claimed: false,
+        });
+      } else if (item.edit_type === "create_team") {
+        await supabase.from("team_profiles" as any).insert({
+          name: item.proposed_data.name,
+          nationality: item.proposed_data.nationality || null,
+          primary_category: item.proposed_data.primary_category || "other",
+          bio: item.proposed_data.bio || null,
+          website: item.proposed_data.website || null,
+        });
+      } else if (item.edit_type === "create_event") {
+        const eventData = item.proposed_data;
+        const { data: newEvent } = await supabase.from("race_events").insert({
+          event_name: eventData.event_name,
+          series_name: eventData.series_name,
+          season_year: eventData.season_year,
+          event_date: eventData.event_date || null,
+          location: eventData.location || null,
+          category: eventData.category || "other",
+        }).select("id").single();
+
+        if (newEvent && eventData.entries) {
+          for (const entry of eventData.entries) {
+            await supabase.from("race_entries").insert({
+              race_event_id: newEvent.id,
+              finishing_position: entry.finishing_position ?? null,
+              team_name: entry.team_name || null,
+              car_number: entry.car_number || null,
+              race_class: entry.race_class || null,
+              status: entry.status || null,
+              verification_status: "pending",
+            });
+          }
+        }
+      } else if (item.edit_type.startsWith("edit_") && item.target_id) {
+        const tableMap: Record<string, string> = { edit_driver: "driver_profiles", edit_team: "team_profiles", edit_event: "race_events" };
+        const table = tableMap[item.edit_type];
+        if (table) {
+          await supabase.from(table as any).update(item.proposed_data as any).eq("id", item.target_id);
+        }
+      }
+
+      await supabase.from("edit_queue" as any).update({ status: "approved", reviewed_by: session.user.id, reviewed_at: new Date().toISOString() } as any).eq("id", item.id);
+      toast({ title: "Contribution approved" });
+      fetchEditQueue();
+      fetchDrivers();
+      fetchRaceEvents();
+    } catch (err: any) {
+      toast({ title: "Error approving", description: err.message, variant: "destructive" });
+    }
+    setApprovingQueueId(null);
+  };
+
+  const handleRejectQueueItem = async (itemId: string, notes: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    await supabase.from("edit_queue" as any).update({ status: "rejected", reviewed_by: session.user.id, reviewed_at: new Date().toISOString(), admin_notes: notes || null } as any).eq("id", itemId);
+    toast({ title: "Contribution rejected" });
+    fetchEditQueue();
+  };
+
+  const handleUndoQueueItem = async (item: any) => {
+    if (!item.previous_data || !item.target_id) return;
+    const tableMap: Record<string, string> = { edit_driver: "driver_profiles", edit_team: "team_profiles", edit_event: "race_events" };
+    const table = tableMap[item.edit_type];
+    if (table) {
+      await supabase.from(table as any).update(item.previous_data as any).eq("id", item.target_id);
+      await supabase.from("edit_queue" as any).update({ status: "pending" } as any).eq("id", item.id);
+      toast({ title: "Edit undone" });
+      fetchEditQueue();
+    }
+  };
 
   const handleBulkEnrich = async () => {
     const needsEnrich = drivers.filter(d => !d.nationality || !d.bio);
@@ -1366,6 +1464,9 @@ Here are the results to parse:
             </TabsTrigger>
             <TabsTrigger value="community">
               <Send className="h-3.5 w-3.5 mr-1" /> Community {communitySubmissions.filter((s: any) => s.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{communitySubmissions.filter((s: any) => s.status === "pending").length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="edit-queue">
+              <PenLine className="h-3.5 w-3.5 mr-1" /> Edit Queue {editQueue.filter((e: any) => e.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{editQueue.filter((e: any) => e.status === "pending").length}</span>}
             </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
@@ -2307,6 +2408,71 @@ Here are the results to parse:
                           </Button>
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Edit Queue ── */}
+          <TabsContent value="edit-queue">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-foreground">Community Edit Queue</h2>
+              {editQueueLoading ? (
+                <p className="text-muted-foreground">Loading…</p>
+              ) : editQueue.length === 0 ? (
+                <p className="text-muted-foreground">No community edits submitted yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {editQueue.map((item: any) => (
+                    <div key={item.id} className="rounded-lg border border-border bg-card p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="secondary" className="text-xs">{item.edit_type.replace(/_/g, " ")}</Badge>
+                            <Badge variant={item.status === "pending" ? "secondary" : item.status === "approved" ? "default" : "destructive"} className="text-xs">{item.status}</Badge>
+                            <span className="text-xs text-muted-foreground">{new Date(item.created_at).toLocaleString()}</span>
+                          </div>
+                          <p className="text-sm text-card-foreground mt-2">
+                            <span className="font-medium">Table:</span> {item.target_table.replace(/_/g, " ")}
+                            {item.target_id && <span className="text-muted-foreground"> (ID: {item.target_id.substring(0, 8)}…)</span>}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">By: {item.submitted_by.substring(0, 8)}…</p>
+                          <div className="mt-2 text-xs">
+                            <span className="font-medium text-card-foreground">Proposed: </span>
+                            <code className="text-muted-foreground bg-muted px-1 py-0.5 rounded text-[11px]">
+                              {JSON.stringify(item.proposed_data, null, 0).substring(0, 200)}
+                            </code>
+                          </div>
+                          {item.previous_data && (
+                            <div className="mt-1 text-xs">
+                              <span className="font-medium text-card-foreground">Previous: </span>
+                              <code className="text-muted-foreground bg-muted px-1 py-0.5 rounded text-[11px]">
+                                {JSON.stringify(item.previous_data, null, 0).substring(0, 200)}
+                              </code>
+                            </div>
+                          )}
+                          {item.admin_notes && <p className="text-xs text-muted-foreground mt-1">Admin notes: {item.admin_notes}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {item.status === "pending" && (
+                            <>
+                              <Button size="sm" onClick={() => handleApproveQueueItem(item)} disabled={approvingQueueId === item.id} className="gap-1">
+                                {approvingQueueId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />} Approve
+                              </Button>
+                              <Button size="sm" variant="outline" className="gap-1 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleRejectQueueItem(item.id, "")}>
+                                <XCircle className="h-3 w-3" /> Reject
+                              </Button>
+                            </>
+                          )}
+                          {item.status === "approved" && item.previous_data && item.target_id && (
+                            <Button size="sm" variant="outline" onClick={() => handleUndoQueueItem(item)} className="gap-1">
+                              <Undo2 className="h-3 w-3" /> Undo
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
