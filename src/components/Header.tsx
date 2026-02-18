@@ -38,7 +38,7 @@ const Header = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
-      <div className="container flex h-16 items-center justify-between">
+      <div className="container flex h-16 items-center justify-between bg-secondary">
         <Link to="/" className="flex items-center gap-2 bg-secondary">
           <div className="flex h-8 w-8 items-center justify-center rounded bg-primary">
             <span className="font-display text-sm font-bold text-primary-foreground">TR</span>
