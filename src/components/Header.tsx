@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Search, Shield, LogOut } from "lucide-react";
+import { Search, Shield, LogOut, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const Header = () => {
@@ -52,6 +52,10 @@ const Header = () => {
           <Link to="/search" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
             <Search className="h-4 w-4" />
             Find Drivers
+          </Link>
+          <Link to="/results" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Trophy className="h-4 w-4" />
+            Race Results
           </Link>
           {isAdmin && (
             <Link to="/admin" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
