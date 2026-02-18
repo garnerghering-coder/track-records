@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Camera } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -115,6 +115,7 @@ const Admin = () => {
 
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
+  const [findingPhotoIds, setFindingPhotoIds] = useState<Set<string>>(new Set());
   const [bulkEnriching, setBulkEnriching] = useState(false);
 
   // Bulk selection
@@ -640,6 +641,40 @@ const Admin = () => {
     setEnrichingIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
   };
 
+  const handleFindDriverPhoto = async (driverId: string) => {
+    setFindingPhotoIds(prev => new Set(prev).add(driverId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/find-driver-photo`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ driverProfileId: driverId }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Photo search failed", description: result.error, variant: "destructive" });
+      } else if (result.photo_url) {
+        toast({ title: "Photo found!", description: "Driver photo has been updated." });
+        fetchDrivers();
+      } else if (result.message) {
+        toast({ title: result.message });
+      } else {
+        toast({ title: "No photo found", description: result.error || "Could not find a suitable photo.", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setFindingPhotoIds(prev => { const n = new Set(prev); n.delete(driverId); return n; });
+  };
+
   const handleBulkEnrich = async () => {
     const needsEnrich = drivers.filter(d => !d.nationality || !d.bio);
     if (needsEnrich.length === 0) {
@@ -1020,6 +1055,9 @@ const Admin = () => {
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => handleEnrichDriver(d.id)} disabled={enrichingIds.has(d.id)} title="Enrich with AI">
                             {enrichingIds.has(d.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleFindDriverPhoto(d.id)} disabled={findingPhotoIds.has(d.id)} title="Find photo">
+                            {findingPhotoIds.has(d.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => navigate(`/driver/${d.id}`)}><Eye className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(d)}><Pencil className="h-4 w-4" /></Button>
