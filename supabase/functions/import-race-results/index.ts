@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import pdf from "npm:pdf-parse/lib/pdf-parse.js";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -75,26 +75,11 @@ serve(async (req) => {
 
     const { rawText: rawTextInput, pdfBase64, eventHint, seriesHint } = await req.json();
 
-    let rawText = rawTextInput;
+    const hasPdf = pdfBase64 && typeof pdfBase64 === "string";
+    const hasText = rawTextInput && typeof rawTextInput === "string" && rawTextInput.trim().length >= 10;
 
-    // If PDF was uploaded, extract text from it
-    if (pdfBase64 && typeof pdfBase64 === "string") {
-      try {
-        const pdfBuffer = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
-        const pdfData = await pdf(pdfBuffer);
-        rawText = pdfData.text;
-        console.log(`Extracted ${rawText.length} chars from PDF (${pdfData.numpages} pages)`);
-      } catch (pdfErr) {
-        console.error("PDF parse error:", pdfErr);
-        return new Response(JSON.stringify({ error: "Failed to parse PDF file. Make sure it's a valid PDF." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-
-    if (!rawText || typeof rawText !== "string" || rawText.trim().length < 10) {
-      return new Response(JSON.stringify({ error: "rawText or pdfBase64 is required (min 10 chars)" }), {
+    if (!hasPdf && !hasText) {
+      return new Response(JSON.stringify({ error: "rawText or pdfBase64 is required (min 10 chars for text)" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -139,12 +124,36 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
   ]
 }`;
 
-    const aiResponse = await callAI({
+    // Build user message content: multimodal for PDF, text-only otherwise
+    let userContent: any;
+    if (hasPdf) {
+      userContent = [
+        { type: "text", text: `Extract the race results from this PDF document.${hasText ? `\n\nAdditional context:\n${rawTextInput}` : ""}` },
+        { type: "image_url", url: `data:application/pdf;base64,${pdfBase64}` },
+      ];
+    } else {
+      userContent = `Extract the race results from this text:\n\n${rawTextInput}`;
+    }
+
+    // For PDF, force Lovable AI (Gemini) since Groq doesn't support multimodal PDF
+    const callFn = hasPdf
+      ? async (body: Record<string, any>) => {
+          const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+          if (!LOVABLE_KEY) throw new Error("No AI provider available");
+          return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
+          });
+        }
+      : callAI;
+
+    const aiResponse = await callFn({
       max_tokens: 16384,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Extract the race results from this text:\n\n${rawText}` },
+        { role: "user", content: userContent },
       ],
     });
 
