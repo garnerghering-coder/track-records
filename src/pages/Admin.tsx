@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
@@ -113,6 +113,11 @@ const Admin = () => {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [importPdfFile, setImportPdfFile] = useState<File | null>(null);
+
+  // Direct JSON Import
+  const [directJsonText, setDirectJsonText] = useState("");
+  const [directImporting, setDirectImporting] = useState(false);
+  const [directImportResult, setDirectImportResult] = useState<any>(null);
 
   // Generate Race
   const [generateRaceName, setGenerateRaceName] = useState("");
@@ -703,6 +708,79 @@ const Admin = () => {
       toast({ title: "Import error", description: err.message, variant: "destructive" });
     }
     setImporting(false);
+  };
+
+  const DIRECT_IMPORT_TEMPLATE = `Parse these race results into this exact JSON format. Return ONLY valid JSON, no explanation:
+
+{
+  "event_name": "string",
+  "series_name": "string",
+  "season_year": number,
+  "location": "string or null",
+  "category": "one of: karting, single_seater, gt, touring_car, sports_car, rally, endurance, formula, stock_car, other",
+  "entries": [
+    {
+      "finishing_position": number or null,
+      "class_position": number or null,
+      "car_number": "string or null",
+      "team_name": "string or null",
+      "driver_names": ["array of full driver name strings"],
+      "race_class": "string or null",
+      "laps_completed": number or null,
+      "gap_to_leader": "string or null",
+      "gap_to_class_leader": "string or null",
+      "pit_stops": number or null,
+      "status": "Finished, DNF, DNS, or DSQ"
+    }
+  ]
+}
+
+Here are the results to parse:
+[PASTE YOUR RESULTS HERE]`;
+
+  const handleDirectImport = async () => {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(directJsonText);
+    } catch {
+      toast({ title: "Invalid JSON", description: "Please paste valid JSON.", variant: "destructive" });
+      return;
+    }
+    if (!parsed.event_name || !parsed.series_name || !Array.isArray(parsed.entries) || parsed.entries.length === 0) {
+      toast({ title: "Invalid structure", description: "JSON must have event_name, series_name, and a non-empty entries array.", variant: "destructive" });
+      return;
+    }
+    setDirectImporting(true);
+    setDirectImportResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/direct-import`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: directJsonText,
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Import failed", description: result.error || "Unknown error", variant: "destructive" });
+      } else {
+        setDirectImportResult(result);
+        toast({ title: "Results imported!", description: `${result.entriesCount} entries added as pending.` });
+        setDirectJsonText("");
+        fetchPendingEvents();
+        fetchRaceEvents();
+        fetchDrivers();
+      }
+    } catch (err: any) {
+      toast({ title: "Import error", description: err.message, variant: "destructive" });
+    }
+    setDirectImporting(false);
   };
 
   const handleGenerateRace = async () => {
@@ -1574,6 +1652,66 @@ const Admin = () => {
                   <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
                 </div>
               )}
+              </div>
+
+              {/* Direct JSON Import */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <FileJson className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold text-card-foreground">Direct JSON Import</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Use your own AI (ChatGPT, Claude, etc.) to structure results, then paste the JSON here. No API keys needed.
+                </p>
+                <div className="space-y-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(DIRECT_IMPORT_TEMPLATE);
+                      toast({ title: "Template copied!", description: "Paste it into ChatGPT/Claude along with your raw results." });
+                    }}
+                  >
+                    <ClipboardCopy className="h-4 w-4 mr-2" /> Copy Template Prompt
+                  </Button>
+                  <div>
+                    <Label className="text-card-foreground">Paste Structured JSON</Label>
+                    <Textarea
+                      value={directJsonText}
+                      onChange={(e) => setDirectJsonText(e.target.value)}
+                      placeholder='{"event_name": "...", "series_name": "...", "season_year": 2025, "entries": [...]}'
+                      className="min-h-[200px] font-mono text-xs"
+                    />
+                  </div>
+                  <Button onClick={handleDirectImport} disabled={directImporting || !directJsonText.trim()} className="w-full">
+                    {directImporting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Importing…</> : <><FileJson className="h-4 w-4 mr-2" /> Import JSON</>}
+                  </Button>
+                </div>
+                {directImportResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <h3 className="font-semibold text-card-foreground mb-2">Import Summary</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-muted-foreground">Event:</div>
+                      <div className="text-card-foreground">{directImportResult.eventName}</div>
+                      <div className="text-muted-foreground">Entries:</div>
+                      <div className="text-card-foreground">{directImportResult.entriesCount}</div>
+                      <div className="text-muted-foreground">Drivers matched:</div>
+                      <div className="text-card-foreground">{directImportResult.matchedDrivers}</div>
+                      <div className="text-muted-foreground">Drivers created:</div>
+                      <div className="text-card-foreground">{directImportResult.createdDrivers}</div>
+                    </div>
+                    {directImportResult.unmatchedNames?.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs text-muted-foreground mb-1">Unmatched driver names:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {directImportResult.unmatchedNames.map((n: string, i: number) => (
+                            <Badge key={i} variant="outline" className="text-xs">{n}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
+                  </div>
+                )}
               </div>
 
               {/* Import Entire Series */}
