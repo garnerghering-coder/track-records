@@ -1,70 +1,44 @@
 
 
-## Improve Discovery: Auto-Search for Missing Result URLs
+## Fix: Skip to Next AI Key on 402 (Insufficient Credits)
 
 ### The Problem
 
-The discovery flow does one broad search (e.g. "Formula 1 2025 full season race results"), gets 10 results back, and asks AI to extract event names + URLs from those pages. But 10 search results can't cover all 24 races -- so 17 events get "no results URL found" and are skipped entirely.
+The `callAI` shared helper only retries on HTTP 429 (rate limited). The llmapi.ai key is returning **402** ("Organization has insufficient credits"), which the helper treats as a valid response and returns immediately -- never trying the Google AI Studio key at priority 2.
 
 ### The Fix
 
-When an event has no `result_url` after the initial AI extraction, instead of skipping it, do a **targeted Firecrawl search** for that specific event. For example: `"Miami Grand Prix 2025 race results"`. Then extract the best URL from those targeted results and proceed with the scrape.
-
-### How It Works (Step by Step)
-
-1. Initial broad search + AI extraction (unchanged)
-2. For each event in the loop:
-   - If it already has a `result_url` -- import as before
-   - If `result_url` is null -- run a focused Firecrawl search for that event
-   - Ask AI to pick the best result URL from the targeted search
-   - If a URL is found, proceed with the scrape import
-   - If still no URL, log it as "no URL" (same as today)
+In `supabase/functions/_shared/call-ai.ts`, change the retry condition from checking only `429` to also checking `402`. This way, keys that are out of credits are skipped just like rate-limited ones.
 
 ### Technical Details
 
-**File: `supabase/functions/discover-series/index.ts`**
+**File: `supabase/functions/_shared/call-ai.ts`**
 
-Replace the current "no URL" skip block (lines 215-222) with a targeted search + URL extraction flow:
+Line 32-35: Change the single 429 check to also handle 402:
 
 ```text
-if (!event.result_url) {
-  // Targeted search for this specific event
-  await updateJob({}, `🔍 [${i+1}/${events.length}] ${event.event_name} — searching for results...`);
+// Before:
+if (resp.status === 429) {
+  console.log(`Key "${key.id}" rate limited, trying next...`);
+  continue;
+}
 
-  const targetSearch = await fetch("https://api.firecrawl.dev/v1/search", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query: `${event.event_name} ${seasonYear} race results classification`,
-      limit: 5,
-    }),
-  });
-
-  if (targetSearch.ok) {
-    const targetData = await targetSearch.json();
-    const targetResults = targetData.data || [];
-
-    if (targetResults.length > 0) {
-      // Ask AI to pick the best URL
-      const urlPickResponse = await callAI({ ... });
-      // Extract chosen URL, set event.result_url
-    }
-  }
-
-  // If still no URL after targeted search, skip as before
-  if (!event.result_url) {
-    noUrl++;
-    await updateJob({ events_no_url: noUrl }, `⚠️ ...`);
-    continue;
-  }
+// After:
+if (resp.status === 429 || resp.status === 402) {
+  console.log(`Key "${key.id}" returned ${resp.status} (${resp.status === 429 ? 'rate limited' : 'insufficient credits'}), trying next...`);
+  continue;
 }
 ```
 
-The AI prompt for URL selection will receive the list of search result URLs + titles and pick the one most likely to contain actual race classification/results data (not news articles, previews, or betting sites).
+Same change for the Groq fallback on line 67:
 
-### Impact
+```text
+// Before:
+if (resp.status !== 429) return resp;
 
-- For the F1 2025 example, this would have turned 17 skipped events into ~17 additional imports
-- Each missing event costs one extra Firecrawl search (cheap) + one short AI call to pick the URL
-- No changes to the database schema or frontend
-- Only the `discover-series` edge function is modified
+// After:
+if (resp.status !== 429 && resp.status !== 402) return resp;
+```
+
+One file changed, two lines modified. The `discover-series` function (and all other AI callers) will automatically benefit since they all use `callAI`.
+
