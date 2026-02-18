@@ -193,6 +193,13 @@ Rules:
         let imported = 0, skipped = 0, failed = 0, noUrl = 0;
 
         for (let i = 0; i < events.length; i++) {
+          // Check if job was cancelled
+          const { data: jobCheck } = await adminClient.from("discovery_jobs").select("status").eq("id", activeJobId).single();
+          if (jobCheck?.status === "cancelled") {
+            await updateJob({ status: "cancelled" }, "🛑 Job cancelled by user");
+            return;
+          }
+
           const event = events[i];
           const key = `${event.event_name.toLowerCase()}|${seasonYear}`;
 
