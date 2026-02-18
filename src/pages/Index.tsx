@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Shield, Search, Trophy, Users, ChevronRight, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import heroImage from "@/assets/hero-racing.jpg";
 
 const benefits = [
   {
@@ -34,11 +35,11 @@ const Index = () => {
       <Header />
 
       {/* Hero */}
-      <section
-        className="relative flex min-h-[90vh] items-center justify-center overflow-hidden pt-16"
-        style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 50%, hsl(0 60% 20%) 100%)" }}
-      >
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDE4YzEuNjYgMCAzIDEuMzQgMyAzcy0xLjM0IDMtMyAzLTMtMS4zNC0zLTMgMS4zNC0zIDMtMyIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
+      <section className="relative flex min-h-[90vh] items-center justify-center overflow-hidden pt-16">
+        <div className="absolute inset-0">
+          <img src={heroImage} alt="GT cars racing on track" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-black/60" />
+        </div>
 
         <div className="container relative z-10 text-center">
           <motion.div
@@ -46,12 +47,12 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
           >
-            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl" style={{ color: "hsl(0 0% 100%)" }}>
+            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-white">
               Your Racing Career,
               <br />
               <span className="text-primary">Verified.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg font-body" style={{ color: "hsl(0 0% 100% / 0.7)" }}>
+            <p className="mx-auto mt-6 max-w-2xl text-lg font-body text-white/70">
               TrackRecord gives motorsport drivers a verified, data-driven profile.
               Teams and sponsors search and discover talent backed by real results.
             </p>
@@ -65,8 +66,7 @@ const Index = () => {
                 <Button
                   size="lg"
                   variant="ghost"
-                  className="gap-2 text-base px-8"
-                  style={{ border: "1px solid hsl(0 0% 100% / 0.2)", color: "hsl(0 0% 100%)" }}
+                  className="gap-2 text-base px-8 border border-white/20 text-white hover:bg-white/10"
                 >
                   <Search className="h-4 w-4" /> Find Drivers
                 </Button>
@@ -74,9 +74,6 @@ const Index = () => {
             </div>
           </motion.div>
         </div>
-
-        {/* Bottom fade to background */}
-        <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: "linear-gradient(to top, hsl(var(--background)), transparent)" }} />
       </section>
 
       {/* Benefits */}
@@ -152,13 +149,13 @@ const Index = () => {
         <div className="container">
           <div
             className="relative overflow-hidden rounded-2xl p-12 text-center"
-            style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 50%, hsl(0 60% 20%) 100%)" }}
+            style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 50%, hsl(270 40% 20%) 100%)" }}
           >
             <div className="relative z-10">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
+              <h2 className="font-display text-3xl font-bold sm:text-4xl text-white">
                 Ready to Build Your Track Record?
               </h2>
-              <p className="mt-4 max-w-lg mx-auto" style={{ color: "hsl(0 0% 100% / 0.7)" }}>
+              <p className="mt-4 max-w-lg mx-auto text-white/70">
                 Join the platform where your racing career speaks for itself — verified, discoverable, professional.
               </p>
               <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
@@ -171,8 +168,7 @@ const Index = () => {
                   <Button
                     size="lg"
                     variant="ghost"
-                    className="px-8"
-                    style={{ border: "1px solid hsl(0 0% 100% / 0.2)", color: "hsl(0 0% 100%)" }}
+                    className="px-8 border border-white/20 text-white hover:bg-white/10"
                   >
                     I'm a Team / Sponsor
                   </Button>

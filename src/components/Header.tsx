@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Search, Shield, LogOut, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import logoIcon from "@/assets/logo-icon.png";
 
 const Header = () => {
   const navigate = useNavigate();
@@ -40,9 +41,7 @@ const Header = () => {
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-primary">
-            <span className="font-display text-sm font-bold text-primary-foreground">TR</span>
-          </div>
+          <img src={logoIcon} alt="TrackRecord" className="h-8 w-auto" />
           <span className="font-display text-xl font-bold tracking-wider text-foreground">
             TrackRecord
           </span>
