@@ -258,7 +258,7 @@ const DriverProfilePage = () => {
                   <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
                     {profile.first_name} {profile.last_name}
                   </h1>
-                  {!profile.is_claimed && <Badge variant="secondary" className="text-xs">Unclaimed</Badge>}
+                  
                 </div>
                 <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
                   {profile.nationality && <span className="inline-flex items-center gap-1"><FlagImage nationality={profile.nationality} size={16} /> {profile.nationality}</span>}
