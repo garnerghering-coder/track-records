@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -137,6 +137,11 @@ const Admin = () => {
   const [generateRaceName, setGenerateRaceName] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generateResult, setGenerateResult] = useState<any>(null);
+
+  // Import from URL
+  const [importUrl, setImportUrl] = useState("");
+  const [importingUrl, setImportingUrl] = useState(false);
+  const [importUrlResult, setImportUrlResult] = useState<any>(null);
 
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
@@ -634,6 +639,48 @@ const Admin = () => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
     setGenerating(false);
+  };
+
+  const handleImportFromUrl = async () => {
+    if (!importUrl.trim() || !importUrl.startsWith("http")) {
+      toast({ title: "Enter a valid URL", variant: "destructive" });
+      return;
+    }
+    setImportingUrl(true);
+    setImportUrlResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-race-results`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ url: importUrl }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Import failed", description: result.error || "Unknown error", variant: "destructive" });
+        setImportingUrl(false);
+        return;
+      }
+
+      setImportUrlResult(result);
+      toast({ title: "Results imported from URL!", description: `${result.entriesCount} entries created as pending.` });
+      setImportUrl("");
+      fetchPendingEvents();
+      fetchRaceEvents();
+      fetchDrivers();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setImportingUrl(false);
   };
 
   const handleEnrichDriver = async (driverId: string) => {
@@ -1197,6 +1244,48 @@ const Admin = () => {
                       <div className="text-card-foreground">{generateResult.matchedDrivers}</div>
                       <div className="text-muted-foreground">Drivers created:</div>
                       <div className="text-card-foreground">{generateResult.createdDrivers}</div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Import from URL */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <Globe className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold text-card-foreground">Import from URL</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">Paste a link to any race results page and the system will scrape and extract structured data automatically.</p>
+                <div className="flex gap-3">
+                  <div className="relative flex-1">
+                    <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={importUrl}
+                      onChange={(e) => setImportUrl(e.target.value)}
+                      placeholder="https://results.example.com/race-results"
+                      className="pl-9"
+                      onKeyDown={(e) => e.key === "Enter" && !importingUrl && handleImportFromUrl()}
+                    />
+                  </div>
+                  <Button onClick={handleImportFromUrl} disabled={importingUrl || !importUrl.trim()}>
+                    {importingUrl ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Scraping…</> : <><Globe className="h-4 w-4 mr-2" /> Import</>}
+                  </Button>
+                </div>
+                {importUrlResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <h3 className="font-semibold text-card-foreground mb-2">Import Summary</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="text-muted-foreground">Event:</div>
+                      <div className="text-card-foreground">{importUrlResult.eventName}</div>
+                      <div className="text-muted-foreground">Series:</div>
+                      <div className="text-card-foreground">{importUrlResult.seriesName}</div>
+                      <div className="text-muted-foreground">Entries:</div>
+                      <div className="text-card-foreground">{importUrlResult.entriesCount}</div>
+                      <div className="text-muted-foreground">Drivers matched:</div>
+                      <div className="text-card-foreground">{importUrlResult.matchedDrivers}</div>
+                      <div className="text-muted-foreground">Drivers created:</div>
+                      <div className="text-card-foreground">{importUrlResult.createdDrivers}</div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
                   </div>
