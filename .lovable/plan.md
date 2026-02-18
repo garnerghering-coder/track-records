@@ -1,86 +1,153 @@
 
 
-## Visual Overhaul + Dismissable Flags
+## Scale Up: Auto-Discovery, Scheduled Imports, and Community Submissions
 
-### 1. Dismissable Flags in the Flags Tab
+### Overview
+Three new systems to dramatically reduce manual work: (1) an AI-powered series discovery tool that finds and imports all races for an entire series/season automatically, (2) scheduled recurring imports from known results websites, and (3) a public submission form so drivers/teams can contribute their own results.
 
-Add a "Dismiss" button next to "View" on each flag. Dismissed flags are stored in localStorage (keyed by `entryId + type`) so they persist across sessions but don't need a database table. Dismissed flags are hidden from the list and the count updates accordingly. A "Show dismissed" toggle lets you review and un-dismiss if needed.
+---
 
-**File:** `src/components/FlagsTab.tsx`
-- Add a `dismissed` state set, initialized from `localStorage`
-- Filter out dismissed flags from display
-- Add a "Dismiss" button on each flag row
-- Add a "Show dismissed (N)" toggle at the top to reveal them with an "Restore" button
+### 1. Series Auto-Discovery (Admin Tool)
 
-### 2. Color Scheme Overhaul: Red to Purple
+A new admin tool where you type something like "IMSA SportsCar Championship 2024" and the system automatically:
+- Searches the web to find the full season calendar
+- Discovers result URLs for each round
+- Scrapes and imports each race's results one by one
+- Shows progress as it works through the season
 
-The logos use a vibrant purple (#B44AFF / ~270 75% 65%) with black and white. The current theme uses red (`0 85% 50%`) as the primary color. We will swap all primary color references to purple.
+**How it works:**
+1. Admin enters a series name + year (e.g. "F4 US Championship 2024")
+2. A new edge function `discover-series` uses Firecrawl search to find the season calendar and individual race result pages
+3. For each discovered race, it calls the existing `scrape-race-results` logic to import results
+4. The UI shows a progress log: "Found 12 rounds... Importing Round 1... Imported 30 entries... Importing Round 2..."
+5. Skips events that already exist in the database (matched by event name + series + year)
 
-**File:** `src/index.css`
-- Light mode: `--primary: 270 75% 65%` (the logo purple)
-- Dark mode: `--primary: 270 75% 65%` (same purple works on dark)
-- Update `--ring` to match
-- Update `--sidebar-ring` and `--sidebar-primary` to match
-- Keep `--destructive` as red (it's for errors, separate from brand)
+**New edge function:** `supabase/functions/discover-series/index.ts`
+- Accepts `{ seriesName: string, seasonYear: number }`
+- Step 1: Firecrawl search for `"{seriesName} {seasonYear} full season results schedule"` 
+- Step 2: From results, use AI to extract a list of race event names and their result page URLs
+- Step 3: For each event URL, scrape and import using the same logic as `scrape-race-results`
+- Returns a summary: events found, events imported, events skipped (already exist), errors
 
-**File:** `src/pages/Index.tsx`
-- Update the CTA section gradient from red tones to purple tones: `hsl(0 60% 20%)` becomes `hsl(270 40% 20%)`
+**Admin UI changes:**
+- New section in the "Add Race" tab: "Import Entire Series"
+- Input fields: series name, year
+- "Discover & Import" button
+- Progress display showing each round being processed with status indicators
 
-### 3. Hero Section: Photo Background Instead of Gradient
+---
 
-Replace the CSS gradient hero background with a photo of GT cars racing. We will use AI image generation to create a dramatic GT racing photo, upload it to the public folder, and use it as a background image with a dark overlay for text readability.
+### 2. Scheduled Imports (Recurring Sources)
 
-**File:** `src/pages/Index.tsx`
-- Remove the `style={{ background: "linear-gradient(...)" }}` from the hero section
-- Replace with a background image + dark overlay approach
-- Remove the bottom white gradient fade (`h-32` div at the bottom of the hero)
-- Add a subtle dark overlay so white text remains readable
+A new database table `import_sources` stores URLs of websites that publish race results regularly (e.g., a specific series results page). A cron job checks these periodically and imports any new results.
 
-### 4. Embed Logo Images
+**Database changes:**
 
-Copy the uploaded logos into `src/assets/` and use them in the Header and Footer instead of the current "TR" text badge.
+```text
+TABLE: import_sources
+  id          uuid PK
+  name        text          -- friendly name like "IMSA Results Page"
+  url         text          -- URL to scrape
+  series_hint text          -- helps AI identify the series
+  frequency   text          -- 'daily', 'weekly', 'monthly'
+  last_run_at timestamptz
+  last_status text          -- 'success', 'error', 'no_new_data'
+  is_active   boolean       -- enable/disable
+  created_at  timestamptz
+  created_by  uuid
+```
 
-**Files:** `src/components/Header.tsx`, `src/components/Footer.tsx`
-- Replace the `<div className="flex h-8 w-8 ..."><span>TR</span></div>` with an `<img>` using the TR icon logo
-- Import from `@/assets/TR_1600_x_1080_px.png`
+RLS: Admin-only for all operations.
+
+**New edge function:** `supabase/functions/scheduled-import/index.ts`
+- Called by a pg_cron job (daily)
+- Queries `import_sources` for active sources due for a run
+- For each source, scrapes the URL and imports results, skipping events already in the database
+- Updates `last_run_at` and `last_status`
+
+**Cron setup:** A daily pg_cron job that calls the `scheduled-import` function.
+
+**Admin UI:**
+- New tab or section: "Import Sources"
+- Table listing all sources with name, URL, frequency, last run status, active toggle
+- Add/edit/delete sources
+- "Run Now" button to trigger an immediate import for a specific source
+
+---
+
+### 3. Community Submissions
+
+Let logged-in users (drivers, teams) submit race results through a public form. Submissions go into a review queue for admin approval before being added to the main database.
+
+**Database changes:**
+
+```text
+TABLE: community_submissions
+  id              uuid PK
+  submitted_by    uuid          -- auth user who submitted
+  event_name      text
+  series_name     text
+  season_year     integer
+  event_date      date
+  category        racing_category
+  location        text
+  raw_data        text          -- the pasted/typed results text
+  parsed_entries  jsonb         -- AI-parsed structured data (stored for admin review)
+  status          text          -- 'pending', 'approved', 'rejected'
+  admin_notes     text
+  reviewed_by     uuid
+  reviewed_at     timestamptz
+  created_at      timestamptz
+```
+
+RLS: Users can insert and view own. Admins can view/update all.
+
+**How it works:**
+1. Any logged-in user visits a "Submit Results" page
+2. They fill in event details (series, event name, year) and paste raw results text (or upload a PDF)
+3. On submission, the `import-race-results` edge function parses the data but instead of inserting into `race_events`, it stores the parsed result in `community_submissions` as `parsed_entries` JSON
+4. Admin sees a "Community" tab showing pending submissions
+5. Admin can preview the parsed data, edit if needed, then approve (which triggers the actual import) or reject with notes
+
+**New edge function:** `supabase/functions/parse-submission/index.ts`
+- Same AI parsing logic as `import-race-results` but returns the parsed data instead of inserting it
+- Stores result in `community_submissions`
+
+**New page:** `src/pages/Submit.tsx`
+- Public-facing form for submitting results
+- Fields: series name, event name, year, category, raw results text (textarea), optional PDF upload
+- Shows submission status history for the logged-in user
+
+**Admin UI:**
+- New "Community" tab in Admin dashboard
+- Lists pending submissions with event details and submitter info
+- Preview shows the AI-parsed entries
+- Approve button imports the data; Reject button with notes field
+
+---
 
 ### Technical Details
 
-**CSS variable changes in `src/index.css`:**
-```
---primary: 270 75% 65%;
---ring: 270 75% 65%;
---sidebar-primary: 270 75% 65%;  (dark mode)
---sidebar-ring: 270 75% 65%;
-```
-
-**Hero section in `src/pages/Index.tsx`:**
-- Use AI-generated GT racing image saved to `public/images/hero-racing.jpg`
-- Structure: `<section className="relative ..."><div className="absolute inset-0"><img src="/images/hero-racing.jpg" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/60" /></div>...content...</section>`
-- Remove the bottom gradient fade div entirely
-
-**FlagsTab dismiss logic:**
-```typescript
-const [dismissed, setDismissed] = useState<Set<string>>(() => {
-  const stored = localStorage.getItem("dismissedFlags");
-  return stored ? new Set(JSON.parse(stored)) : new Set();
-});
-
-const dismissFlag = (key: string) => {
-  const next = new Set(dismissed).add(key);
-  setDismissed(next);
-  localStorage.setItem("dismissedFlags", JSON.stringify([...next]));
-};
-```
+**Files to create:**
+- `supabase/functions/discover-series/index.ts` -- Series auto-discovery
+- `supabase/functions/scheduled-import/index.ts` -- Cron-triggered import runner
+- `supabase/functions/parse-submission/index.ts` -- Parse community submission without inserting
+- `src/pages/Submit.tsx` -- Public submission form
 
 **Files to modify:**
-- `src/index.css` -- Primary color swap to purple
-- `src/pages/Index.tsx` -- Hero image, remove gradient fade, update CTA gradient
-- `src/components/Header.tsx` -- Use logo image
-- `src/components/Footer.tsx` -- Use logo image
-- `src/components/FlagsTab.tsx` -- Add dismiss/restore functionality
+- `src/pages/Admin.tsx` -- Add series discovery UI, import sources management, community review tab
+- `src/App.tsx` -- Add /submit route
+- `supabase/config.toml` -- Register new edge functions
 
-**Files to create:**
-- AI-generated hero image at `public/images/hero-racing.jpg`
-- Copy logos to `src/assets/`
+**Database migrations:**
+- Create `import_sources` table with admin-only RLS
+- Create `community_submissions` table with user insert + own select, admin full access
+- Enable pg_cron and pg_net extensions
+- Create daily cron job for scheduled imports
+
+**Implementation order:**
+1. Database migrations (both tables + cron)
+2. Series auto-discovery (highest impact -- one click imports an entire season)
+3. Community submissions (lets others help you)
+4. Scheduled imports (ongoing automation)
 
