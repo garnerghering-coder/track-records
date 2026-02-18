@@ -213,12 +213,71 @@ Rules:
           }
 
           if (!event.result_url) {
-            noUrl++;
-            await updateJob(
-              { events_no_url: noUrl },
-              `⚠️ [${i + 1}/${events.length}] ${event.event_name} — no results URL found`
-            );
-            continue;
+            // Targeted search for this specific event
+            await updateJob({}, `🔍 [${i + 1}/${events.length}] ${event.event_name} — searching for results...`);
+
+            try {
+              const targetSearch = await fetch("https://api.firecrawl.dev/v1/search", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  query: `${event.event_name} ${seasonYear} race results classification`,
+                  limit: 5,
+                }),
+              });
+
+              if (targetSearch.ok) {
+                const targetData = await targetSearch.json();
+                const targetResults = (targetData.data || []) as Array<{ url?: string; title?: string; description?: string }>;
+
+                if (targetResults.length > 0) {
+                  const candidateList = targetResults
+                    .map((r, idx) => `${idx + 1}. ${r.url} — ${r.title || "No title"}`)
+                    .join("\n");
+
+                  const urlPickResponse = await callAI({
+                    max_tokens: 256,
+                    response_format: { type: "json_object" },
+                    messages: [
+                      {
+                        role: "system",
+                        content: `You pick the single best URL from a list that leads to an actual race results/classification page. Avoid news articles, previews, betting sites, or schedule pages. Return JSON: { "chosen_url": "string or null" }`,
+                      },
+                      {
+                        role: "user",
+                        content: `Which URL most likely has the official race results for "${event.event_name} ${seasonYear}"?\n\n${candidateList}`,
+                      },
+                    ],
+                  });
+
+                  if (urlPickResponse.ok) {
+                    const pickData = await urlPickResponse.json();
+                    const pickContent = pickData.choices?.[0]?.message?.content;
+                    if (pickContent) {
+                      try {
+                        const picked = JSON.parse(pickContent);
+                        if (picked.chosen_url) {
+                          event.result_url = picked.chosen_url;
+                          await updateJob({}, `🔗 [${i + 1}/${events.length}] ${event.event_name} — found URL via targeted search`);
+                        }
+                      } catch { /* ignore parse error */ }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.error(`Targeted search failed for ${event.event_name}:`, err);
+            }
+
+            // If still no URL after targeted search, skip
+            if (!event.result_url) {
+              noUrl++;
+              await updateJob(
+                { events_no_url: noUrl },
+                `⚠️ [${i + 1}/${events.length}] ${event.event_name} — no results URL found (even after targeted search)`
+              );
+              continue;
+            }
           }
 
           try {
