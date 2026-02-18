@@ -1,53 +1,52 @@
 
 
-## AI-Powered Race Results Ingestion
+## Auto-Create Profiles for Unmatched Drivers
 
 ### Overview
-Add an AI-powered import system where you can paste raw race results (from a website, PDF, timing sheet, etc.) and the AI automatically extracts structured data -- drivers, positions, teams, classes, gaps, and more. Results land in a "pending" approval queue so an admin can review and publish them with one click.
+When the AI import function encounters driver names that don't match any existing profile, it will automatically create new `driver_profiles` entries for them instead of just logging them as unmatched. The new profiles will be minimal (first name + last name only) and linked to the race entry immediately.
 
-### How It Works
+### Changes
 
-1. **New "Import Results" section in the Admin Dashboard**
-   - A text area where you paste raw race results (copy from a timing page, PDF export, etc.)
-   - Optionally provide event context (event name, series) to help the AI
-   - Click "Process with AI" to send the text to the backend
+**File modified: `supabase/functions/import-race-results/index.ts`**
 
-2. **Backend AI processing (edge function)**
-   - Receives the raw text and sends it to Lovable AI (Gemini Flash) with a structured prompt
-   - The AI extracts: event name, series, year, location, category, and for each entry: finishing position, class position, car number, team name, driver name(s), race class, laps, gaps, pit stops, status
-   - Uses tool calling to get clean structured JSON output
-   - The function then matches driver names against existing `driver_profiles` (fuzzy match on first/last name)
-   - Inserts a new `race_event` and `race_entries` with `verification_status: 'pending'`
-   - For matched drivers, creates `race_entry_drivers` links; for unmatched ones, stores the name in a notes field for admin review
+In the driver matching loop, when a driver name is not found after both exact and partial matching:
+1. Split the name into first name (first word) and last name (remaining words)
+2. Insert a new row into `driver_profiles` with `first_name`, `last_name`, `is_claimed: false`
+3. Use the returned ID to link the driver to the race entry via `race_entry_drivers`
+4. Track newly created profiles in the response so the admin knows which ones were auto-generated
 
-3. **Pending results approval queue**
-   - New section in the Admin Dashboard showing events with pending entries
-   - Admin can review the AI-extracted data, correct any mistakes, and then approve (sets status to 'verified') or reject entries
-   - Approved results instantly appear on the public site and driver profiles
+The response will change from reporting `unmatchedDrivers` / `unmatchedNames` to also include `createdDrivers` with their names and new profile IDs.
+
+**No other files need to change** -- the Admin UI already displays the import summary, and will just show fewer (or zero) unmatched drivers since they get created automatically.
 
 ### Technical Details
 
-**New edge function: `supabase/functions/import-race-results/index.ts`**
-- Accepts `{ rawText: string, eventHint?: string, seriesHint?: string }` 
-- Calls Lovable AI gateway with tool calling to extract structured race data
-- Queries `driver_profiles` to match extracted driver names
-- Inserts into `race_events`, `race_entries`, `race_entry_drivers` using the service role key
-- Returns the created event ID and a summary of matched/unmatched drivers
+Replace the "unmatched" block in the driver matching loop with:
 
-**Database changes: None required**
-- `race_entries` already has `verification_status` with a default of `'verified'` -- imported entries will explicitly use `'pending'`
-- No schema changes needed
+```typescript
+// Instead of adding to unmatchedForEntry, create a new profile
+const nameParts = name.trim().split(/\s+/);
+const firstName = nameParts[0];
+const lastName = nameParts.slice(1).join(" ") || nameParts[0];
 
-**Files modified:**
-- `src/pages/Admin.tsx` -- Add an "Import Results" panel with a text area and "Process with AI" button, plus a pending approval queue showing events with pending entries where admin can approve/reject
-- `supabase/config.toml` -- Register the new edge function with `verify_jwt = false`
+const { data: newDriver } = await adminClient
+  .from("driver_profiles")
+  .insert({ first_name: firstName, last_name: lastName, is_claimed: false })
+  .select("id")
+  .single();
 
-**Files created:**
-- `supabase/functions/import-race-results/index.ts` -- Edge function for AI parsing and database insertion
+if (newDriver) {
+  matchedDriverIds.push(newDriver.id);
+  driverMap.set(name.trim().toLowerCase(), newDriver.id);
+  createdCount++;
+  createdNames.push(name);
+} else {
+  // Fallback: still track as unmatched if insert fails
+  unmatchedForEntry.push(name);
+  unmatchedCount++;
+  unmatchedNames.push(name);
+}
+```
 
-**How the AI extraction works:**
-- Uses Lovable AI (google/gemini-3-flash-preview) via tool calling
-- The tool schema defines the exact structure expected: event metadata + array of entries with driver names, positions, classes, gaps, etc.
-- This ensures clean, typed output rather than fragile JSON parsing
-- Driver matching uses case-insensitive name comparison against existing profiles
+The response JSON will add `createdDrivers` (count) and `createdNames` (array) fields alongside the existing matched/unmatched fields.
 
