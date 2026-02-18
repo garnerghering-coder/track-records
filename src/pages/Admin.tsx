@@ -10,14 +10,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
 
 import FlagImage from "@/components/FlagImage";
 import DuplicatesTab from "@/components/DuplicatesTab";
+import FlagsTab from "@/components/FlagsTab";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Tables } from "@/integrations/supabase/types";
 
 type DriverProfile = Tables<"driver_profiles">;
@@ -97,6 +99,11 @@ const Admin = () => {
   // Reports
   const [reports, setReports] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
+  const [flagCount, setFlagCount] = useState(0);
+
+  // Driver editing on entries
+  const [editingDriversEntryId, setEditingDriversEntryId] = useState<string | null>(null);
+  const [driverSearchTerm, setDriverSearchTerm] = useState("");
 
   // AI Import
   const [importText, setImportText] = useState("");
@@ -815,6 +822,107 @@ const Admin = () => {
     );
   };
 
+  const handleRemoveDriver = async (entryId: string, driverProfileId: string) => {
+    const { error } = await supabase.from("race_entry_drivers").delete()
+      .eq("race_entry_id", entryId).eq("driver_profile_id", driverProfileId);
+    if (error) {
+      toast({ title: "Error removing driver", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Driver removed from entry" });
+      fetchPendingEvents();
+      if (expandedEventId) fetchExpandedEntries(expandedEventId);
+    }
+  };
+
+  const handleAddDriverToEntry = async (entryId: string, driverProfileId: string) => {
+    const { error } = await supabase.from("race_entry_drivers").insert({
+      race_entry_id: entryId,
+      driver_profile_id: driverProfileId,
+    });
+    if (error) {
+      toast({ title: "Error adding driver", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Driver added to entry" });
+      setDriverSearchTerm("");
+      fetchPendingEvents();
+      if (expandedEventId) fetchExpandedEntries(expandedEventId);
+    }
+  };
+
+  const renderDriverCell = (entry: any) => {
+    const currentDrivers = entry.race_entry_drivers || [];
+    const currentIds = new Set(currentDrivers.map((red: any) => red.driver_profile_id));
+    const isEditing = editingDriversEntryId === entry.id;
+    const filteredDrivers = driverSearchTerm.trim()
+      ? drivers.filter(d =>
+          !currentIds.has(d.id) &&
+          `${d.first_name} ${d.last_name}`.toLowerCase().includes(driverSearchTerm.toLowerCase())
+        ).slice(0, 8)
+      : [];
+
+    return (
+      <td className="px-3 py-2">
+        <Popover open={isEditing} onOpenChange={(open) => { if (!open) { setEditingDriversEntryId(null); setDriverSearchTerm(""); } }}>
+          <PopoverTrigger asChild>
+            <button
+              className="text-left w-full cursor-pointer hover:bg-accent/50 rounded px-1 py-0.5 transition-colors"
+              onClick={() => setEditingDriversEntryId(entry.id)}
+            >
+              {currentDrivers.length > 0
+                ? currentDrivers.map((red: any) =>
+                    red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : "?"
+                  ).join(", ")
+                : <span className="text-muted-foreground italic">No matched drivers</span>
+              }
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" align="start">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-card-foreground">Linked Drivers</p>
+              {currentDrivers.length === 0 && <p className="text-xs text-muted-foreground italic">None</p>}
+              {currentDrivers.map((red: any) => (
+                <div key={red.driver_profile_id} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-card-foreground truncate">
+                    {red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : red.driver_profile_id.slice(0, 8)}
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive hover:text-destructive/80" onClick={() => handleRemoveDriver(entry.id, red.driver_profile_id)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+              <div className="border-t border-border pt-2 mt-2">
+                <Input
+                  value={driverSearchTerm}
+                  onChange={(e) => setDriverSearchTerm(e.target.value)}
+                  placeholder="Search drivers to add…"
+                  className="h-7 text-xs"
+                  autoFocus
+                />
+                {filteredDrivers.length > 0 && (
+                  <div className="mt-1 max-h-32 overflow-y-auto space-y-0.5">
+                    {filteredDrivers.map(d => (
+                      <button
+                        key={d.id}
+                        className="w-full text-left px-2 py-1 text-xs rounded hover:bg-accent transition-colors text-card-foreground"
+                        onClick={() => handleAddDriverToEntry(entry.id, d.id)}
+                      >
+                        {d.first_name} {d.last_name}
+                        {d.nationality && <span className="text-muted-foreground ml-1">({d.nationality})</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {driverSearchTerm.trim() && filteredDrivers.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1 px-1">No matching drivers</p>
+                )}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </td>
+    );
+  };
+
   // Shared entries table for pending and expanded All Races
   const renderEntriesTable = (entries: any[]) => (
     <div className="overflow-x-auto">
@@ -839,14 +947,7 @@ const Admin = () => {
                 {renderCell(entry, "finishing_position", entry.finishing_position, "text-card-foreground font-medium")}
                 {renderCell(entry, "car_number", entry.car_number)}
                 {renderCell(entry, "team_name", entry.team_name, "text-card-foreground")}
-                <td className="px-3 py-2 text-card-foreground">
-                  {entry.race_entry_drivers?.length > 0
-                    ? entry.race_entry_drivers.map((red: any) =>
-                        red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : "?"
-                      ).join(", ")
-                    : <span className="text-muted-foreground italic">No matched drivers</span>
-                  }
-                </td>
+                {renderDriverCell(entry)}
                 {renderCell(entry, "race_class", entry.race_class)}
                 {renderCell(entry, "gap_to_leader", entry.gap_to_leader)}
                 {renderCell(entry, "status", entry.status)}
@@ -889,6 +990,9 @@ const Admin = () => {
               Pending {pendingEvents.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingEvents.length}</span>}
             </TabsTrigger>
             <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
+            <TabsTrigger value="flags">
+              <AlertTriangle className="h-3.5 w-3.5 mr-1" /> Flags {flagCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground text-xs">{flagCount}</span>}
+            </TabsTrigger>
             <TabsTrigger value="reports">
               <Flag className="h-3.5 w-3.5 mr-1" /> Reports {reports.filter((r: any) => r.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{reports.filter((r: any) => r.status === "pending").length}</span>}
             </TabsTrigger>
@@ -1518,6 +1622,17 @@ const Admin = () => {
                 </tbody>
               </table>
             </div>
+          </TabsContent>
+
+          {/* ── Flags ── */}
+          <TabsContent value="flags">
+            <FlagsTab
+              onNavigateToEvent={(eventId) => {
+                setActiveTab("all-races");
+                toggleExpandEvent(eventId);
+              }}
+              onFlagCountChange={setFlagCount}
+            />
           </TabsContent>
 
           {/* ── Reports ── */}

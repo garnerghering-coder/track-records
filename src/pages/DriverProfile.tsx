@@ -111,7 +111,12 @@ const DriverProfilePage = () => {
     const evResults = (junctions || [])
       .map((j: any) => j.race_entries)
       .filter(Boolean)
-      .sort((a: any, b: any) => (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0));
+      .sort((a: any, b: any) => {
+        const dateA = a.race_events?.event_date || "";
+        const dateB = b.race_events?.event_date || "";
+        if (dateA || dateB) return dateB.localeCompare(dateA);
+        return (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0);
+      });
     setEventResults(evResults);
 
     setLoading(false);
@@ -495,7 +500,10 @@ const DriverProfilePage = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-card-foreground truncate">{ev.event_name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{ev.series_name} • {ev.season_year}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {ev.series_name} • {ev.season_year}
+                          {ev.event_date && <span className="ml-1">• {new Date(ev.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span>}
+                        </p>
                       </div>
                       {entry.team_name && <span className="text-xs text-muted-foreground hidden sm:block">{entry.team_name}</span>}
                       {entry.car_number && <span className="text-xs font-mono text-muted-foreground">#{entry.car_number}</span>}
