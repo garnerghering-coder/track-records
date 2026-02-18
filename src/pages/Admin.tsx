@@ -127,12 +127,12 @@ const Admin = () => {
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [bulkEnriching, setBulkEnriching] = useState(false);
 
-  // Series Discovery
+  // Series Discovery (background jobs)
   const [discoverSeriesName, setDiscoverSeriesName] = useState("");
   const [discoverYear, setDiscoverYear] = useState(new Date().getFullYear().toString());
-  const [discovering, setDiscovering] = useState(false);
-  const [discoverResult, setDiscoverResult] = useState<any>(null);
-  const [discoverLog, setDiscoverLog] = useState<string[]>([]);
+  const [submittingJob, setSubmittingJob] = useState(false);
+  const [discoveryJobs, setDiscoveryJobs] = useState<any[]>([]);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
 
   // Import Sources
   const [importSources, setImportSources] = useState<any[]>([]);
@@ -305,11 +305,28 @@ const Admin = () => {
     if (data) setCommunitySubmissions(data as any[]);
   };
 
+  const fetchDiscoveryJobs = async () => {
+    const { data } = await supabase
+      .from("discovery_jobs" as any)
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (data) setDiscoveryJobs(data as any[]);
+  };
+
+  // Poll for running jobs
+  useEffect(() => {
+    if (!isAdmin) return;
+    fetchDiscoveryJobs();
+    const hasRunning = discoveryJobs.some((j: any) => j.status === "queued" || j.status === "running");
+    if (!hasRunning) return;
+    const interval = setInterval(fetchDiscoveryJobs, 5000);
+    return () => clearInterval(interval);
+  }, [isAdmin, discoveryJobs.some((j: any) => j.status === "queued" || j.status === "running")]);
+
   const handleDiscoverSeries = async () => {
     if (!discoverSeriesName.trim()) { toast({ title: "Enter a series name", variant: "destructive" }); return; }
-    setDiscovering(true);
-    setDiscoverResult(null);
-    setDiscoverLog([]);
+    setSubmittingJob(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(
@@ -320,68 +337,18 @@ const Admin = () => {
           body: JSON.stringify({ seriesName: discoverSeriesName, seasonYear: parseInt(discoverYear) || new Date().getFullYear() }),
         }
       );
-
+      const result = await response.json();
       if (!response.ok) {
-        const errText = await response.text();
-        let errMsg = "Discovery failed";
-        try { errMsg = JSON.parse(errText).error || errMsg; } catch {}
-        toast({ title: "Discovery failed", description: errMsg, variant: "destructive" });
-        setDiscovering(false);
-        return;
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) { toast({ title: "Error", description: "No response stream", variant: "destructive" }); setDiscovering(false); return; }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.type === "status") {
-              setDiscoverLog(prev => [...prev, event.message]);
-            } else if (event.type === "discovered") {
-              setDiscoverLog(prev => [...prev, `✅ Discovered ${event.eventsFound} events`]);
-            } else if (event.type === "progress") {
-              const prefix = `[${event.index}/${event.total}] ${event.event_name}`;
-              if (event.status === "importing") {
-                setDiscoverLog(prev => [...prev, `⏳ ${prefix} — importing...`]);
-              } else if (event.status === "imported") {
-                setDiscoverLog(prev => [...prev, `✅ ${prefix} — ${event.entriesCount} entries imported`]);
-              } else if (event.status === "skipped") {
-                setDiscoverLog(prev => [...prev, `⏭️ ${prefix} — skipped (already exists)`]);
-              } else if (event.status === "no_url") {
-                setDiscoverLog(prev => [...prev, `⚠️ ${prefix} — no results URL found`]);
-              } else if (event.status === "error") {
-                setDiscoverLog(prev => [...prev, `❌ ${prefix} — ${event.reason}`]);
-              }
-            } else if (event.type === "complete") {
-              setDiscoverResult(event);
-              toast({ title: "Series discovery complete!", description: `Found ${event.eventsFound} events, imported ${event.imported}.` });
-              fetchPendingEvents();
-              fetchRaceEvents();
-              fetchDrivers();
-            } else if (event.type === "error") {
-              setDiscoverLog(prev => [...prev, `❌ Error: ${event.message}`]);
-              toast({ title: "Discovery error", description: event.message, variant: "destructive" });
-            }
-          } catch {}
-        }
+        toast({ title: "Failed to queue job", description: result.error, variant: "destructive" });
+      } else {
+        toast({ title: "Job queued!", description: `${discoverSeriesName} ${discoverYear} is now processing in the background.` });
+        setDiscoverSeriesName("");
+        fetchDiscoveryJobs();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
-    setDiscovering(false);
+    setSubmittingJob(false);
   };
 
   const handleAddImportSource = async () => {
@@ -1602,7 +1569,7 @@ const Admin = () => {
                   <Zap className="h-5 w-5 text-primary" />
                   <h2 className="font-display text-xl font-bold text-card-foreground">Import Entire Series</h2>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">Enter a series name and year. The AI will search the web, discover all race rounds, and import results for the entire season automatically.</p>
+                <p className="text-sm text-muted-foreground mb-4">Enter a series name and year. Jobs run in the background — you can queue multiple series and navigate away.</p>
                 <div className="flex gap-3">
                   <Input
                     value={discoverSeriesName}
@@ -1617,56 +1584,77 @@ const Admin = () => {
                     className="w-24"
                     placeholder="Year"
                   />
-                  <Button onClick={handleDiscoverSeries} disabled={discovering || !discoverSeriesName.trim()}>
-                    {discovering ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Discovering…</> : <><Zap className="h-4 w-4 mr-2" /> Discover & Import</>}
+                  <Button onClick={handleDiscoverSeries} disabled={submittingJob || !discoverSeriesName.trim()}>
+                    {submittingJob ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Queuing…</> : <><Zap className="h-4 w-4 mr-2" /> Discover & Import</>}
                   </Button>
                 </div>
-                {discovering && (
-                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Discovering {discoverSeriesName} {discoverYear}…</span>
+
+                {/* Jobs List */}
+                {discoveryJobs.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-card-foreground text-sm">Discovery Jobs</h3>
+                      <Button variant="ghost" size="sm" onClick={fetchDiscoveryJobs}>
+                        <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                      </Button>
                     </div>
-                    {discoverLog.length > 0 && (
-                      <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
-                        {discoverLog.map((line, i) => (
-                          <div key={i} className="text-muted-foreground">{line}</div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {!discovering && discoverLog.length > 0 && !discoverResult && (
-                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
-                      {discoverLog.map((line, i) => (
-                        <div key={i} className="text-muted-foreground">{line}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {discoverResult && (
-                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
-                    <h3 className="font-semibold text-card-foreground mb-2">Discovery Summary</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                      <div className="text-muted-foreground">Events found:</div>
-                      <div className="text-card-foreground">{discoverResult.eventsFound}</div>
-                      <div className="text-muted-foreground">Imported:</div>
-                      <div className="text-card-foreground">{discoverResult.imported}</div>
-                      <div className="text-muted-foreground">Skipped (existing):</div>
-                      <div className="text-card-foreground">{discoverResult.skipped}</div>
-                      <div className="text-muted-foreground">No URL found:</div>
-                      <div className="text-card-foreground">{discoverResult.noUrl}</div>
-                      <div className="text-muted-foreground">Failed:</div>
-                      <div className="text-card-foreground">{discoverResult.failed}</div>
-                    </div>
-                    {discoverLog.length > 0 && (
-                      <div className="space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
-                        {discoverLog.map((line, i) => (
-                          <div key={i} className="text-muted-foreground">{line}</div>
-                        ))}
-                      </div>
-                    )}
+                    {discoveryJobs.map((job: any) => {
+                      const isRunning = job.status === "running" || job.status === "queued";
+                      const progress = job.events_found ? ((job.events_imported + job.events_skipped + job.events_failed + job.events_no_url) / job.events_found) * 100 : 0;
+                      const log = (job.progress_log || []) as { time: string; message: string }[];
+                      const isExpanded = expandedJobId === job.id;
+
+                      return (
+                        <div key={job.id} className="rounded-lg border border-border bg-muted/30 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isRunning && <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />}
+                              {job.status === "completed" && <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />}
+                              {job.status === "failed" && <XCircle className="h-4 w-4 text-destructive shrink-0" />}
+                              <span className="font-medium text-card-foreground truncate">{job.series_name} {job.season_year}</span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge variant={job.status === "completed" ? "default" : job.status === "failed" ? "destructive" : "secondary"}>
+                                {job.status}
+                              </Badge>
+                              {job.events_found && (
+                                <span className="text-xs text-muted-foreground">
+                                  {job.events_imported + job.events_skipped + job.events_failed + job.events_no_url}/{job.events_found}
+                                </span>
+                              )}
+                              <Button variant="ghost" size="sm" onClick={() => setExpandedJobId(isExpanded ? null : job.id)}>
+                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {job.events_found && (
+                            <div className="mt-2">
+                              <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                                <div
+                                  className="h-full bg-primary transition-all duration-500"
+                                  style={{ width: `${Math.min(progress, 100)}%` }}
+                                />
+                              </div>
+                              <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                                {job.events_imported > 0 && <span>✅ {job.events_imported} imported</span>}
+                                {job.events_skipped > 0 && <span>⏭️ {job.events_skipped} skipped</span>}
+                                {job.events_failed > 0 && <span>❌ {job.events_failed} failed</span>}
+                                {job.events_no_url > 0 && <span>⚠️ {job.events_no_url} no URL</span>}
+                              </div>
+                            </div>
+                          )}
+
+                          {isExpanded && log.length > 0 && (
+                            <div className="mt-3 space-y-1 max-h-60 overflow-y-auto text-xs font-mono bg-background/50 rounded p-2">
+                              {log.map((entry, i) => (
+                                <div key={i} className="text-muted-foreground">{entry.message}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
