@@ -23,24 +23,24 @@ type DriverProfile = Tables<"driver_profiles">;
 type RaceResult = Tables<"race_results">;
 
 const RACING_CATEGORIES = [
-  "karting", "single_seater", "gt", "touring_car", "sports_car",
-  "rally", "endurance", "formula", "stock_car", "other",
-] as const;
+"karting", "single_seater", "gt", "touring_car", "sports_car",
+"rally", "endurance", "formula", "stock_car", "other"] as
+const;
 
 const categoryLabels: Record<string, string> = {
   karting: "Karting", single_seater: "Single Seater", gt: "GT",
   touring_car: "Touring Car", sports_car: "Sports Car", rally: "Rally",
-  endurance: "Endurance", formula: "Formula", stock_car: "Stock Car", other: "Other",
+  endurance: "Endurance", formula: "Formula", stock_car: "Stock Car", other: "Other"
 };
 
-const VerificationBadge = ({ status }: { status: string }) => {
+const VerificationBadge = ({ status }: {status: string;}) => {
   if (status === "verified") return <Badge className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90"><CheckCircle className="h-3 w-3" /> Verified</Badge>;
   if (status === "rejected") return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" /> Rejected</Badge>;
   return <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Pending</Badge>;
 };
 
 const DriverProfilePage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{id: string;}>();
   const { toast } = useToast();
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [results, setResults] = useState<RaceResult[]>([]);
@@ -61,7 +61,7 @@ const DriverProfilePage = () => {
   const [editBio, setEditBio] = useState("");
   const [editNationality, setEditNationality] = useState("");
   const [editCategory, setEditCategory] = useState("");
-  
+
   const [editSocialWebsite, setEditSocialWebsite] = useState("");
   const [editSocialInstagram, setEditSocialInstagram] = useState("");
   const [editSocialTwitter, setEditSocialTwitter] = useState("");
@@ -96,39 +96,39 @@ const DriverProfilePage = () => {
   const fetchData = async () => {
     if (!id) return;
     const [profileRes, resultsRes] = await Promise.all([
-      supabase.from("driver_profiles").select("*").eq("id", id).single(),
-      supabase.from("race_results").select("*").eq("driver_profile_id", id).order("season_year", { ascending: false }),
-    ]);
+    supabase.from("driver_profiles").select("*").eq("id", id).single(),
+    supabase.from("race_results").select("*").eq("driver_profile_id", id).order("season_year", { ascending: false })]
+    );
     setProfile(profileRes.data);
     setResults(resultsRes.data ?? []);
 
     // Fetch events from new tables
-    const { data: junctions } = await supabase
-      .from("race_entry_drivers")
-      .select("race_entry_id, race_entries(id, race_event_id, team_name, car_number, race_class, finishing_position, class_position, laps_completed, status, race_events(id, event_name, series_name, season_year, category, location, event_date))")
-      .eq("driver_profile_id", id);
+    const { data: junctions } = await supabase.
+    from("race_entry_drivers").
+    select("race_entry_id, race_entries(id, race_event_id, team_name, car_number, race_class, finishing_position, class_position, laps_completed, status, race_events(id, event_name, series_name, season_year, category, location, event_date))").
+    eq("driver_profile_id", id);
 
-    const evResults = (junctions || [])
-      .map((j: any) => j.race_entries)
-      .filter(Boolean)
-      .sort((a: any, b: any) => {
-        const dateA = a.race_events?.event_date || "";
-        const dateB = b.race_events?.event_date || "";
-        if (dateA || dateB) return dateB.localeCompare(dateA);
-        return (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0);
-      });
+    const evResults = (junctions || []).
+    map((j: any) => j.race_entries).
+    filter(Boolean).
+    sort((a: any, b: any) => {
+      const dateA = a.race_events?.event_date || "";
+      const dateB = b.race_events?.event_date || "";
+      if (dateA || dateB) return dateB.localeCompare(dateA);
+      return (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0);
+    });
     setEventResults(evResults);
 
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [id]);
+  useEffect(() => {fetchData();}, [id]);
 
   useEffect(() => {
     if (!session || !id) return;
-    supabase.from("profile_claim_requests").select("*")
-      .eq("driver_profile_id", id).eq("user_id", session.user.id)
-      .maybeSingle().then(({ data }) => setExistingClaim(data));
+    supabase.from("profile_claim_requests").select("*").
+    eq("driver_profile_id", id).eq("user_id", session.user.id).
+    maybeSingle().then(({ data }) => setExistingClaim(data));
   }, [session, id]);
 
   const isOwner = profile?.is_claimed && session && profile.user_id === session.user.id;
@@ -138,7 +138,7 @@ const DriverProfilePage = () => {
     setEditBio(profile.bio || "");
     setEditNationality(profile.nationality || "");
     setEditCategory(profile.primary_category || "other");
-    
+
     setEditSocialWebsite(profile.social_website || "");
     setEditSocialInstagram(profile.social_instagram || "");
     setEditSocialTwitter(profile.social_twitter || "");
@@ -153,11 +153,11 @@ const DriverProfilePage = () => {
       bio: editBio || null,
       nationality: editNationality || null,
       primary_category: editCategory as any,
-      
+
       social_website: editSocialWebsite || null,
       social_instagram: editSocialInstagram || null,
       social_twitter: editSocialTwitter || null,
-      social_linkedin: editSocialLinkedin || null,
+      social_linkedin: editSocialLinkedin || null
     }).eq("id", profile.id);
     setSavingProfile(false);
     if (error) {
@@ -182,7 +182,7 @@ const DriverProfilePage = () => {
       championship_position: newChampPos ? parseInt(newChampPos) : null,
       notes: newNotes || null,
       submitted_by: session?.user.id || null,
-      verification_status: "pending" as const,
+      verification_status: "pending" as const
     });
     setSubmittingResult(false);
     if (error) {
@@ -190,7 +190,7 @@ const DriverProfilePage = () => {
     } else {
       toast({ title: "Result added", description: "It will appear as pending until verified by an admin." });
       setAddingResult(false);
-      setNewSeriesName(""); setNewEventName(""); setNewCategory("other"); setNewFinishPos(""); setNewChampPos(""); setNewNotes("");
+      setNewSeriesName("");setNewEventName("");setNewCategory("other");setNewFinishPos("");setNewChampPos("");setNewNotes("");
       setNewSeasonYear(new Date().getFullYear().toString());
       fetchData();
     }
@@ -200,7 +200,7 @@ const DriverProfilePage = () => {
     const { error } = await supabase.from("race_results").update({
       verification_status: status,
       verified_by: session?.user.id || null,
-      verified_at: new Date().toISOString(),
+      verified_at: new Date().toISOString()
     }).eq("id", resultId);
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -218,26 +218,26 @@ const DriverProfilePage = () => {
       const ext = claimFile.name.split(".").pop();
       const path = `${session.user.id}/${id}.${ext}`;
       const { error: uploadError } = await supabase.storage.from("claim-documents").upload(path, claimFile, { upsert: true });
-      if (uploadError) { toast({ title: "Upload failed", description: uploadError.message, variant: "destructive" }); setClaimSubmitting(false); return; }
+      if (uploadError) {toast({ title: "Upload failed", description: uploadError.message, variant: "destructive" });setClaimSubmitting(false);return;}
       const { data: signedData } = await supabase.storage.from("claim-documents").createSignedUrl(path, 60 * 60 * 24 * 30);
       documentUrl = signedData?.signedUrl || null;
     }
     const { error } = await supabase.from("profile_claim_requests").insert({
-      driver_profile_id: id, user_id: session.user.id, message: claimMessage || null, document_url: documentUrl,
+      driver_profile_id: id, user_id: session.user.id, message: claimMessage || null, document_url: documentUrl
     });
     setClaimSubmitting(false);
-    if (error) { toast({ title: "Error submitting claim", description: error.message, variant: "destructive" }); }
-    else { toast({ title: "Claim submitted", description: "An admin will review your request." }); setClaimDialogOpen(false); setExistingClaim({ status: "pending" }); }
+    if (error) {toast({ title: "Error submitting claim", description: error.message, variant: "destructive" });} else
+    {toast({ title: "Claim submitted", description: "An admin will review your request." });setClaimDialogOpen(false);setExistingClaim({ status: "pending" });}
   };
 
   if (loading) {
-    return (<div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading profile…</p></div></div>);
+    return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading profile…</p></div></div>;
   }
   if (!profile) {
-    return (<div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Driver profile not found.</p><Link to="/search"><Button variant="outline">Back to Search</Button></Link></div></div>);
+    return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Driver profile not found.</p><Link to="/search"><Button variant="outline">Back to Search</Button></Link></div></div>;
   }
 
-  const verifiedCount = results.filter(r => r.verification_status === "verified").length;
+  const verifiedCount = results.filter((r) => r.verification_status === "verified").length;
   const flag = null; // replaced by FlagImage component
 
   return (
@@ -265,22 +265,22 @@ const DriverProfilePage = () => {
                   {profile.nationality && <span className="inline-flex items-center gap-1"><FlagImage nationality={profile.nationality} size={16} /> {profile.nationality}</span>}
                   {profile.primary_category && <span>{categoryLabels[profile.primary_category] || profile.primary_category}</span>}
                   {profile.license_grade && <span>License: {profile.license_grade}</span>}
-                  <span>{verifiedCount} verified result{verifiedCount !== 1 ? "s" : ""}</span>
+                  
                 </div>
               </div>
             </div>
-            {isOwner && !editing && (
-              <div className="flex items-center gap-2 self-start sm:self-auto">
+            {isOwner && !editing &&
+            <div className="flex items-center gap-2 self-start sm:self-auto">
                 <Button variant="outline" size="sm" onClick={openEditMode} className="border-white/20 text-white hover:bg-white/10 hover:text-white">
                   <Pencil className="h-4 w-4 mr-1.5" /> Edit Profile
                 </Button>
               </div>
-            )}
-            {!isOwner && profile && (
-              <div className="self-start sm:self-auto">
+            }
+            {!isOwner && profile &&
+            <div className="self-start sm:self-auto">
                 <ReportDialog reportType="driver" targetId={profile.id} targetName={`${profile.first_name} ${profile.last_name}`} />
               </div>
-            )}
+            }
           </div>
         </div>
       </section>
@@ -289,8 +289,8 @@ const DriverProfilePage = () => {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Edit Profile Panel */}
-          {editing && isOwner && (
-            <div className="rounded-lg border-2 border-primary/30 bg-card p-5 space-y-4">
+          {editing && isOwner &&
+          <div className="rounded-lg border-2 border-primary/30 bg-card p-5 space-y-4">
               <h3 className="font-display text-sm font-semibold text-card-foreground">Edit Profile</h3>
               <div>
                 <Label className="text-card-foreground text-xs">Bio</Label>
@@ -304,7 +304,7 @@ const DriverProfilePage = () => {
                 <Label className="text-card-foreground text-xs">Primary Category</Label>
                 <Select value={editCategory} onValueChange={setEditCategory}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
+                  <SelectContent>{RACING_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
@@ -321,17 +321,17 @@ const DriverProfilePage = () => {
                 <Button variant="outline" onClick={() => setEditing(false)} className="flex-1">Cancel</Button>
               </div>
             </div>
-          )}
+          }
 
-          {!editing && profile.bio && (
-            <div className="rounded-lg border border-border bg-card p-5">
+          {!editing && profile.bio &&
+          <div className="rounded-lg border border-border bg-card p-5">
               <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">About</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{profile.bio}</p>
             </div>
-          )}
+          }
 
-          {!editing && (profile.license_type || profile.license_grade || profile.license_issuing_body) && (
-            <div className="rounded-lg border border-border bg-card p-5">
+          {!editing && (profile.license_type || profile.license_grade || profile.license_issuing_body) &&
+          <div className="rounded-lg border border-border bg-card p-5">
               <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Racing License</h3>
               <dl className="space-y-1 text-sm">
                 {profile.license_type && <div className="flex justify-between"><dt className="text-muted-foreground">Type</dt><dd className="text-card-foreground">{profile.license_type}</dd></div>}
@@ -339,10 +339,10 @@ const DriverProfilePage = () => {
                 {profile.license_issuing_body && <div className="flex justify-between"><dt className="text-muted-foreground">Issued By</dt><dd className="text-card-foreground">{profile.license_issuing_body}</dd></div>}
               </dl>
             </div>
-          )}
+          }
 
-          {!editing && (profile.social_website || profile.social_instagram || profile.social_twitter || profile.social_linkedin) && (
-            <div className="rounded-lg border border-border bg-card p-5">
+          {!editing && (profile.social_website || profile.social_instagram || profile.social_twitter || profile.social_linkedin) &&
+          <div className="rounded-lg border border-border bg-card p-5">
               <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Links</h3>
               <div className="flex gap-3">
                 {profile.social_website && <a href={profile.social_website} target="_blank" rel="noopener" className="text-muted-foreground hover:text-primary"><Globe className="h-5 w-5" /></a>}
@@ -351,18 +351,18 @@ const DriverProfilePage = () => {
                 {profile.social_linkedin && <a href={profile.social_linkedin} target="_blank" rel="noopener" className="text-muted-foreground hover:text-primary"><Linkedin className="h-5 w-5" /></a>}
               </div>
             </div>
-          )}
+          }
 
           {/* Claim section */}
-          {!profile.is_claimed && (
-            <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-5 text-center">
+          {!profile.is_claimed &&
+          <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-5 text-center">
               <p className="text-sm text-muted-foreground mb-3">Is this your profile?</p>
-              {!session ? (
-                <Link to="/auth?signup=true"><Button size="sm">Sign Up to Claim</Button></Link>
-              ) : existingClaim ? (
-                <p className="text-xs text-muted-foreground">Your claim is <span className="font-medium text-primary">{existingClaim.status}</span>.</p>
-              ) : (
-                <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
+              {!session ?
+            <Link to="/auth?signup=true"><Button size="sm">Sign Up to Claim</Button></Link> :
+            existingClaim ?
+            <p className="text-xs text-muted-foreground">Your claim is <span className="font-medium text-primary">{existingClaim.status}</span>.</p> :
+
+            <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
                   <DialogTrigger asChild><Button size="sm">Claim This Profile</Button></DialogTrigger>
                   <DialogContent>
                     <DialogHeader><DialogTitle>Claim Profile: {profile.first_name} {profile.last_name}</DialogTitle></DialogHeader>
@@ -382,25 +382,25 @@ const DriverProfilePage = () => {
                     </div>
                   </DialogContent>
                 </Dialog>
-              )}
+            }
             </div>
-          )}
+          }
         </div>
 
         {/* Results */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display text-xl font-bold text-foreground">Race Results</h2>
-            {isOwner && (
-              <Button size="sm" variant="outline" onClick={() => setAddingResult(true)}>
+            {isOwner &&
+            <Button size="sm" variant="outline" onClick={() => setAddingResult(true)}>
                 <Plus className="h-4 w-4 mr-1" /> Add Result
               </Button>
-            )}
+            }
           </div>
 
           {/* Add Result Form */}
-          {addingResult && isOwner && (
-            <div className="rounded-lg border-2 border-primary/30 bg-card p-5 mb-4 space-y-3">
+          {addingResult && isOwner &&
+          <div className="rounded-lg border-2 border-primary/30 bg-card p-5 mb-4 space-y-3">
               <h3 className="font-display text-sm font-semibold text-card-foreground">New Race Result</h3>
               <p className="text-xs text-muted-foreground">Results you add will be marked as "Pending" until verified by an admin.</p>
               <div className="grid grid-cols-2 gap-3">
@@ -410,7 +410,7 @@ const DriverProfilePage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div><Label className="text-xs text-muted-foreground">Event Name</Label><Input value={newEventName} onChange={(e) => setNewEventName(e.target.value)} placeholder="Optional" /></div>
                 <div><Label className="text-xs text-muted-foreground">Category</Label>
-                  <Select value={newCategory} onValueChange={setNewCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent></Select>
+                  <Select value={newCategory} onValueChange={setNewCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent></Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -425,14 +425,14 @@ const DriverProfilePage = () => {
                 <Button variant="outline" onClick={() => setAddingResult(false)} className="flex-1">Cancel</Button>
               </div>
             </div>
-          )}
+          }
 
-          {results.length === 0 && eventResults.length === 0 ? (
-            <div className="rounded-lg border border-border bg-card p-8 text-center">
+          {results.length === 0 && eventResults.length === 0 ?
+          <div className="rounded-lg border border-border bg-card p-8 text-center">
               <p className="text-muted-foreground">No race results yet.</p>
-            </div>
-          ) : results.length === 0 ? null : (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
+            </div> :
+          results.length === 0 ? null :
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -446,57 +446,57 @@ const DriverProfilePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {results.map(r => (
-                    <TableRow key={r.id}>
+                  {results.map((r) =>
+                <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.season_year}</TableCell>
                       <TableCell>{r.series_name}</TableCell>
                       <TableCell className="text-muted-foreground">{r.event_name || "—"}</TableCell>
                       <TableCell className="text-center">{r.finishing_position ?? "—"}</TableCell>
                       <TableCell className="text-center">{r.championship_position ?? "—"}</TableCell>
                       <TableCell className="text-right"><VerificationBadge status={r.verification_status} /></TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-right">
-                          {r.verification_status !== "verified" && (
-                            <Button size="sm" variant="ghost" onClick={() => handleVerifyResult(r.id, "verified")} className="text-green-400 hover:text-green-300 gap-1">
+                      {isAdmin &&
+                  <TableCell className="text-right">
+                          {r.verification_status !== "verified" &&
+                    <Button size="sm" variant="ghost" onClick={() => handleVerifyResult(r.id, "verified")} className="text-green-400 hover:text-green-300 gap-1">
                               <ShieldCheck className="h-3.5 w-3.5" /> Verify
                             </Button>
-                          )}
-                          {r.verification_status !== "rejected" && r.verification_status !== "verified" && (
-                            <Button size="sm" variant="ghost" onClick={() => handleVerifyResult(r.id, "rejected")} className="text-destructive hover:text-destructive/80 gap-1">
+                    }
+                          {r.verification_status !== "rejected" && r.verification_status !== "verified" &&
+                    <Button size="sm" variant="ghost" onClick={() => handleVerifyResult(r.id, "rejected")} className="text-destructive hover:text-destructive/80 gap-1">
                               <XCircle className="h-3.5 w-3.5" /> Reject
                             </Button>
-                          )}
+                    }
                         </TableCell>
-                      )}
+                  }
                     </TableRow>
-                  ))}
+                )}
                 </TableBody>
               </Table>
             </div>
-          )}
+          }
 
           {/* Event-based results */}
-          {eventResults.length > 0 && (
-            <div className="mt-6">
+          {eventResults.length > 0 &&
+          <div className="mt-6">
               <div className="space-y-3">
                 {eventResults.map((entry: any) => {
-                  const ev = entry.race_events;
-                  if (!ev) return null;
-                  const catLabel = ev.category ? (categoryLabels[ev.category] || ev.category) : null;
-                  return (
-                    <Link
-                      key={entry.id}
-                      to={`/event/${ev.id}`}
-                      className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-colors"
-                    >
+                const ev = entry.race_events;
+                if (!ev) return null;
+                const catLabel = ev.category ? categoryLabels[ev.category] || ev.category : null;
+                return (
+                  <Link
+                    key={entry.id}
+                    to={`/event/${ev.id}`}
+                    className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-colors">
+
                       <div className="w-10 text-center shrink-0">
-                        {entry.finishing_position != null ? (
-                          <span className={`font-display text-lg font-bold ${entry.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
+                        {entry.finishing_position != null ?
+                      <span className={`font-display text-lg font-bold ${entry.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
                             P{entry.finishing_position}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">—</span>
-                        )}
+                          </span> :
+
+                      <span className="text-muted-foreground text-sm">—</span>
+                      }
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-card-foreground truncate">{ev.event_name}</p>
@@ -509,18 +509,18 @@ const DriverProfilePage = () => {
                       {entry.car_number && <span className="text-xs font-mono text-muted-foreground">#{entry.car_number}</span>}
                       {entry.race_class && <Badge variant="secondary" className="text-xs">{entry.race_class}</Badge>}
                       {catLabel && <Badge variant="secondary" className="text-xs hidden sm:inline-flex">{catLabel}</Badge>}
-                    </Link>
-                  );
-                })}
+                    </Link>);
+
+              })}
               </div>
             </div>
-          )}
+          }
         </div>
       </div>
 
       <Footer />
-    </div>
-  );
+    </div>);
+
 };
 
 export default DriverProfilePage;
