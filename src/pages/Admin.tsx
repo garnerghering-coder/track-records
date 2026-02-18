@@ -10,12 +10,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
 
 import FlagImage from "@/components/FlagImage";
+import DuplicatesTab from "@/components/DuplicatesTab";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -95,6 +96,7 @@ const Admin = () => {
 
   // Reports
   const [reports, setReports] = useState<any[]>([]);
+  const [duplicateCount, setDuplicateCount] = useState(0);
 
   // AI Import
   const [importText, setImportText] = useState("");
@@ -874,6 +876,9 @@ const Admin = () => {
           <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="create-driver">Create Driver</TabsTrigger>
             <TabsTrigger value="drivers">All Drivers ({drivers.length})</TabsTrigger>
+            <TabsTrigger value="duplicates">
+              <Users className="h-3.5 w-3.5 mr-1" /> Duplicates {duplicateCount > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{duplicateCount}</span>}
+            </TabsTrigger>
             <TabsTrigger value="claims">
               Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
             </TabsTrigger>
@@ -1055,6 +1060,15 @@ const Admin = () => {
                 </tbody>
               </table>
             </div>
+          </TabsContent>
+
+          {/* ── Duplicates ── */}
+          <TabsContent value="duplicates">
+            <DuplicatesTab
+              drivers={drivers}
+              onRefresh={fetchDrivers}
+              onGroupCountChange={setDuplicateCount}
+            />
           </TabsContent>
 
           {/* ── Claims ── */}

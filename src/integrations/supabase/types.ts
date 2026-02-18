@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      dismissed_duplicates: {
+        Row: {
+          dismissed_at: string
+          dismissed_by: string | null
+          driver_id_1: string
+          driver_id_2: string
+          id: string
+        }
+        Insert: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          driver_id_1: string
+          driver_id_2: string
+          id?: string
+        }
+        Update: {
+          dismissed_at?: string
+          dismissed_by?: string | null
+          driver_id_1?: string
+          driver_id_2?: string
+          id?: string
+        }
+        Relationships: []
+      }
       driver_profiles: {
         Row: {
           bio: string | null
