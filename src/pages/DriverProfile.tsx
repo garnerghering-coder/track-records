@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Clock, Globe, Instagram, Twitter, Linkedin, ArrowLeft, Loader2, Pencil, Plus, Trash2, ShieldCheck } from "lucide-react";
+import ReportDialog from "@/components/ReportDialog";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CountrySelect from "@/components/CountrySelect";
@@ -268,9 +269,16 @@ const DriverProfilePage = () => {
               </div>
             </div>
             {isOwner && !editing && (
-              <Button variant="outline" size="sm" onClick={openEditMode} className="self-start sm:self-auto border-white/20 text-white hover:bg-white/10 hover:text-white">
-                <Pencil className="h-4 w-4 mr-1.5" /> Edit Profile
-              </Button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <Button variant="outline" size="sm" onClick={openEditMode} className="border-white/20 text-white hover:bg-white/10 hover:text-white">
+                  <Pencil className="h-4 w-4 mr-1.5" /> Edit Profile
+                </Button>
+              </div>
+            )}
+            {!isOwner && profile && (
+              <div className="self-start sm:self-auto">
+                <ReportDialog reportType="driver" targetId={profile.id} targetName={`${profile.first_name} ${profile.last_name}`} />
+              </div>
             )}
           </div>
         </div>
@@ -473,7 +481,7 @@ const DriverProfilePage = () => {
           {/* Event-based results from new tables */}
           {eventResults.length > 0 && (
             <div className="mt-8">
-              <h2 className="font-display text-xl font-bold text-foreground mb-4">Event Results</h2>
+              <h3 className="font-display text-lg font-semibold text-foreground mb-4">Event Entries</h3>
               <div className="space-y-3">
                 {eventResults.map((entry: any) => {
                   const ev = entry.race_events;

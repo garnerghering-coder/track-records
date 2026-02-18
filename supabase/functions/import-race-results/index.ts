@@ -179,25 +179,44 @@ serve(async (req) => {
       driverMap.set(`${d.first_name.toLowerCase()} ${d.last_name.toLowerCase()}`, d.id);
     }
 
-    // Insert race event
-    const { data: raceEvent, error: eventError } = await adminClient
-      .from("race_events")
-      .insert({
-        event_name: extracted.event_name || eventHint || "Unknown Event",
-        series_name: extracted.series_name || seriesHint || "Unknown Series",
-        season_year: extracted.season_year || new Date().getFullYear(),
-        category: extracted.category || "other",
-        location: extracted.location || null,
-      })
-      .select("id")
-      .single();
+    // Check for existing event with same name, series, and year
+    const eventNameVal = extracted.event_name || eventHint || "Unknown Event";
+    const seriesNameVal = extracted.series_name || seriesHint || "Unknown Series";
+    const seasonYearVal = extracted.season_year || new Date().getFullYear();
 
-    if (eventError || !raceEvent) {
-      console.error("Event insert error:", eventError);
-      return new Response(JSON.stringify({ error: "Failed to create event", details: eventError?.message }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const { data: existingEvent } = await adminClient
+      .from("race_events")
+      .select("id")
+      .eq("event_name", eventNameVal)
+      .eq("series_name", seriesNameVal)
+      .eq("season_year", seasonYearVal)
+      .maybeSingle();
+
+    let raceEvent: { id: string };
+    if (existingEvent) {
+      raceEvent = existingEvent;
+      console.log("Using existing event:", raceEvent.id);
+    } else {
+      const { data: newEvent, error: eventError } = await adminClient
+        .from("race_events")
+        .insert({
+          event_name: eventNameVal,
+          series_name: seriesNameVal,
+          season_year: seasonYearVal,
+          category: extracted.category || "other",
+          location: extracted.location || null,
+        })
+        .select("id")
+        .single();
+
+      if (eventError || !newEvent) {
+        console.error("Event insert error:", eventError);
+        return new Response(JSON.stringify({ error: "Failed to create event", details: eventError?.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      raceEvent = newEvent;
     }
 
     let matchedCount = 0;
