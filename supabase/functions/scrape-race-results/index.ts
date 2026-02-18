@@ -58,8 +58,8 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!FIRECRAWL_API_KEY) {
@@ -134,11 +134,11 @@ serve(async (req) => {
 
     // Step 2: Feed to AI for extraction
     const today = new Date().toISOString().split("T")[0];
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "llama-3.3-70b-versatile",
         messages: [
           {
             role: "system",
@@ -157,7 +157,7 @@ serve(async (req) => {
     if (!aiResponse.ok) {
       const status = aiResponse.status;
       if (status === 429) return new Response(JSON.stringify({ error: "AI rate limit exceeded. Please try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits in Settings." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if (status === 401) return new Response(JSON.stringify({ error: "Invalid Groq API key. Check your GROQ_API_KEY secret." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const errText = await aiResponse.text();
       console.error("AI gateway error:", status, errText);
       return new Response(JSON.stringify({ error: "AI processing failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
