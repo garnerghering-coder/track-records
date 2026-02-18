@@ -1,84 +1,66 @@
 
 
-## Expand Abbreviated Driver Names Everywhere
+## Add Duplicate Driver Detection and Merge Tab
 
-### Problem
-Race results often list drivers as "F. Nasr" instead of "Felipe Nasr". Currently the system stores that literally as `first_name: "F."`, and it stays that way forever. Additionally, "F. Nasr" fails to match an existing "Felipe Nasr" in the database, creating duplicates.
+### Overview
+Add a new "Duplicates" tab to the Admin Dashboard that automatically detects potential duplicate driver profiles and lets you merge them or dismiss false positives.
 
-### Changes
+### Duplicate Detection Logic
+Drivers are flagged as potential duplicates when:
+- Exact match on `last_name` (case-insensitive) AND first name starts with the same letter (catches "F. Nasr" vs "Felipe Nasr")
+- Exact match on both `first_name` and `last_name` (case-insensitive)
+- Groups are formed so you see clusters of 2+ drivers that look like the same person
 
-#### 1. AI Import: Tell the AI to expand abbreviated names (import-race-results)
+### UI Design
+- New tab: **Duplicates** with a badge count of detected groups
+- Each group shows a card with all candidate profiles side-by-side, displaying: name, nationality, bio snippet, number of race entries, whether claimed
+- Two actions per group:
+  - **Merge**: Pick a "primary" profile (defaults to the one with more data or the claimed one). All race entry links from the secondary profiles get reassigned to the primary. Secondary profiles are deleted.
+  - **Not Duplicates / Dismiss**: Mark the pair as "not duplicates" so they stop appearing. This uses a small `dismissed_duplicates` table to persist dismissals.
 
-Update the system prompt in `import-race-results/index.ts` to add a rule:
-- "ALWAYS expand abbreviated first names to their full form. For example, 'F. Nasr' should become 'Felipe Nasr', 'S. Bourdais' should become 'Sebastien Bourdais'. Use your motorsport knowledge to determine the correct full name."
+### Database Changes
+One new table to track dismissed duplicate pairs so they don't keep reappearing:
 
-This handles the problem at the source -- most abbreviated names in race results belong to well-known drivers the AI already knows.
+```sql
+CREATE TABLE public.dismissed_duplicates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id_1 uuid NOT NULL,
+  driver_id_2 uuid NOT NULL,
+  dismissed_at timestamptz NOT NULL DEFAULT now(),
+  dismissed_by uuid,
+  UNIQUE (driver_id_1, driver_id_2)
+);
 
-#### 2. AI Import: Better matching for abbreviated names (import-race-results)
+ALTER TABLE public.dismissed_duplicates ENABLE ROW LEVEL SECURITY;
 
-Even after the AI expands names, some may slip through. Add matching logic so "F. Nasr" matches an existing "Felipe Nasr":
-- When exact and partial matches fail, check if the incoming name looks abbreviated (first part is 1-2 chars or ends with a dot)
-- If so, check if any existing driver's last name matches AND their first name starts with the same letter
-- If exactly one match is found, use it
+CREATE POLICY "Admins can manage dismissed duplicates"
+  ON public.dismissed_duplicates FOR ALL
+  USING (has_role(auth.uid(), 'admin'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'admin'::app_role));
+```
 
-#### 3. Enrichment: Resolve abbreviated first names (enrich-driver-profile)
-
-Update the enrichment function to also ask the AI for the driver's full first name, and update `first_name` if the current one looks abbreviated (1-2 characters or ends with "."):
-- Add `"full_first_name"` to the AI response schema
-- After enrichment, if `profile.first_name` matches the pattern of an abbreviation (e.g. "F.", "F", "Ph.") AND the AI returned a `full_first_name`, update `first_name` in the database
+### Merge Logic (client-side, admin-only)
+When merging driver A (keep) and driver B (remove):
+1. Update all `race_entry_drivers` rows where `driver_profile_id = B` to point to A
+2. Update all `race_results` rows where `driver_profile_id = B` to point to A
+3. Copy any non-null fields from B to A if A's field is null (nationality, bio, photo, socials, etc.)
+4. Delete driver B
 
 ### Technical Details
 
-**import-race-results/index.ts -- System prompt addition (around line 99):**
-```
-- ALWAYS expand abbreviated first names to their full form using your motorsport knowledge.
-  Examples: "F. Nasr" -> "Felipe Nasr", "S. Bourdais" -> "Sebastien Bourdais", 
-  "K. Magnussen" -> "Kevin Magnussen". Never leave a name as just an initial.
-```
+**Files to modify:**
+- `src/pages/Admin.tsx` -- Add state, fetch logic, duplicate detection algorithm, merge handler, dismiss handler, and new TabsContent with the duplicates UI
 
-**import-race-results/index.ts -- Abbreviated name matching (after line 286):**
+**New migration:**
+- Create `dismissed_duplicates` table with RLS
 
-After the existing partial match fails, add a new check:
+**Duplicate detection algorithm (runs client-side on the already-fetched `drivers` array):**
 ```typescript
-// Try abbreviated match: "F. Nasr" -> matches "Felipe Nasr"
-const firstPart = parts[0].replace(".", "");
-if (firstPart.length <= 2) {
-  const lastPart = parts[parts.length - 1];
-  const candidates: string[] = [];
-  let candidateId = "";
-  for (const [key, driverId] of driverMap.entries()) {
-    const keyParts = key.split(" ");
-    const keyLast = keyParts[keyParts.length - 1];
-    const keyFirst = keyParts[0];
-    if (keyLast === lastPart && keyFirst.startsWith(firstPart.toLowerCase())) {
-      candidates.push(key);
-      candidateId = driverId;
-    }
-  }
-  if (candidates.length === 1) {
-    matchedDriverIds.push(candidateId);
-    matchedCount++;
-    found = true;
-  }
-}
+// Group drivers by normalized last name
+// Within each group, find pairs where first names match or one is an abbreviation of the other
+// Filter out dismissed pairs
+// Return groups of 2+ potential duplicates
 ```
 
-**enrich-driver-profile/index.ts -- Add full_first_name to schema (line 118 area):**
-
-Add to the AI prompt fields:
-```
-- "full_first_name": string or null (the driver's full first name, especially important 
-  if the stored name is abbreviated like "F." or "S.")
-```
-
-Add to the update logic (after line 182):
-```typescript
-// Fix abbreviated first names
-const isAbbreviated = profile.first_name.length <= 2 || profile.first_name.endsWith(".");
-if (isAbbreviated && enriched.full_first_name && enriched.full_first_name.length > 2) {
-  updates.first_name = enriched.full_first_name;
-}
-```
-
-### No database changes needed
+**Tab placement:** After "All Drivers" tab, before "Claims"
 
