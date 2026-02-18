@@ -1,66 +1,34 @@
 
 
-## Admin AI Key Manager
+## Remove AI Keys Tab + Add Job Management Actions
 
-### What This Adds
+### What Changes
 
-A new "AI Keys" tab in the Admin dashboard where you can:
+1. **Remove the "AI Keys" tab entirely** from the Admin UI -- all state, functions, and UI related to managing API keys in the browser will be deleted. The shared `callAI` backend helper and the `ai_api_keys` database table stay in place (they already work for key rotation behind the scenes), but there will be no UI tab for them.
 
-- **Add API keys** for any OpenAI-compatible provider (Groq, OpenRouter, Together, etc.) with a label, endpoint URL, model name, and the key itself
-- **See all configured keys** in a table with their status (active/disabled), provider name, and last-used timestamp
-- **Enable/disable keys** with a toggle -- disabled keys are skipped
-- **Delete keys** you no longer need
-- **Priority ordering** -- keys are tried top-to-bottom; drag or reorder to set priority
+2. **Add Delete and Cancel buttons to discovery jobs** in the existing jobs list:
+   - **Completed/Failed jobs**: A trash icon button to delete the job row from the database, removing it from the list
+   - **Running/Queued jobs**: A cancel button that sets the job status to `"cancelled"`, which the edge function will check between event imports and stop processing
 
-The edge functions will try each active key in priority order, falling back to the next one on 429 (rate limit) or failure, with the Lovable AI gateway as the final fallback.
+3. **Edge function update**: The `discover-series` function will check the job status before importing each event. If status has been changed to `"cancelled"`, it stops processing and logs that it was cancelled.
 
-### How It Works
+### UI Changes
 
-1. A new `ai_api_keys` database table stores the keys (encrypted at rest by the database). Only admins can read/write this table via RLS.
-2. The shared `callAI` logic in each edge function is updated to:
-   - Fetch all active keys from `ai_api_keys` ordered by priority
-   - Try each one in sequence until one succeeds
-   - Fall back to the Lovable AI gateway as the last resort
-   - Update `last_used_at` on the key that worked
-3. The Admin UI gets a new "AI Keys" tab with a simple form and table
-
-### UI Design
-
-The "AI Keys" tab will show:
-- **Add Key form**: Fields for Label (e.g. "My Groq Key"), Provider URL (defaults to Groq's endpoint), Model name (defaults to "llama-3.3-70b-versatile"), and the API Key itself
-- **Keys table**: Label, Provider URL, Model, Status toggle, Last Used timestamp, Delete button
-- Keys are stored with a `priority` integer -- lower number = tried first
+In the discovery jobs list, each job card gets action buttons in the top-right:
+- Running/queued jobs: a "Cancel" button (X icon)
+- Completed/failed/cancelled jobs: a "Remove" button (trash icon)
 
 ### Technical Details
 
-**New database table: `ai_api_keys`**
-```text
-- id (uuid, primary key)
-- label (text) -- e.g. "Groq Key #2"
-- provider_url (text) -- e.g. "https://api.groq.com/openai/v1/chat/completions"
-- model_name (text) -- e.g. "llama-3.3-70b-versatile"
-- api_key (text) -- the actual key
-- is_active (boolean, default true)
-- priority (integer, default 0) -- lower = tried first
-- last_used_at (timestamptz, nullable)
-- created_at (timestamptz, default now())
-```
-
-RLS: Only admins can SELECT, INSERT, UPDATE, DELETE.
-
-**Shared helper function: `supabase/functions/_shared/call-ai.ts`**
-- A single shared `callAI` function that all edge functions import
-- Fetches active keys from `ai_api_keys` ordered by priority
-- Tries each key in sequence, skipping on 429 or error
-- Falls back to `GROQ_API_KEY` env var (existing behavior) and then Lovable AI gateway
-- Updates `last_used_at` on success
-
-**Edge functions updated** (discover-series, scrape-race-results, generate-race-event, enrich-driver-profile, import-race-results, parse-submission):
-- Replace the inline `callAI` function with an import from the shared helper
-
 **File: `src/pages/Admin.tsx`**
-- Add "AI Keys" tab
-- Form to add new keys (label, provider URL, model, API key)
-- Table listing all keys with toggle, delete, and last-used info
-- API key values are masked in the UI (show last 4 chars only)
+- Remove all `aiKeys` state variables (`aiKeys`, `newKeyLabel`, `newKeyProviderUrl`, `newKeyModel`, `newKeyApiKey`, `addingKey`)
+- Remove `fetchAiKeys`, `handleAddAiKey`, `handleToggleAiKey`, `handleDeleteAiKey` functions
+- Remove the "AI Keys" `TabsTrigger` and `TabsContent`
+- Remove the `Key` icon import (if unused elsewhere)
+- Add `handleCancelJob(jobId)` -- updates the job row status to `"cancelled"`
+- Add `handleDeleteJob(jobId)` -- deletes the job row from the database
+- Add cancel/delete buttons to each job card
 
+**File: `supabase/functions/discover-series/index.ts`**
+- Inside the event import loop, before processing each event, fetch the current job status from the database
+- If status is `"cancelled"`, break the loop and update the job with a cancellation log message
