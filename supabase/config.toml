@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.scrape-race-results]
 verify_jwt = false
+
+[functions.discover-series]
+verify_jwt = false
+
+[functions.parse-submission]
+verify_jwt = false
+
+[functions.scheduled-import]
+verify_jwt = false
