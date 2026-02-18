@@ -14,7 +14,7 @@ import ReportDialog from "@/components/ReportDialog";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import CountrySelect from "@/components/CountrySelect";
-import DriverPhotoUpload from "@/components/DriverPhotoUpload";
+
 import FlagImage from "@/components/FlagImage";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
@@ -61,7 +61,7 @@ const DriverProfilePage = () => {
   const [editBio, setEditBio] = useState("");
   const [editNationality, setEditNationality] = useState("");
   const [editCategory, setEditCategory] = useState("");
-  const [editPhotoUrl, setEditPhotoUrl] = useState<string | null>(null);
+  
   const [editSocialWebsite, setEditSocialWebsite] = useState("");
   const [editSocialInstagram, setEditSocialInstagram] = useState("");
   const [editSocialTwitter, setEditSocialTwitter] = useState("");
@@ -133,7 +133,7 @@ const DriverProfilePage = () => {
     setEditBio(profile.bio || "");
     setEditNationality(profile.nationality || "");
     setEditCategory(profile.primary_category || "other");
-    setEditPhotoUrl(profile.photo_url);
+    
     setEditSocialWebsite(profile.social_website || "");
     setEditSocialInstagram(profile.social_instagram || "");
     setEditSocialTwitter(profile.social_twitter || "");
@@ -148,7 +148,7 @@ const DriverProfilePage = () => {
       bio: editBio || null,
       nationality: editNationality || null,
       primary_category: editCategory as any,
-      photo_url: editPhotoUrl,
+      
       social_website: editSocialWebsite || null,
       social_instagram: editSocialInstagram || null,
       social_twitter: editSocialTwitter || null,
@@ -246,13 +246,9 @@ const DriverProfilePage = () => {
           </Link>
           <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
             <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-              {profile.photo_url ? (
-                <img src={profile.photo_url} alt={`${profile.first_name} ${profile.last_name}`} className="h-24 w-24 rounded-xl object-cover border-2 border-primary/30" />
-              ) : (
-                <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/20 text-primary font-display text-3xl font-bold">
-                  {profile.first_name[0]}{profile.last_name[0]}
-                </div>
-              )}
+              <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/20 text-primary font-display text-3xl font-bold">
+                {profile.first_name[0]}{profile.last_name[0]}
+              </div>
               <div>
                 <div className="flex items-center gap-3 flex-wrap">
                   <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
@@ -291,10 +287,6 @@ const DriverProfilePage = () => {
           {editing && isOwner && (
             <div className="rounded-lg border-2 border-primary/30 bg-card p-5 space-y-4">
               <h3 className="font-display text-sm font-semibold text-card-foreground">Edit Profile</h3>
-              <div>
-                <Label className="text-card-foreground text-xs">Photo</Label>
-                <DriverPhotoUpload currentUrl={editPhotoUrl} driverId={profile.id} onUploaded={setEditPhotoUrl} size="sm" />
-              </div>
               <div>
                 <Label className="text-card-foreground text-xs">Bio</Label>
                 <Textarea value={editBio} onChange={(e) => setEditBio(e.target.value)} rows={3} />
@@ -478,10 +470,9 @@ const DriverProfilePage = () => {
             </div>
           )}
 
-          {/* Event-based results from new tables */}
+          {/* Event-based results */}
           {eventResults.length > 0 && (
-            <div className="mt-8">
-              <h3 className="font-display text-lg font-semibold text-foreground mb-4">Event Entries</h3>
+            <div className="mt-6">
               <div className="space-y-3">
                 {eventResults.map((entry: any) => {
                   const ev = entry.race_events;
