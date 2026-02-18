@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -88,6 +88,12 @@ const Admin = () => {
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
 
+  // All race events
+  const [raceEvents, setRaceEvents] = useState<any[]>([]);
+
+  // Reports
+  const [reports, setReports] = useState<any[]>([]);
+
   // Event-based race results (new tables)
   const [eventName, setEventName] = useState("");
   const [seriesName, setSeriesName] = useState("");
@@ -154,6 +160,8 @@ const Admin = () => {
     fetchRoles();
     fetchClaims();
     fetchPendingEvents();
+    fetchRaceEvents();
+    fetchReports();
   };
 
   const fetchDrivers = async () => {
@@ -181,6 +189,53 @@ const Admin = () => {
 
   const updateResult = (key: string, field: keyof RaceResultRow, value: string) => {
     setRaceResults(prev => prev.map(r => r.key === key ? { ...r, [field]: value } : r));
+  };
+
+  const fetchRaceEvents = async () => {
+    const { data } = await supabase
+      .from("race_events")
+      .select("*, race_entries(id)")
+      .order("created_at", { ascending: false });
+    if (data) setRaceEvents(data);
+  };
+
+  const fetchReports = async () => {
+    const { data } = await supabase
+      .from("reports" as any)
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (data) setReports(data as any[]);
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    // Delete entries first (cascade), then event
+    await supabase.from("race_entry_drivers").delete().in(
+      "race_entry_id",
+      (await supabase.from("race_entries").select("id").eq("race_event_id", eventId)).data?.map((e: any) => e.id) || []
+    );
+    await supabase.from("race_entries").delete().eq("race_event_id", eventId);
+    const { error } = await supabase.from("race_events").delete().eq("id", eventId);
+    if (error) {
+      toast({ title: "Error deleting event", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Event deleted" });
+      fetchRaceEvents();
+    }
+  };
+
+  const handleUpdateReport = async (reportId: string, status: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from("reports" as any).update({
+      status,
+      reviewed_by: session?.user?.id || null,
+      reviewed_at: new Date().toISOString(),
+    } as any).eq("id", reportId);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: `Report ${status}` });
+      fetchReports();
+    }
   };
 
   const removeResult = (key: string) => {
@@ -600,6 +655,10 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="pending">
               Pending {pendingEvents.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingEvents.length}</span>}
+            </TabsTrigger>
+            <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
+            <TabsTrigger value="reports">
+              <Flag className="h-3.5 w-3.5 mr-1" /> Reports {reports.filter((r: any) => r.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{reports.filter((r: any) => r.status === "pending").length}</span>}
             </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
@@ -1127,6 +1186,108 @@ const Admin = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </TabsContent>
+
+          {/* ── All Races ── */}
+          <TabsContent value="all-races">
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Event</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Series</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Year</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Location</th>
+                    <th className="px-4 py-3 text-center font-semibold text-card-foreground">Entries</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {raceEvents.map((ev: any) => (
+                    <tr key={ev.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-4 py-3 text-card-foreground font-medium">{ev.event_name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{ev.series_name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{ev.season_year}</td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{ev.category?.replace(/_/g, " ") ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{ev.location ?? "—"}</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground">{ev.race_entries?.length ?? 0}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/event/${ev.id}`)}><Eye className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm"><Trash className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {ev.event_name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete this race event and all its entries. This cannot be undone.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteEvent(ev.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {raceEvents.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No race events yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* ── Reports ── */}
+          <TabsContent value="reports">
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Type</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Target ID</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Message</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Date</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.map((r: any) => (
+                    <tr key={r.id} className="border-b border-border/50">
+                      <td className="px-4 py-3">
+                        <Badge variant="secondary" className="text-xs capitalize">{r.report_type}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => navigate(r.report_type === "driver" ? `/driver/${r.target_id}` : `/event/${r.target_id}`)}>
+                          View {r.report_type}
+                        </Button>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs max-w-[300px]">{r.message}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                          r.status === "reviewed" ? "bg-green-500/20 text-green-400" :
+                          r.status === "dismissed" ? "bg-muted text-muted-foreground" :
+                          "bg-yellow-500/20 text-yellow-400"
+                        }`}>{r.status}</span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        {r.status === "pending" && (
+                          <div className="flex items-center justify-end gap-1">
+                            <Button size="sm" variant="outline" className="text-green-400 border-green-400/30 hover:bg-green-500/10" onClick={() => handleUpdateReport(r.id, "reviewed")}>Reviewed</Button>
+                            <Button size="sm" variant="outline" className="text-muted-foreground border-border hover:bg-muted" onClick={() => handleUpdateReport(r.id, "dismissed")}>Dismiss</Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {reports.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No reports yet.</td></tr>}
+                </tbody>
+              </table>
             </div>
           </TabsContent>
 

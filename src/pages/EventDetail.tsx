@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Trophy, CheckCircle, MapPin, Calendar } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ReportDialog from "@/components/ReportDialog";
 import { getFlagForCountry } from "@/lib/countries";
 
 const categoryLabels: Record<string, string> = {
@@ -147,7 +148,7 @@ const EventDetailPage = () => {
           <Link to="/results" className="inline-flex items-center gap-1 text-sm mb-6" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
             <ArrowLeft className="h-4 w-4" /> Back to Results
           </Link>
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-4 flex-1">
             <Trophy className="h-8 w-8 text-primary shrink-0 mt-1" />
             <div>
               <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
@@ -169,6 +170,9 @@ const EventDetailPage = () => {
                 )}
               </div>
             </div>
+          </div>
+          <div className="mt-4 sm:mt-0">
+            <ReportDialog reportType="event" targetId={event.id} targetName={event.event_name} />
           </div>
         </div>
       </section>
