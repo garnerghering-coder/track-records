@@ -68,6 +68,54 @@ export type Database = {
         }
         Relationships: []
       }
+      discovery_jobs: {
+        Row: {
+          created_at: string
+          created_by: string
+          events_failed: number
+          events_found: number | null
+          events_imported: number
+          events_no_url: number
+          events_skipped: number
+          id: string
+          progress_log: Json
+          season_year: number
+          series_name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          events_failed?: number
+          events_found?: number | null
+          events_imported?: number
+          events_no_url?: number
+          events_skipped?: number
+          id?: string
+          progress_log?: Json
+          season_year: number
+          series_name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          events_failed?: number
+          events_found?: number | null
+          events_imported?: number
+          events_no_url?: number
+          events_skipped?: number
+          id?: string
+          progress_log?: Json
+          season_year?: number
+          series_name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       dismissed_duplicates: {
         Row: {
           dismissed_at: string

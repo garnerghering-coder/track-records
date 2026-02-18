@@ -20,26 +20,6 @@ serve(async (req) => {
       });
     }
 
-    async function callAI(body: Record<string, any>): Promise<Response> {
-      const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
-      if (GROQ_KEY) {
-        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
-        });
-        if (resp.status !== 429) return resp;
-        console.log("Groq rate limited, falling back to Lovable AI");
-      }
-      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (!LOVABLE_KEY) throw new Error("No AI provider available");
-      return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
-      });
-    }
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -71,29 +51,53 @@ serve(async (req) => {
       });
     }
 
-    const { seriesName, seasonYear } = await req.json();
+    const { seriesName, seasonYear, jobId } = await req.json();
     if (!seriesName || !seasonYear) {
       return new Response(JSON.stringify({ error: "seriesName and seasonYear are required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Set up streaming response
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
+    // If no jobId provided, create a job row
+    let activeJobId = jobId;
+    if (!activeJobId) {
+      const { data: job, error: jobErr } = await adminClient.from("discovery_jobs").insert({
+        series_name: seriesName,
+        season_year: seasonYear,
+        status: "queued",
+        created_by: userId,
+      }).select("id").single();
+      if (jobErr || !job) {
+        return new Response(JSON.stringify({ error: "Failed to create job" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      activeJobId = job.id;
+    }
 
-    const sendEvent = async (data: Record<string, any>) => {
-      await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-    };
+    // Helper to append a log entry and update job fields
+    async function updateJob(fields: Record<string, any>, logMessage?: string) {
+      if (logMessage) {
+        // Append to progress_log using raw SQL via RPC isn't available,
+        // so we fetch current log, append, and update
+        const { data: current } = await adminClient
+          .from("discovery_jobs")
+          .select("progress_log")
+          .eq("id", activeJobId)
+          .single();
+        const log = (current?.progress_log as any[]) || [];
+        log.push({ time: new Date().toISOString(), message: logMessage });
+        fields.progress_log = log;
+      }
+      await adminClient.from("discovery_jobs").update(fields).eq("id", activeJobId);
+    }
 
-    // Start processing in background
-    (async () => {
+    // Fire-and-forget: start background processing
+    const backgroundWork = async () => {
       try {
-        // Step 1: Search for season calendar/results pages
-        console.log(`Discovering series: ${seriesName} ${seasonYear}`);
-        await sendEvent({ type: "status", message: `Searching for ${seriesName} ${seasonYear} results...` });
+        await updateJob({ status: "running" }, `Searching for ${seriesName} ${seasonYear} results...`);
 
+        // Step 1: Search for season results
         const searchQuery = `${seriesName} ${seasonYear} full season race results`;
         const searchResponse = await fetch("https://api.firecrawl.dev/v1/search", {
           method: "POST",
@@ -102,21 +106,16 @@ serve(async (req) => {
         });
 
         if (!searchResponse.ok) {
-          const errText = await searchResponse.text();
-          console.error("Firecrawl search error:", errText);
-          await sendEvent({ type: "error", message: "Failed to search for series results" });
-          await writer.close();
+          await updateJob({ status: "failed" }, `Search failed: ${await searchResponse.text()}`);
           return;
         }
 
         const searchData = await searchResponse.json();
         const searchResults = searchData.data || [];
-        console.log(`Found ${searchResults.length} search results`);
-        await sendEvent({ type: "status", message: `Found ${searchResults.length} search results. Analyzing with AI...` });
+        await updateJob({}, `Found ${searchResults.length} search results. Analyzing with AI...`);
 
         if (searchResults.length === 0) {
-          await sendEvent({ type: "error", message: "No results found for this series/year" });
-          await writer.close();
+          await updateJob({ status: "failed" }, "No results found for this series/year");
           return;
         }
 
@@ -151,17 +150,14 @@ Rules:
         });
 
         if (!aiResponse.ok) {
-          console.error("AI error:", await aiResponse.text());
-          await sendEvent({ type: "error", message: "AI failed to extract events" });
-          await writer.close();
+          await updateJob({ status: "failed" }, `AI failed to extract events: ${await aiResponse.text()}`);
           return;
         }
 
         const aiData = await aiResponse.json();
         const rawContent = aiData.choices?.[0]?.message?.content;
         if (!rawContent) {
-          await sendEvent({ type: "error", message: "AI returned no content" });
-          await writer.close();
+          await updateJob({ status: "failed" }, "AI returned no content");
           return;
         }
 
@@ -169,19 +165,15 @@ Rules:
         try {
           discovered = JSON.parse(rawContent);
         } catch {
-          console.error("Failed to parse AI response:", rawContent.slice(0, 500));
-          await sendEvent({ type: "error", message: "AI returned invalid JSON" });
-          await writer.close();
+          await updateJob({ status: "failed" }, "AI returned invalid JSON");
           return;
         }
 
         const events = discovered.events || [];
-        console.log(`Discovered ${events.length} events`);
-        await sendEvent({ type: "discovered", eventsFound: events.length, events: events.map((e: any) => ({ event_name: e.event_name, has_url: !!e.result_url })) });
+        await updateJob({ events_found: events.length }, `✅ Discovered ${events.length} events`);
 
         if (events.length === 0) {
-          await sendEvent({ type: "error", message: "No events found for this series/year" });
-          await writer.close();
+          await updateJob({ status: "failed" }, "No events found for this series/year");
           return;
         }
 
@@ -196,7 +188,7 @@ Rules:
           (existingEvents || []).map(e => `${e.event_name.toLowerCase()}|${e.season_year}`)
         );
 
-        // Step 4: Import each event, streaming progress
+        // Step 4: Import each event
         let imported = 0, skipped = 0, failed = 0, noUrl = 0;
 
         for (let i = 0; i < events.length; i++) {
@@ -205,19 +197,24 @@ Rules:
 
           if (existingSet.has(key)) {
             skipped++;
-            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "skipped", reason: "Already exists" });
+            await updateJob(
+              { events_skipped: skipped },
+              `⏭️ [${i + 1}/${events.length}] ${event.event_name} — skipped (already exists)`
+            );
             continue;
           }
 
           if (!event.result_url) {
             noUrl++;
-            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "no_url", reason: "No results URL found" });
+            await updateJob(
+              { events_no_url: noUrl },
+              `⚠️ [${i + 1}/${events.length}] ${event.event_name} — no results URL found`
+            );
             continue;
           }
 
           try {
-            console.log(`Importing: ${event.event_name} from ${event.result_url}`);
-            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "importing" });
+            await updateJob({}, `⏳ [${i + 1}/${events.length}] ${event.event_name} — importing...`);
 
             const importResponse = await fetch(`${SUPABASE_URL}/functions/v1/scrape-race-results`, {
               method: "POST",
@@ -233,35 +230,48 @@ Rules:
             if (importResponse.ok && importResult.success) {
               imported++;
               existingSet.add(key);
-              await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "imported", entriesCount: importResult.entriesCount, matchedDrivers: importResult.matchedDrivers, createdDrivers: importResult.createdDrivers });
+              await updateJob(
+                { events_imported: imported },
+                `✅ [${i + 1}/${events.length}] ${event.event_name} — ${importResult.entriesCount} entries imported`
+              );
             } else {
               failed++;
-              await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "error", reason: importResult.error || "Import failed" });
+              await updateJob(
+                { events_failed: failed },
+                `❌ [${i + 1}/${events.length}] ${event.event_name} — ${importResult.error || "Import failed"}`
+              );
             }
           } catch (err) {
-            console.error(`Error importing ${event.event_name}:`, err);
             failed++;
-            await sendEvent({ type: "progress", index: i + 1, total: events.length, event_name: event.event_name, status: "error", reason: err instanceof Error ? err.message : "Unknown error" });
+            await updateJob(
+              { events_failed: failed },
+              `❌ [${i + 1}/${events.length}] ${event.event_name} — ${err instanceof Error ? err.message : "Unknown error"}`
+            );
           }
         }
 
         // Final summary
-        await sendEvent({ type: "complete", seriesName, seasonYear, eventsFound: events.length, imported, skipped, failed, noUrl });
+        await updateJob(
+          { status: "completed", events_imported: imported, events_skipped: skipped, events_failed: failed, events_no_url: noUrl },
+          `✅ Complete — ${imported} imported, ${skipped} skipped, ${failed} failed, ${noUrl} no URL`
+        );
       } catch (e) {
-        console.error("discover-series stream error:", e);
-        await sendEvent({ type: "error", message: e instanceof Error ? e.message : "Unknown error" });
-      } finally {
-        await writer.close();
+        console.error("discover-series background error:", e);
+        await updateJob({ status: "failed" }, `Fatal error: ${e instanceof Error ? e.message : "Unknown error"}`);
       }
-    })();
+    };
 
-    return new Response(readable, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
+    // Use EdgeRuntime.waitUntil if available, otherwise detached promise
+    if (typeof (globalThis as any).EdgeRuntime !== "undefined" && (globalThis as any).EdgeRuntime.waitUntil) {
+      (globalThis as any).EdgeRuntime.waitUntil(backgroundWork());
+    } else {
+      // Fire and forget - don't await
+      backgroundWork();
+    }
+
+    // Return immediately with the job ID
+    return new Response(JSON.stringify({ jobId: activeJobId }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("discover-series error:", e);
@@ -270,3 +280,23 @@ Rules:
     });
   }
 });
+
+async function callAI(body: Record<string, any>): Promise<Response> {
+  const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+  if (GROQ_KEY) {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
+    });
+    if (resp.status !== 429) return resp;
+    console.log("Groq rate limited, falling back to Lovable AI");
+  }
+  const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_KEY) throw new Error("No AI provider available");
+  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
+  });
+}
