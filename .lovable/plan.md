@@ -1,42 +1,71 @@
 
 
-## Fix "Import error: failed to fetch"
+## Remove Verified Checks + Fix Enrichment + Auto-Enrich on Import
 
-### Root Cause
+### 1. Remove Verified Checks from Search Page
 
-The `import-race-results` edge function crashes on boot because `npm:pdf-parse/lib/pdf-parse.js` is not a valid export path in the `pdf-parse` package when running in Deno's edge runtime. The function never starts, so every request returns a network-level "failed to fetch" error.
+Remove the "verified results" count logic from `src/pages/Search.tsx`:
+- Delete the query to `race_results` that filters by `verification_status = "verified"`
+- Remove the `verified_count` property from driver cards
+- Remove the green checkmark badge showing "X verified results"
 
-### Fix
+Also remove from `src/pages/DriverProfile.tsx` any verification badge filtering if present (the `VerificationBadge` component stays since it shows status, but we stop using it as a gate).
 
-Replace the `pdf-parse` import with `npm:pdf-parse` (default entry point). If that also fails in the edge runtime, fall back to a simpler approach: use the `pdf-lib` library (`npm:pdf-lib`) to check the PDF is valid, but rely on a different text extraction method.
+### 2. Fix Enrichment Quality Issues
 
-The most reliable approach for Deno edge functions is to use `npm:pdfjs-dist` or simply change the import to `npm:pdf-parse` (without the subpath).
+The AI sometimes returns the literal string `"null"` instead of JSON `null`. For example: `"nationality":"null"`. The code treats this as a valid value and writes it to the database.
 
-**File: `supabase/functions/import-race-results/index.ts`**
+**Fix in `enrich-driver-profile/index.ts`:**
+- After parsing the AI JSON, sanitize all fields: convert string `"null"`, `"unknown"`, `"N/A"`, empty strings to actual `null`
+- Improve the system prompt to be more aggressive about finding data -- remove "Only return data you are confident about" and instead tell the AI to try harder, use context clues from the driver name, and provide best-effort answers
+- Increase `max_tokens` to 4096 (currently 2048) to give the AI more room
 
-1. Change the import from:
-   ```typescript
-   import pdf from "npm:pdf-parse/lib/pdf-parse.js";
-   ```
-   to:
-   ```typescript
-   import pdf from "npm:pdf-parse";
-   ```
+### 3. Auto-Enrich New Drivers on Import
 
-2. If that still fails in the edge runtime, switch to an alternative: extract PDF text using the Lovable AI gateway's multimodal capabilities by sending the PDF as base64 directly to the AI model (Gemini supports PDF input), eliminating the need for a separate PDF parsing library entirely.
+When `import-race-results` creates new driver profiles (lines 289-303), it currently just inserts a bare `first_name` + `last_name`. After the import completes, it should automatically trigger enrichment for all newly created profiles.
 
-### Recommended Approach: Drop pdf-parse, use AI directly
+**Changes to `import-race-results/index.ts`:**
+- After the import loop finishes, collect all newly created driver profile IDs
+- Call the `enrich-driver-profile` edge function internally (or inline the enrichment logic) for each new driver
+- This way every new driver gets enriched immediately without admin intervention
 
-Since Gemini 2.5 Flash natively accepts PDF content, the cleanest fix is:
-- Remove the `pdf-parse` dependency entirely
-- When a PDF is uploaded, send the base64 PDF directly to the AI model as part of the prompt
-- This eliminates the brittle npm dependency and lets the AI read the PDF natively
+The simplest approach: after the import response is built, make an internal HTTP call to the enrich function with the list of new driver IDs. Since the import already runs as an admin, it can pass the same auth token.
 
-**Changes to `supabase/functions/import-race-results/index.ts`:**
-- Remove `import pdf from "npm:pdf-parse/lib/pdf-parse.js"`
-- Remove the PDF text extraction block
-- When `pdfBase64` is provided, include it in the AI request as a file attachment (Gemini supports `inline_data` with `application/pdf` mime type)
-- Keep the `rawText` path unchanged for plain text input
+### Technical Details
+
+**Search.tsx changes:**
+- Remove lines 59-75 (verified counts query)
+- Remove `verified_count` from driver type and card rendering
+- Remove the `CheckCircle` import if unused
+
+**enrich-driver-profile/index.ts changes:**
+- Add sanitization after JSON parse:
+```typescript
+// Sanitize string "null" values
+for (const key of Object.keys(enriched)) {
+  if (typeof enriched[key] === "string" && 
+      ["null", "unknown", "n/a", ""].includes(enriched[key].toLowerCase().trim())) {
+    enriched[key] = null;
+  }
+}
+```
+- Update system prompt to be more assertive about finding data
+
+**import-race-results/index.ts changes:**
+- After the import loop, if `createdCount > 0`, call the enrich function:
+```typescript
+if (createdDriverIds.length > 0) {
+  // Fire-and-forget enrichment for new drivers
+  fetch(`${SUPABASE_URL}/functions/v1/enrich-driver-profile`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ driverProfileIds: createdDriverIds }),
+  }).catch(err => console.error("Auto-enrich failed:", err));
+}
+```
 
 ### No database changes needed
 
