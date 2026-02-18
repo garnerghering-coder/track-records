@@ -3,7 +3,8 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Trophy, CheckCircle, MapPin, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Trophy, CheckCircle, MapPin, Calendar, Pencil } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ReportDialog from "@/components/ReportDialog";
@@ -57,10 +58,22 @@ const EventDetailPage = () => {
   const [event, setEvent] = useState<RaceEvent | null>(null);
   const [entries, setEntries] = useState<EntryWithDrivers[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    const fetch = async () => {
+    const fetchData = async () => {
+      // Check admin status
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .eq("role", "admin");
+        setIsAdmin(!!roles && roles.length > 0);
+      }
+
       const { data: ev } = await supabase
         .from("race_events")
         .select("*")
@@ -97,7 +110,7 @@ const EventDetailPage = () => {
       })));
       setLoading(false);
     };
-    fetch();
+    fetchData();
   }, [id]);
 
   // Group by class
@@ -108,7 +121,6 @@ const EventDetailPage = () => {
     return acc;
   }, {});
 
-  // Sort each class by class_position, then finishing_position
   Object.values(classes).forEach(arr => {
     arr.sort((a, b) => (a.class_position ?? a.finishing_position ?? 999) - (b.class_position ?? b.finishing_position ?? 999));
   });
@@ -150,7 +162,7 @@ const EventDetailPage = () => {
           </Link>
           <div className="flex items-start gap-4 flex-1">
             <Trophy className="h-8 w-8 text-primary shrink-0 mt-1" />
-            <div>
+            <div className="flex-1">
               <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
                 {event.event_name}
               </h1>
@@ -171,7 +183,14 @@ const EventDetailPage = () => {
               </div>
             </div>
           </div>
-          <div className="mt-4 sm:mt-0">
+          <div className="mt-4 sm:mt-0 flex items-center gap-2">
+            {isAdmin && (
+              <Link to={`/admin?edit=${event.id}`}>
+                <Button size="sm" variant="secondary" className="gap-1.5">
+                  <Pencil className="h-3.5 w-3.5" /> Edit in Admin
+                </Button>
+              </Link>
+            )}
             <ReportDialog reportType="event" targetId={event.id} targetName={event.event_name} />
           </div>
         </div>
@@ -228,18 +247,16 @@ const EventDetailPage = () => {
                             {entry.drivers.length === 0 ? (
                               <span className="text-muted-foreground">—</span>
                             ) : (
-                              entry.drivers.map(d => {
-                                return (
-                                  <Link
-                                    key={d.id}
-                                    to={`/driver/${d.id}`}
-                                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                                  >
-                                    <FlagImage nationality={d.nationality} size={14} />
-                                    {d.first_name} {d.last_name}
-                                  </Link>
-                                );
-                              })
+                              entry.drivers.map(d => (
+                                <Link
+                                  key={d.id}
+                                  to={`/driver/${d.id}`}
+                                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                                >
+                                  <FlagImage nationality={d.nationality} size={14} />
+                                  {d.first_name} {d.last_name}
+                                </Link>
+                              ))
                             )}
                           </div>
                         </TableCell>
