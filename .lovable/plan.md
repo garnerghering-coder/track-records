@@ -1,49 +1,76 @@
 
 
-## Separate Photo Search from Driver Enrichment
+## Remove Lovable Branding + Smart AI Fallback (Groq-first, Lovable AI backup)
 
-### What Changes
+### 1. Remove Lovable Branding from `index.html`
 
-1. **Remove photo search logic from the `enrich-driver-profile` edge function** -- enrichment will only handle text fields (nationality, bio, date of birth, category, social links).
+Update all meta tags to use "TrackRecord" branding:
+- Title: "TrackRecord - Motorsport Driver Profiles"
+- Description: "The verified motorsport driver profile platform."
+- Author: "TrackRecord"
+- OG tags updated, Lovable OG images removed
+- Twitter `@Lovable` reference removed
+- TODO comments removed
 
-2. **Create a new `find-driver-photo` edge function** that handles photo search independently using Firecrawl.
+The "Edit in Lovable" button in the bottom-right is a platform feature -- go to **Settings** in Lovable and toggle **"Hide 'Lovable' Badge"** (requires a paid plan). It cannot be removed through code.
 
-3. **Add a camera/photo button next to the Enrich button** on each driver row in the All Drivers tab. This button triggers the photo search separately.
+### 2. Smart AI Fallback in All 4 Edge Functions
 
-### How It Works
+The pattern for each function: try Groq first, and if it returns a 429 (rate limit), automatically retry the same request using the Lovable AI gateway instead.
 
-- **Enrich button** (existing): Fills in nationality, bio, DOB, category, social links. No photo involvement.
-- **Photo button** (new): Searches the web for a real photo of the driver, downloads it, uploads to storage, and updates `photo_url`. Works independently.
-- Both buttons can be used on the same driver without interfering with each other.
+**Functions to update:**
+- `enrich-driver-profile` -- uses JSON mode
+- `generate-race-event` -- uses tool calling
+- `import-race-results` -- uses JSON mode
+- `scrape-race-results` -- uses tool calling
+
+**How it works in each function:**
+
+```text
+1. Build the request body (messages, tools, etc.)
+2. Try Groq (api.groq.com, GROQ_API_KEY, llama-3.3-70b-versatile)
+3. If response is 429:
+   - Log "Groq rate limited, falling back to Lovable AI"
+   - Retry same request to ai.gateway.lovable.dev with LOVABLE_API_KEY and google/gemini-2.5-flash
+4. If Groq succeeds, use that response
+5. Next request starts with Groq again (no persistent state needed)
+```
+
+This means Groq is always the first choice. Lovable AI only kicks in when Groq is temporarily unavailable. Since each edge function invocation is independent, there's no state to manage -- it just tries Groq first every time.
 
 ### Technical Details
 
-**File: `supabase/functions/enrich-driver-profile/index.ts`**
-- Remove the entire photo search block (the Firecrawl search, image download, and storage upload code -- roughly lines 131-189)
-- Remove the `photo_url` update from the updates object
-- Keep everything else as-is
+A shared helper pattern will be added near the top of each function:
 
-**New file: `supabase/functions/find-driver-photo/index.ts`**
-- Same admin auth pattern as `enrich-driver-profile`
-- Accepts `{ driverProfileId: string, force?: boolean }`
-- Fetches the driver profile to get the name and current `photo_url`
-- If `photo_url` exists and `force` is not set, return early with "Photo already exists"
-- Uses Firecrawl API to search for `"{firstName} {lastName} racing driver portrait photo"`
-- Parses results for image URLs (same logic currently in enrich function)
-- Downloads and uploads to `driver-photos/{profileId}/photo.{ext}`
-- Updates `driver_profiles.photo_url` with the public URL
-- Returns success/failure with the URL
+```typescript
+async function callAI(body: Record<string, any>): Promise<Response> {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  const groqBody = { ...body, model: "llama-3.3-70b-versatile" };
 
-**File: `supabase/config.toml`**
-- Add `[functions.find-driver-photo]` with `verify_jwt = false`
+  if (GROQ_API_KEY) {
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify(groqBody),
+    });
+    if (resp.status !== 429) return resp;
+    console.log("Groq rate limited, falling back to Lovable AI");
+  }
 
-**File: `src/pages/Admin.tsx`**
-- Add a `handleFindDriverPhoto` function that calls `supabase.functions.invoke("find-driver-photo", { body: { driverProfileId } })`
-- Shows loading state, success/failure toast
-- On the All Drivers tab, add a camera icon button next to the existing Enrich (sparkle) button on each driver row
-- The camera button triggers `handleFindDriverPhoto` for that driver
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("No AI provider available");
+
+  const lovableBody = { ...body, model: "google/gemini-2.5-flash" };
+  return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(lovableBody),
+  });
+}
+```
+
+Each function's existing `fetch("https://api.groq.com/...")` call gets replaced with `callAI({ messages, ... })`. The error handling for non-429 errors (401, 500, etc.) stays the same but the error messages become generic ("AI processing failed") instead of Groq-specific.
+
+The initial check `if (!GROQ_API_KEY) throw new Error(...)` is also removed since the function can now work without Groq.
 
 ### No database changes needed
-
-Same storage bucket and `photo_url` column already exist.
-
