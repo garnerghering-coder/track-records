@@ -1,41 +1,65 @@
 
 
-## Fix Driver Profile "No Results" Bug + Discover Series Timeout
+## Background Job Queue for Series Discovery
 
-### Issue 1: "No race results yet" shown above actual results
+### What Changes
 
-The driver profile page has two separate results sections:
-- **Legacy results** from the `race_results` table (lines 430-476) -- this shows "No race results yet" when empty
-- **Event-based results** from `race_entry_drivers` joins (lines 479-516) -- this shows the actual imported race data
+Right now, series discovery requires you to stay on the page watching the progress stream. If you navigate away, the connection breaks and you lose track. This plan converts it to a **background job system** where:
 
-The problem: when the legacy table is empty but event-based results exist, the page displays "No race results yet" AND the actual results right below it.
+- You can **queue multiple series** at once (e.g., "IMSA 2025" and "F4 US 2024" simultaneously)
+- Jobs **run entirely server-side** -- you can close the browser and come back later
+- A **jobs dashboard** shows all queued/running/completed jobs with their progress logs
+- Multiple jobs can process at the same time
 
-**Fix in `src/pages/DriverProfile.tsx`:**
-- Change the "No race results yet" condition to check BOTH `results.length === 0` AND `eventResults.length === 0`
-- Only show that empty state when there are truly no results from either source
+### How It Works
 
-### Issue 2: Series Auto-Discovery "Failed to fetch"
+1. **New `discovery_jobs` table** stores each job with its status, progress log, and results
+2. When you click "Discover and Import", it creates a row in the table and immediately calls the edge function in a fire-and-forget style
+3. The edge function updates the job row as it progresses (writing log entries and status updates to the database)
+4. The Admin UI polls the table every few seconds to show live progress, or you can refresh anytime to see current state
+5. You can queue another series while the first is still running -- each gets its own job row and edge function invocation
 
-The discover-series function works (logs confirm it discovered 12 events and started importing), but importing an entire season sequentially (each race involves scraping + AI parsing + database writes) takes many minutes. The browser's `fetch()` call times out before the function finishes, causing "Failed to fetch."
+### UI Changes
 
-**Fix -- make the flow asynchronous with streaming progress:**
-- Update the `discover-series` edge function to use **streaming responses** (Server-Sent Events / ReadableStream) so the connection stays alive and progress is sent incrementally
-- Update the Admin UI `handleDiscoverSeries` to use `EventSource` or read from a streaming fetch, displaying each event's status as it arrives in real-time
-- This prevents timeout and gives the admin a live progress log
+The "Import Entire Series" section gets redesigned:
+- **Input area stays the same** (series name + year + button)
+- Below it, a **jobs list** shows all discovery jobs (recent first) with:
+  - Series name, year, status badge (queued / running / completed / failed)
+  - Progress bar (e.g., "5/12 events imported")
+  - Expandable log showing the detailed progress messages
+  - A "Cancel" option for running jobs
+- You can submit a new series even while others are running
 
 ### Technical Details
 
-**File: `src/pages/DriverProfile.tsx`**
-- Line 430: Change `results.length === 0` to `results.length === 0 && eventResults.length === 0`
+**New database table: `discovery_jobs`**
+```text
+- id (uuid, primary key)
+- series_name (text)
+- season_year (integer)  
+- status (text: 'queued', 'running', 'completed', 'failed')
+- progress_log (jsonb array of log entries)
+- events_found (integer, nullable)
+- events_imported (integer, default 0)
+- events_skipped (integer, default 0)
+- events_failed (integer, default 0)
+- events_no_url (integer, default 0)
+- created_by (uuid)
+- created_at (timestamptz)
+- updated_at (timestamptz)
+```
+
+RLS: admins can read/write their own jobs.
 
 **File: `supabase/functions/discover-series/index.ts`**
-- Convert the response to use `TransformStream` / streaming
-- Send each event's import status as a JSON line as it completes
-- Return the final summary as the last streamed message
+- Accept an optional `jobId` parameter
+- Instead of streaming progress to the HTTP response, write progress to the `discovery_jobs` row in the database
+- Update `status`, `progress_log`, and counter fields as each event is processed
+- Return immediately after starting the background work (fire-and-forget pattern using `EdgeRuntime.waitUntil` or a detached async block)
 
 **File: `src/pages/Admin.tsx`**
-- Update `handleDiscoverSeries` to read from a streaming response using `response.body.getReader()`
-- Parse each line of progress and update UI state incrementally
-- Show a live log of "Importing Round 1... done (30 entries)" as each event completes
-- Display final summary when stream ends
+- Replace the streaming fetch with a simple POST that creates the job and returns the job ID
+- Add a `discoveryJobs` state array, fetched on load and polled every 5 seconds while any job is "running"
+- Render the jobs list with status badges, progress counters, and expandable logs
+- The "Discover and Import" button creates a new job without blocking -- you can immediately queue another
 
