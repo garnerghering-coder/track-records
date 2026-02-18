@@ -1,34 +1,44 @@
 
 
-## Remove AI Keys Tab + Add Job Management Actions
+## Add LLM API Key to Backend Rotation
 
 ### What Changes
 
-1. **Remove the "AI Keys" tab entirely** from the Admin UI -- all state, functions, and UI related to managing API keys in the browser will be deleted. The shared `callAI` backend helper and the `ai_api_keys` database table stay in place (they already work for key rotation behind the scenes), but there will be no UI tab for them.
+Insert a new row into the `ai_api_keys` database table with:
 
-2. **Add Delete and Cancel buttons to discovery jobs** in the existing jobs list:
-   - **Completed/Failed jobs**: A trash icon button to delete the job row from the database, removing it from the list
-   - **Running/Queued jobs**: A cancel button that sets the job status to `"cancelled"`, which the edge function will check between event imports and stop processing
+| Field | Value |
+|-------|-------|
+| label | LLM API (llmapi.ai) |
+| provider_url | https://internal.llmapi.ai/v1/chat/completions |
+| model_name | gpt-4o |
+| api_key | llmgtwy_dQ2X...UAULAw |
+| priority | 1 (tried after existing Key 1 if that one exists, or first if Key 1 has no valid config) |
+| is_active | true |
 
-3. **Edge function update**: The `discover-series` function will check the job status before importing each event. If status has been changed to `"cancelled"`, it stops processing and logs that it was cancelled.
+### How It Works
 
-### UI Changes
+No code changes needed. The existing `callAI` shared helper already:
+1. Fetches all active keys from `ai_api_keys` ordered by priority
+2. Tries each in sequence, skipping on 429 or failure
+3. Falls back to the GROQ env key, then Lovable AI gateway
 
-In the discovery jobs list, each job card gets action buttons in the top-right:
-- Running/queued jobs: a "Cancel" button (X icon)
-- Completed/failed/cancelled jobs: a "Remove" button (trash icon)
+This key will slot into that rotation automatically.
 
 ### Technical Details
 
-**File: `src/pages/Admin.tsx`**
-- Remove all `aiKeys` state variables (`aiKeys`, `newKeyLabel`, `newKeyProviderUrl`, `newKeyModel`, `newKeyApiKey`, `addingKey`)
-- Remove `fetchAiKeys`, `handleAddAiKey`, `handleToggleAiKey`, `handleDeleteAiKey` functions
-- Remove the "AI Keys" `TabsTrigger` and `TabsContent`
-- Remove the `Key` icon import (if unused elsewhere)
-- Add `handleCancelJob(jobId)` -- updates the job row status to `"cancelled"`
-- Add `handleDeleteJob(jobId)` -- deletes the job row from the database
-- Add cancel/delete buttons to each job card
+**Single SQL insert via database migration:**
 
-**File: `supabase/functions/discover-series/index.ts`**
-- Inside the event import loop, before processing each event, fetch the current job status from the database
-- If status is `"cancelled"`, break the loop and update the job with a cancellation log message
+```text
+INSERT INTO ai_api_keys (label, provider_url, model_name, api_key, priority, is_active)
+VALUES (
+  'LLM API (llmapi.ai)',
+  'https://internal.llmapi.ai/v1/chat/completions',
+  'gpt-4o',
+  'llmgtwy_dQ2Xk7PXnHjINjC4DbN5oDc1j6tg7DXLdvKAULAw',
+  1,
+  true
+);
+```
+
+Also clean up the existing "Key 1" row if its provider_url is empty (it won't work as-is).
+
