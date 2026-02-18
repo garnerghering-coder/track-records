@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_api_keys: {
+        Row: {
+          api_key: string
+          created_at: string
+          id: string
+          is_active: boolean
+          label: string
+          last_used_at: string | null
+          model_name: string
+          priority: number
+          provider_url: string
+        }
+        Insert: {
+          api_key: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label: string
+          last_used_at?: string | null
+          model_name?: string
+          priority?: number
+          provider_url?: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          last_used_at?: string | null
+          model_name?: string
+          priority?: number
+          provider_url?: string
+        }
+        Relationships: []
+      }
       community_submissions: {
         Row: {
           admin_notes: string | null
