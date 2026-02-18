@@ -1,45 +1,43 @@
 
 
-## Add Inline Editing for Pending Race Entries
+## Edit Verified Race Results and Remove "Race Results" Tab
 
-### What This Adds
+### What Changes
 
-When reviewing AI-imported results in the **Pending** tab, you'll be able to click on any cell in the table to edit it directly. This way if the AI got a position, team name, car number, class, or any other detail wrong, you can fix it right there before approving.
+1. **Remove the "Race Results" tab** from the admin tabs -- the manual event entry form is redundant since AI Import covers this workflow.
 
-### How It Works
+2. **Add an "Edit" button to each race in the "All Races" tab** that opens an inline expanded view showing all entries for that event, with the same click-to-edit behavior already built for the Pending tab. This lets you fix any detail on any race, whether it was AI-imported or manually created.
 
-1. **Click any cell to edit** -- Each row in the pending entries table becomes editable. Click a value (position, car number, team, class, gap, status, notes) to turn it into an input field.
-2. **Save on blur or Enter** -- When you click away or press Enter, the change saves to the database immediately.
-3. **Visual feedback** -- Edited cells get a subtle highlight so you can see what you've changed. A toast confirms each save.
-4. **Edit event details too** -- The event header (name, series, year, location) will also be editable via a small edit button.
+3. **Add an "Edit" button on the public Event Detail page** (visible only to admins) that links directly to the race's edit view in the admin panel.
+
+### How Editing Works in All Races
+
+- Click the **pencil icon** on any race row to expand it and load its entries
+- The expanded section shows the same table as the Pending tab: position, car number, team, drivers, class, gap, status, notes
+- Click any cell to edit it inline (same click-to-edit pattern already built)
+- Event-level details (name, series, year, location, category) are also editable via an "Edit Event" button in the expanded header
+- Changes save immediately to the database
 
 ### Technical Details
 
 **File: `src/pages/Admin.tsx`**
 
-1. Add state for tracking which cell is being edited: `editingCell: { entryId: string, field: string } | null`
-2. Add state for the editing event header: `editingEventId: string | null` with fields for event name, series, year, location
-3. Add an `handleUpdateEntry` function that calls `supabase.from("race_entries").update({...}).eq("id", entryId)` for individual field updates
-4. Add an `handleUpdateEvent` function that calls `supabase.from("race_events").update({...}).eq("id", eventId)` for event-level edits
-5. Replace the static `<td>` cells in the pending entries table with a component that renders an `<Input>` when that cell is active, and plain text otherwise
-6. Add a small pencil icon button on the event header row to toggle editing the event name/series/location
-7. After each save, refresh pending events via `fetchPendingEvents()`
+- Remove the `race-results` TabsTrigger and TabsContent block (the manual entry form ~lines 915, 1154-1383)
+- Remove associated state variables: `eventName`, `seriesName`, `seasonYear`, `eventCategory`, `eventLocation`, `eventDate`, `eventNotes`, `eventEntries`, `savingEvent`, `activeEntryKey`, `driverSearch`, `searchResults`, `searchOpen`, `searching`, and the manual entry helper functions (`addEntryRow`, `addDriverToEntry`, `removeDriverFromEntry`, `updateEventEntry`, `removeEventEntry`, `handleSaveEventResults`, `handleDriverSearch`)
+- Add `expandedEventId` state to track which race row is expanded for editing
+- When expanded, fetch that event's entries with drivers (reusing the same query pattern from `fetchPendingEvents`)
+- Add `expandedEntries` state to hold the loaded entries
+- Reuse existing `editingCell`, `editingCellValue`, `startEditCell`, `handleUpdateEntry` for cell editing -- these already work on `race_entries` table
+- Reuse existing `editingEventId`, `editingEventFields`, `startEditEvent`, `handleUpdateEvent` for event header editing -- these already work on `race_events` table
+- In the All Races table, add a pencil button per row that sets `expandedEventId` and fetches entries
+- Below the row, render a collapsible section with the entries table (same structure as pending tab)
 
-**Editable fields per entry:**
-- Finishing position (number input)
-- Car number (text input)
-- Team name (text input)
-- Class (text input)
-- Gap to leader (text input)
-- Status (dropdown: Finished / DNF / DNS / DSQ)
-- Notes (text input)
+**File: `src/pages/EventDetail.tsx`**
 
-**Editable fields per event:**
-- Event name
-- Series name
-- Season year
-- Location
-- Category
+- Add admin detection (same pattern as Header.tsx -- check `user_roles` for admin)
+- If admin, show an "Edit in Admin" button in the event header that links to `/admin?edit={eventId}`
+- On the Admin page, check URL params on load -- if `edit` param exists, auto-switch to "All Races" tab and expand that event
 
-No database changes needed -- all updates use existing RLS policies (admin can update race_entries and race_events).
+### No database changes needed
 
+All updates use existing RLS policies (admin can update `race_entries` and `race_events`).
