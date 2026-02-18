@@ -1,153 +1,47 @@
 
 
-## Scale Up: Auto-Discovery, Scheduled Imports, and Community Submissions
+## Hero Image Swap + Privacy Policy Page
 
-### Overview
-Three new systems to dramatically reduce manual work: (1) an AI-powered series discovery tool that finds and imports all races for an entire series/season automatically, (2) scheduled recurring imports from known results websites, and (3) a public submission form so drivers/teams can contribute their own results.
+### 1. Replace Hero Background Image
 
----
+Save the uploaded night-rain Porsche photo as the new hero image, replacing the current `src/assets/hero-racing.jpg`.
 
-### 1. Series Auto-Discovery (Admin Tool)
+**File:** `src/assets/hero-racing.jpg` -- overwrite with the uploaded image (copy from `user-uploads://480777139_654041820636754_252195924334771356_n.jpg`)
 
-A new admin tool where you type something like "IMSA SportsCar Championship 2024" and the system automatically:
-- Searches the web to find the full season calendar
-- Discovers result URLs for each round
-- Scrapes and imports each race's results one by one
-- Shows progress as it works through the season
+No code changes needed in `src/pages/Index.tsx` since it already imports from `@/assets/hero-racing.jpg`.
 
-**How it works:**
-1. Admin enters a series name + year (e.g. "F4 US Championship 2024")
-2. A new edge function `discover-series` uses Firecrawl search to find the season calendar and individual race result pages
-3. For each discovered race, it calls the existing `scrape-race-results` logic to import results
-4. The UI shows a progress log: "Found 12 rounds... Importing Round 1... Imported 30 entries... Importing Round 2..."
-5. Skips events that already exist in the database (matched by event name + series + year)
+### 2. Create a Privacy Policy Page
 
-**New edge function:** `supabase/functions/discover-series/index.ts`
-- Accepts `{ seriesName: string, seasonYear: number }`
-- Step 1: Firecrawl search for `"{seriesName} {seasonYear} full season results schedule"` 
-- Step 2: From results, use AI to extract a list of race event names and their result page URLs
-- Step 3: For each event URL, scrape and import using the same logic as `scrape-race-results`
-- Returns a summary: events found, events imported, events skipped (already exist), errors
+A new `/privacy` route with a comprehensive, plain-language privacy policy covering:
 
-**Admin UI changes:**
-- New section in the "Add Race" tab: "Import Entire Series"
-- Input fields: series name, year
-- "Discover & Import" button
-- Progress display showing each round being processed with status indicators
+- **What data is collected**: Account info (email, name, nationality), race results, community submissions, usage analytics
+- **How data is gathered**: User-submitted profiles, admin imports, AI-powered web scraping of publicly available race results, community submissions
+- **How data is used**: Building driver profiles, enabling search/discovery, admin verification
+- **How data is protected**: Authentication, row-level security policies, encrypted connections (HTTPS), no selling of personal data
+- **Third-party services**: Authentication provider, AI processing for result parsing
+- **User rights**: Users can request profile edits, data corrections, or account deletion by contacting the team
+- **Cookies**: Minimal -- session authentication only, no tracking cookies
 
----
+**New file:** `src/pages/Privacy.tsx`
 
-### 2. Scheduled Imports (Recurring Sources)
+### 3. Update Footer Links
 
-A new database table `import_sources` stores URLs of websites that publish race results regularly (e.g., a specific series results page). A cron job checks these periodically and imports any new results.
+Update the Footer to link the "Privacy Policy" item to `/privacy` instead of `#`. Also add "Terms of Service" placeholder and update "Contact" to a mailto or placeholder.
 
-**Database changes:**
+**File:** `src/components/Footer.tsx`
+- Change `<a href="#">Privacy Policy</a>` to `<Link to="/privacy">Privacy Policy</Link>`
+- Add a "Terms of Service" link (can point to `/privacy` for now or be a placeholder)
 
-```text
-TABLE: import_sources
-  id          uuid PK
-  name        text          -- friendly name like "IMSA Results Page"
-  url         text          -- URL to scrape
-  series_hint text          -- helps AI identify the series
-  frequency   text          -- 'daily', 'weekly', 'monthly'
-  last_run_at timestamptz
-  last_status text          -- 'success', 'error', 'no_new_data'
-  is_active   boolean       -- enable/disable
-  created_at  timestamptz
-  created_by  uuid
-```
-
-RLS: Admin-only for all operations.
-
-**New edge function:** `supabase/functions/scheduled-import/index.ts`
-- Called by a pg_cron job (daily)
-- Queries `import_sources` for active sources due for a run
-- For each source, scrapes the URL and imports results, skipping events already in the database
-- Updates `last_run_at` and `last_status`
-
-**Cron setup:** A daily pg_cron job that calls the `scheduled-import` function.
-
-**Admin UI:**
-- New tab or section: "Import Sources"
-- Table listing all sources with name, URL, frequency, last run status, active toggle
-- Add/edit/delete sources
-- "Run Now" button to trigger an immediate import for a specific source
-
----
-
-### 3. Community Submissions
-
-Let logged-in users (drivers, teams) submit race results through a public form. Submissions go into a review queue for admin approval before being added to the main database.
-
-**Database changes:**
-
-```text
-TABLE: community_submissions
-  id              uuid PK
-  submitted_by    uuid          -- auth user who submitted
-  event_name      text
-  series_name     text
-  season_year     integer
-  event_date      date
-  category        racing_category
-  location        text
-  raw_data        text          -- the pasted/typed results text
-  parsed_entries  jsonb         -- AI-parsed structured data (stored for admin review)
-  status          text          -- 'pending', 'approved', 'rejected'
-  admin_notes     text
-  reviewed_by     uuid
-  reviewed_at     timestamptz
-  created_at      timestamptz
-```
-
-RLS: Users can insert and view own. Admins can view/update all.
-
-**How it works:**
-1. Any logged-in user visits a "Submit Results" page
-2. They fill in event details (series, event name, year) and paste raw results text (or upload a PDF)
-3. On submission, the `import-race-results` edge function parses the data but instead of inserting into `race_events`, it stores the parsed result in `community_submissions` as `parsed_entries` JSON
-4. Admin sees a "Community" tab showing pending submissions
-5. Admin can preview the parsed data, edit if needed, then approve (which triggers the actual import) or reject with notes
-
-**New edge function:** `supabase/functions/parse-submission/index.ts`
-- Same AI parsing logic as `import-race-results` but returns the parsed data instead of inserting it
-- Stores result in `community_submissions`
-
-**New page:** `src/pages/Submit.tsx`
-- Public-facing form for submitting results
-- Fields: series name, event name, year, category, raw results text (textarea), optional PDF upload
-- Shows submission status history for the logged-in user
-
-**Admin UI:**
-- New "Community" tab in Admin dashboard
-- Lists pending submissions with event details and submitter info
-- Preview shows the AI-parsed entries
-- Approve button imports the data; Reject button with notes field
-
----
+**File:** `src/App.tsx`
+- Add route: `<Route path="/privacy" element={<Privacy />} />`
 
 ### Technical Details
 
 **Files to create:**
-- `supabase/functions/discover-series/index.ts` -- Series auto-discovery
-- `supabase/functions/scheduled-import/index.ts` -- Cron-triggered import runner
-- `supabase/functions/parse-submission/index.ts` -- Parse community submission without inserting
-- `src/pages/Submit.tsx` -- Public submission form
+- `src/pages/Privacy.tsx` -- Full privacy policy page with Header and Footer, styled consistently with the rest of the site
 
 **Files to modify:**
-- `src/pages/Admin.tsx` -- Add series discovery UI, import sources management, community review tab
-- `src/App.tsx` -- Add /submit route
-- `supabase/config.toml` -- Register new edge functions
-
-**Database migrations:**
-- Create `import_sources` table with admin-only RLS
-- Create `community_submissions` table with user insert + own select, admin full access
-- Enable pg_cron and pg_net extensions
-- Create daily cron job for scheduled imports
-
-**Implementation order:**
-1. Database migrations (both tables + cron)
-2. Series auto-discovery (highest impact -- one click imports an entire season)
-3. Community submissions (lets others help you)
-4. Scheduled imports (ongoing automation)
+- `src/assets/hero-racing.jpg` -- Overwrite with uploaded image
+- `src/components/Footer.tsx` -- Update Privacy Policy link to use React Router `<Link to="/privacy">`
+- `src/App.tsx` -- Add `/privacy` route
 
