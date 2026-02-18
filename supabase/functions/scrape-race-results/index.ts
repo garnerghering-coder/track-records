@@ -58,8 +58,25 @@ serve(async (req) => {
   }
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+    async function callAI(body: Record<string, any>): Promise<Response> {
+      const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+      if (GROQ_KEY) {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
+        });
+        if (resp.status !== 429) return resp;
+        console.log("Groq rate limited, falling back to Lovable AI");
+      }
+      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_KEY) throw new Error("No AI provider available");
+      return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
+      });
+    }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     if (!FIRECRAWL_API_KEY) {
@@ -134,32 +151,24 @@ serve(async (req) => {
 
     // Step 2: Feed to AI for extraction
     const today = new Date().toISOString().split("T")[0];
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content: `You are a motorsport data extractor. Today's date is ${today}. Extract structured race results from the provided web page content.\n\nCRITICAL RULES:\n- Extract EVERY SINGLE entry/car/row from the results table. Do NOT summarize or skip entries.\n- Include ALL entries, not just the top finishers. If there are 60 cars, return 60 entries.\n- Do NOT use "TBD", "To Be Determined", or any placeholder values for driver names, teams, or positions.\n- If actual data is not available on the page, omit that entry entirely.\n- Only include entries with real driver names and real data.\n- Pay careful attention to tables, grids, and structured data on the page.`,
-          },
-          {
-            role: "user",
-            content: `Extract ALL race results from this page content. Make sure to include every single entry/car listed:\n\n${markdown.slice(0, 80000)}`,
-          },
-        ],
-        tools: [raceResultsTool],
-        tool_choice: { type: "function", function: { name: "submit_race_results" } },
-      }),
+    const aiResponse = await callAI({
+      messages: [
+        {
+          role: "system",
+          content: `You are a motorsport data extractor. Today's date is ${today}. Extract structured race results from the provided web page content.\n\nCRITICAL RULES:\n- Extract EVERY SINGLE entry/car/row from the results table. Do NOT summarize or skip entries.\n- Include ALL entries, not just the top finishers. If there are 60 cars, return 60 entries.\n- Do NOT use "TBD", "To Be Determined", or any placeholder values for driver names, teams, or positions.\n- If actual data is not available on the page, omit that entry entirely.\n- Only include entries with real driver names and real data.\n- Pay careful attention to tables, grids, and structured data on the page.`,
+        },
+        {
+          role: "user",
+          content: `Extract ALL race results from this page content. Make sure to include every single entry/car listed:\n\n${markdown.slice(0, 80000)}`,
+        },
+      ],
+      tools: [raceResultsTool],
+      tool_choice: { type: "function", function: { name: "submit_race_results" } },
     });
 
     if (!aiResponse.ok) {
-      const status = aiResponse.status;
-      if (status === 429) return new Response(JSON.stringify({ error: "AI rate limit exceeded. Please try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (status === 401) return new Response(JSON.stringify({ error: "Invalid Groq API key. Check your GROQ_API_KEY secret." }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", status, errText);
+      console.error("AI error:", aiResponse.status, errText);
       return new Response(JSON.stringify({ error: "AI processing failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

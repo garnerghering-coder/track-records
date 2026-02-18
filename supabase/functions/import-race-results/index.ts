@@ -13,8 +13,25 @@ serve(async (req) => {
   }
 
   try {
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+    async function callAI(body: Record<string, any>): Promise<Response> {
+      const GROQ_KEY = Deno.env.get("GROQ_API_KEY");
+      if (GROQ_KEY) {
+        const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${GROQ_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, model: "llama-3.3-70b-versatile" }),
+        });
+        if (resp.status !== 429) return resp;
+        console.log("Groq rate limited, falling back to Lovable AI");
+      }
+      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_KEY) throw new Error("No AI provider available");
+      return fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, model: "google/gemini-2.5-flash" }),
+      });
+    }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -102,39 +119,18 @@ You MUST respond with ONLY a valid JSON object (no markdown, no explanation) mat
   ]
 }`;
 
-    const aiResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        max_tokens: 8192,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Extract the race results from this text:\n\n${rawText}` },
-        ],
-      }),
+    const aiResponse = await callAI({
+      max_tokens: 8192,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Extract the race results from this text:\n\n${rawText}` },
+      ],
     });
 
     if (!aiResponse.ok) {
-      const status = aiResponse.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "AI rate limit exceeded. Please try again shortly." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 401) {
-        return new Response(JSON.stringify({ error: "Invalid Groq API key. Check your GROQ_API_KEY secret." }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const errText = await aiResponse.text();
-      console.error("AI gateway error:", status, errText);
+      console.error("AI error:", aiResponse.status, errText);
       return new Response(JSON.stringify({ error: "AI processing failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
