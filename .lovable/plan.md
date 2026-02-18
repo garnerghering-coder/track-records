@@ -1,47 +1,41 @@
 
 
-## Hero Image Swap + Privacy Policy Page
+## Fix Driver Profile "No Results" Bug + Discover Series Timeout
 
-### 1. Replace Hero Background Image
+### Issue 1: "No race results yet" shown above actual results
 
-Save the uploaded night-rain Porsche photo as the new hero image, replacing the current `src/assets/hero-racing.jpg`.
+The driver profile page has two separate results sections:
+- **Legacy results** from the `race_results` table (lines 430-476) -- this shows "No race results yet" when empty
+- **Event-based results** from `race_entry_drivers` joins (lines 479-516) -- this shows the actual imported race data
 
-**File:** `src/assets/hero-racing.jpg` -- overwrite with the uploaded image (copy from `user-uploads://480777139_654041820636754_252195924334771356_n.jpg`)
+The problem: when the legacy table is empty but event-based results exist, the page displays "No race results yet" AND the actual results right below it.
 
-No code changes needed in `src/pages/Index.tsx` since it already imports from `@/assets/hero-racing.jpg`.
+**Fix in `src/pages/DriverProfile.tsx`:**
+- Change the "No race results yet" condition to check BOTH `results.length === 0` AND `eventResults.length === 0`
+- Only show that empty state when there are truly no results from either source
 
-### 2. Create a Privacy Policy Page
+### Issue 2: Series Auto-Discovery "Failed to fetch"
 
-A new `/privacy` route with a comprehensive, plain-language privacy policy covering:
+The discover-series function works (logs confirm it discovered 12 events and started importing), but importing an entire season sequentially (each race involves scraping + AI parsing + database writes) takes many minutes. The browser's `fetch()` call times out before the function finishes, causing "Failed to fetch."
 
-- **What data is collected**: Account info (email, name, nationality), race results, community submissions, usage analytics
-- **How data is gathered**: User-submitted profiles, admin imports, AI-powered web scraping of publicly available race results, community submissions
-- **How data is used**: Building driver profiles, enabling search/discovery, admin verification
-- **How data is protected**: Authentication, row-level security policies, encrypted connections (HTTPS), no selling of personal data
-- **Third-party services**: Authentication provider, AI processing for result parsing
-- **User rights**: Users can request profile edits, data corrections, or account deletion by contacting the team
-- **Cookies**: Minimal -- session authentication only, no tracking cookies
-
-**New file:** `src/pages/Privacy.tsx`
-
-### 3. Update Footer Links
-
-Update the Footer to link the "Privacy Policy" item to `/privacy` instead of `#`. Also add "Terms of Service" placeholder and update "Contact" to a mailto or placeholder.
-
-**File:** `src/components/Footer.tsx`
-- Change `<a href="#">Privacy Policy</a>` to `<Link to="/privacy">Privacy Policy</Link>`
-- Add a "Terms of Service" link (can point to `/privacy` for now or be a placeholder)
-
-**File:** `src/App.tsx`
-- Add route: `<Route path="/privacy" element={<Privacy />} />`
+**Fix -- make the flow asynchronous with streaming progress:**
+- Update the `discover-series` edge function to use **streaming responses** (Server-Sent Events / ReadableStream) so the connection stays alive and progress is sent incrementally
+- Update the Admin UI `handleDiscoverSeries` to use `EventSource` or read from a streaming fetch, displaying each event's status as it arrives in real-time
+- This prevents timeout and gives the admin a live progress log
 
 ### Technical Details
 
-**Files to create:**
-- `src/pages/Privacy.tsx` -- Full privacy policy page with Header and Footer, styled consistently with the rest of the site
+**File: `src/pages/DriverProfile.tsx`**
+- Line 430: Change `results.length === 0` to `results.length === 0 && eventResults.length === 0`
 
-**Files to modify:**
-- `src/assets/hero-racing.jpg` -- Overwrite with uploaded image
-- `src/components/Footer.tsx` -- Update Privacy Policy link to use React Router `<Link to="/privacy">`
-- `src/App.tsx` -- Add `/privacy` route
+**File: `supabase/functions/discover-series/index.ts`**
+- Convert the response to use `TransformStream` / streaming
+- Send each event's import status as a JSON line as it completes
+- Return the final summary as the last streamed message
+
+**File: `src/pages/Admin.tsx`**
+- Update `handleDiscoverSeries` to read from a streaming response using `response.body.getReader()`
+- Parse each line of progress and update UI state incrementally
+- Show a live log of "Importing Round 1... done (30 entries)" as each event completes
+- Display final summary when stream ends
 
