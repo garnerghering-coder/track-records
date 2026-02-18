@@ -86,11 +86,14 @@ const Admin = () => {
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [roles, setRoles] = useState<UserRole[]>([]);
 
-  // Event-based race results
+  // Event-based race results (new tables)
   const [eventName, setEventName] = useState("");
   const [seriesName, setSeriesName] = useState("");
   const [seasonYear, setSeasonYear] = useState(new Date().getFullYear().toString());
   const [eventCategory, setEventCategory] = useState<string>("other");
+  const [eventLocation, setEventLocation] = useState("");
+  const [eventDate, setEventDate] = useState("");
+  const [eventNotes, setEventNotes] = useState("");
   const [driverSearch, setDriverSearch] = useState("");
   const [searchResults, setSearchResults] = useState<DriverProfile[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -98,13 +101,22 @@ const Admin = () => {
 
   interface EventResultEntry {
     key: string;
-    driver: DriverProfile;
+    drivers: DriverProfile[];
+    team_name: string;
+    car_number: string;
+    race_class: string;
     finishing_position: string;
-    championship_position: string;
+    class_position: string;
+    laps_completed: string;
+    gap_to_leader: string;
+    gap_to_class_leader: string;
+    pit_stops: string;
+    status: string;
     notes: string;
   }
   const [eventEntries, setEventEntries] = useState<EventResultEntry[]>([]);
   const [savingEvent, setSavingEvent] = useState(false);
+  const [activeEntryKey, setActiveEntryKey] = useState<string | null>(null);
 
   useEffect(() => { checkAdmin(); }, []);
 
@@ -278,18 +290,41 @@ const Admin = () => {
     setSearchOpen(true);
   };
 
-  const addDriverToEvent = (driver: DriverProfile) => {
-    if (eventEntries.some(e => e.driver.id === driver.id)) return;
+  const addEntryRow = () => {
     setEventEntries(prev => [...prev, {
       key: crypto.randomUUID(),
-      driver,
+      drivers: [],
+      team_name: "",
+      car_number: "",
+      race_class: "",
       finishing_position: "",
-      championship_position: "",
+      class_position: "",
+      laps_completed: "",
+      gap_to_leader: "",
+      gap_to_class_leader: "",
+      pit_stops: "",
+      status: "Finished",
       notes: "",
     }]);
+  };
+
+  const addDriverToEntry = (entryKey: string, driver: DriverProfile) => {
+    setEventEntries(prev => prev.map(e => {
+      if (e.key !== entryKey) return e;
+      if (e.drivers.some(d => d.id === driver.id)) return e;
+      return { ...e, drivers: [...e.drivers, driver] };
+    }));
     setDriverSearch("");
     setSearchResults([]);
     setSearchOpen(false);
+    setActiveEntryKey(null);
+  };
+
+  const removeDriverFromEntry = (entryKey: string, driverId: string) => {
+    setEventEntries(prev => prev.map(e => {
+      if (e.key !== entryKey) return e;
+      return { ...e, drivers: e.drivers.filter(d => d.id !== driverId) };
+    }));
   };
 
   const updateEventEntry = (key: string, field: string, value: string) => {
@@ -301,43 +336,90 @@ const Admin = () => {
   };
 
   const handleSaveEventResults = async () => {
-    if (!seriesName.trim()) {
-      toast({ title: "Series name required", variant: "destructive" });
+    if (!seriesName.trim() || !eventName.trim()) {
+      toast({ title: "Event and series name required", variant: "destructive" });
       return;
     }
     if (eventEntries.length === 0) {
-      toast({ title: "Add at least one driver", variant: "destructive" });
+      toast({ title: "Add at least one entry", variant: "destructive" });
       return;
     }
     setSavingEvent(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase.from("race_results").insert(
-      eventEntries.map(e => ({
-        driver_profile_id: e.driver.id,
-        season_year: parseInt(seasonYear) || new Date().getFullYear(),
+
+    // 1. Create race_event
+    const { data: raceEvent, error: eventError } = await supabase
+      .from("race_events")
+      .insert({
+        event_name: eventName.trim(),
         series_name: seriesName.trim(),
-        event_name: eventName.trim() || null,
+        season_year: parseInt(seasonYear) || new Date().getFullYear(),
         category: (eventCategory || "other") as any,
-        finishing_position: e.finishing_position ? parseInt(e.finishing_position) : null,
-        championship_position: e.championship_position ? parseInt(e.championship_position) : null,
-        notes: e.notes || null,
-        verification_status: "verified" as const,
-        submitted_by: session?.user.id || null,
-        verified_by: session?.user.id || null,
-        verified_at: new Date().toISOString(),
-      }))
-    );
-    setSavingEvent(false);
-    if (error) {
-      toast({ title: "Error saving results", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Results saved", description: `${eventEntries.length} verified result(s) added.` });
-      setEventEntries([]);
-      setEventName("");
-      setSeriesName("");
-      setSeasonYear(new Date().getFullYear().toString());
-      setEventCategory("other");
+        location: eventLocation.trim() || null,
+        event_date: eventDate || null,
+        notes: eventNotes.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (eventError || !raceEvent) {
+      toast({ title: "Error creating event", description: eventError?.message, variant: "destructive" });
+      setSavingEvent(false);
+      return;
     }
+
+    // 2. Create entries
+    const { data: insertedEntries, error: entriesError } = await supabase
+      .from("race_entries")
+      .insert(eventEntries.map(e => ({
+        race_event_id: raceEvent.id,
+        team_name: e.team_name.trim() || null,
+        car_number: e.car_number.trim() || null,
+        race_class: e.race_class.trim() || null,
+        finishing_position: e.finishing_position ? parseInt(e.finishing_position) : null,
+        class_position: e.class_position ? parseInt(e.class_position) : null,
+        laps_completed: e.laps_completed ? parseInt(e.laps_completed) : null,
+        gap_to_leader: e.gap_to_leader.trim() || null,
+        gap_to_class_leader: e.gap_to_class_leader.trim() || null,
+        pit_stops: e.pit_stops ? parseInt(e.pit_stops) : null,
+        status: e.status.trim() || null,
+        notes: e.notes.trim() || null,
+        verification_status: "verified" as const,
+      })))
+      .select("id");
+
+    if (entriesError || !insertedEntries) {
+      toast({ title: "Event created but entries failed", description: entriesError?.message, variant: "destructive" });
+      setSavingEvent(false);
+      return;
+    }
+
+    // 3. Create driver junctions
+    const junctions: { race_entry_id: string; driver_profile_id: string }[] = [];
+    eventEntries.forEach((e, i) => {
+      const entryId = insertedEntries[i]?.id;
+      if (!entryId) return;
+      e.drivers.forEach(d => {
+        junctions.push({ race_entry_id: entryId, driver_profile_id: d.id });
+      });
+    });
+
+    if (junctions.length > 0) {
+      const { error: juncError } = await supabase.from("race_entry_drivers").insert(junctions);
+      if (juncError) {
+        toast({ title: "Entries saved but driver links failed", description: juncError.message, variant: "destructive" });
+      }
+    }
+
+    setSavingEvent(false);
+    toast({ title: "Event & results saved", description: `${eventEntries.length} entries added.` });
+    setEventEntries([]);
+    setEventName("");
+    setSeriesName("");
+    setSeasonYear(new Date().getFullYear().toString());
+    setEventCategory("other");
+    setEventLocation("");
+    setEventDate("");
+    setEventNotes("");
   };
   const handleGrantRole = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -547,22 +629,23 @@ const Admin = () => {
 
           {/* ── Race Results ── */}
           <TabsContent value="race-results">
-            <div className="max-w-3xl rounded-xl border border-border bg-card p-6">
+            <div className="max-w-4xl rounded-xl border border-border bg-card p-6">
               <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Enter Event Results</h2>
-              <p className="text-sm text-muted-foreground mb-6">Fill in the event details, search for drivers to add, then save. Results are automatically verified.</p>
+              <p className="text-sm text-muted-foreground mb-6">Create a race event with entries. Each entry can have multiple drivers (e.g. endurance co-drivers). Results are auto-verified.</p>
 
+              {/* Event details */}
               <div className="space-y-4 mb-6">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-card-foreground">Event Name</Label>
-                    <Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. 24 Hours of Daytona" />
+                    <Label className="text-card-foreground">Event Name *</Label>
+                    <Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. Rolex 24 at Daytona" />
                   </div>
                   <div>
                     <Label className="text-card-foreground">Series Name *</Label>
-                    <Input value={seriesName} onChange={(e) => setSeriesName(e.target.value)} placeholder="e.g. IMSA WeatherTech" required />
+                    <Input value={seriesName} onChange={(e) => setSeriesName(e.target.value)} placeholder="e.g. IMSA WeatherTech" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-card-foreground">Season Year</Label>
                     <Input value={seasonYear} onChange={(e) => setSeasonYear(e.target.value)} type="number" />
@@ -574,103 +657,168 @@ const Admin = () => {
                       <SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>))}</SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <Label className="text-card-foreground">Event Date</Label>
+                    <Input value={eventDate} onChange={(e) => setEventDate(e.target.value)} type="date" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-card-foreground">Location</Label>
+                    <Input value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} placeholder="e.g. Daytona International Speedway" />
+                  </div>
+                  <div>
+                    <Label className="text-card-foreground">Event Notes</Label>
+                    <Input value={eventNotes} onChange={(e) => setEventNotes(e.target.value)} placeholder="Optional" />
+                  </div>
                 </div>
               </div>
 
+              {/* Entries */}
               <div className="border-t border-border pt-4">
-                <Label className="text-card-foreground font-semibold mb-3 block">Add Drivers</Label>
-                <div className="relative mb-4">
-                  <Popover open={searchOpen && searchResults.length > 0} onOpenChange={setSearchOpen}>
-                    <PopoverTrigger asChild>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          value={driverSearch}
-                          onChange={(e) => handleDriverSearch(e.target.value)}
-                          placeholder="Search driver by name…"
-                          className="pl-9"
-                        />
-                        {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />}
-                      </div>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                      <div className="max-h-[240px] overflow-y-auto p-1">
-                        {searchResults.map((d) => {
-                          const flag = getFlagForCountry(d.nationality);
-                          const alreadyAdded = eventEntries.some(e => e.driver.id === d.id);
-                          return (
-                            <button
-                              key={d.id}
-                              disabled={alreadyAdded}
-                              onClick={() => addDriverToEvent(d)}
-                              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              {d.photo_url ? (
-                                <img src={d.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                              ) : (
-                                <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">{d.first_name[0]}{d.last_name[0]}</div>
-                              )}
-                              <div className="flex-1 text-left">
-                                <span className="font-medium text-popover-foreground">{d.first_name} {d.last_name}</span>
-                                <span className="ml-2 text-xs text-muted-foreground capitalize">{d.primary_category?.replace(/_/g, " ")}</span>
-                              </div>
-                              {flag && <span className="text-base">{flag}</span>}
-                              {alreadyAdded && <Check className="h-4 w-4 text-primary" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                <div className="flex items-center justify-between mb-4">
+                  <Label className="text-card-foreground font-semibold">Race Entries</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addEntryRow}>
+                    <Plus className="h-4 w-4 mr-1" /> Add Entry
+                  </Button>
                 </div>
 
                 {eventEntries.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">Search and select drivers above to add them to this event.</p>
+                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed border-border rounded-lg">Click "Add Entry" to add cars/teams to this event.</p>
                 )}
 
-                <div className="space-y-3">
-                  {eventEntries.map((entry, i) => {
-                    const flag = getFlagForCountry(entry.driver.nationality);
-                    return (
-                      <div key={entry.key} className="rounded-lg border border-border/50 bg-muted/20 p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            {entry.driver.photo_url ? (
-                              <img src={entry.driver.photo_url} alt="" className="h-8 w-8 rounded-full object-cover" />
-                            ) : (
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">{entry.driver.first_name[0]}{entry.driver.last_name[0]}</div>
-                            )}
-                            <div>
-                              <span className="text-sm font-medium text-card-foreground">{flag && <span className="mr-1">{flag}</span>}{entry.driver.first_name} {entry.driver.last_name}</span>
-                              <span className="ml-2 text-xs text-muted-foreground capitalize">{entry.driver.primary_category?.replace(/_/g, " ")}</span>
-                            </div>
-                          </div>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeEventEntry(entry.key)}>
-                            <X className="h-4 w-4 text-destructive" />
-                          </Button>
+                <div className="space-y-4">
+                  {eventEntries.map((entry, i) => (
+                    <div key={entry.key} className="rounded-lg border border-border/50 bg-muted/20 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-card-foreground">Entry #{i + 1}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeEventEntry(entry.key)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Car #</Label>
+                          <Input value={entry.car_number} onChange={(e) => updateEventEntry(entry.key, "car_number", e.target.value)} placeholder="e.g. 31" />
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Finishing Position</Label>
-                            <Input value={entry.finishing_position} onChange={(e) => updateEventEntry(entry.key, "finishing_position", e.target.value)} type="number" placeholder="e.g. 1" />
-                          </div>
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Championship Position</Label>
-                            <Input value={entry.championship_position} onChange={(e) => updateEventEntry(entry.key, "championship_position", e.target.value)} type="number" placeholder="Optional" />
-                          </div>
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Notes</Label>
-                            <Input value={entry.notes} onChange={(e) => updateEventEntry(entry.key, "notes", e.target.value)} placeholder="Optional" />
-                          </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Team Name</Label>
+                          <Input value={entry.team_name} onChange={(e) => updateEventEntry(entry.key, "team_name", e.target.value)} placeholder="e.g. Action Express" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Class</Label>
+                          <Input value={entry.race_class} onChange={(e) => updateEventEntry(entry.key, "race_class", e.target.value)} placeholder="e.g. GTP, LMP2" />
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Driver search for this entry */}
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-1 block">Drivers</Label>
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {entry.drivers.map(d => {
+                            const flag = getFlagForCountry(d.nationality);
+                            return (
+                              <span key={d.id} className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary text-xs px-2.5 py-1">
+                                {flag && <span>{flag}</span>}
+                                {d.first_name} {d.last_name}
+                                <button type="button" onClick={() => removeDriverFromEntry(entry.key, d.id)} className="ml-0.5 hover:text-destructive"><X className="h-3 w-3" /></button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                        <Popover open={activeEntryKey === entry.key && searchOpen && searchResults.length > 0} onOpenChange={(open) => { setSearchOpen(open); if (!open) setActiveEntryKey(null); }}>
+                          <PopoverTrigger asChild>
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                value={activeEntryKey === entry.key ? driverSearch : ""}
+                                onFocus={() => setActiveEntryKey(entry.key)}
+                                onChange={(e) => { setActiveEntryKey(entry.key); handleDriverSearch(e.target.value); }}
+                                placeholder="Search driver…"
+                                className="pl-9 h-8 text-xs"
+                              />
+                              {searching && activeEntryKey === entry.key && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground animate-spin" />}
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                            <div className="max-h-[200px] overflow-y-auto p-1">
+                              {searchResults.map((d) => {
+                                const flag = getFlagForCountry(d.nationality);
+                                const alreadyAdded = entry.drivers.some(ed => ed.id === d.id);
+                                return (
+                                  <button
+                                    key={d.id}
+                                    disabled={alreadyAdded}
+                                    onClick={() => addDriverToEntry(entry.key, d)}
+                                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    {d.photo_url ? (
+                                      <img src={d.photo_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                                    ) : (
+                                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">{d.first_name[0]}{d.last_name[0]}</div>
+                                    )}
+                                    <span className="font-medium text-popover-foreground text-xs">{d.first_name} {d.last_name}</span>
+                                    {flag && <span className="text-sm">{flag}</span>}
+                                    {alreadyAdded && <Check className="h-3 w-3 text-primary" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Finish Pos</Label>
+                          <Input value={entry.finishing_position} onChange={(e) => updateEventEntry(entry.key, "finishing_position", e.target.value)} type="number" placeholder="1" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Class Pos</Label>
+                          <Input value={entry.class_position} onChange={(e) => updateEventEntry(entry.key, "class_position", e.target.value)} type="number" placeholder="1" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Laps</Label>
+                          <Input value={entry.laps_completed} onChange={(e) => updateEventEntry(entry.key, "laps_completed", e.target.value)} type="number" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Pit Stops</Label>
+                          <Input value={entry.pit_stops} onChange={(e) => updateEventEntry(entry.key, "pit_stops", e.target.value)} type="number" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Gap to Leader</Label>
+                          <Input value={entry.gap_to_leader} onChange={(e) => updateEventEntry(entry.key, "gap_to_leader", e.target.value)} placeholder="e.g. +1 Lap" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Gap to Class Leader</Label>
+                          <Input value={entry.gap_to_class_leader} onChange={(e) => updateEventEntry(entry.key, "gap_to_class_leader", e.target.value)} placeholder="e.g. +32.4s" />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Status</Label>
+                          <Select value={entry.status} onValueChange={(v) => updateEventEntry(entry.key, "status", v)}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Finished">Finished</SelectItem>
+                              <SelectItem value="DNF">DNF</SelectItem>
+                              <SelectItem value="DNS">DNS</SelectItem>
+                              <SelectItem value="DSQ">DSQ</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Notes</Label>
+                        <Input value={entry.notes} onChange={(e) => updateEventEntry(entry.key, "notes", e.target.value)} placeholder="Optional" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {eventEntries.length > 0 && (
                   <Button onClick={handleSaveEventResults} disabled={savingEvent} className="w-full mt-4">
-                    {savingEvent ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : `Save ${eventEntries.length} Result(s) as Verified`}
+                    {savingEvent ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving…</> : `Save Event with ${eventEntries.length} Entry(ies)`}
                   </Button>
                 )}
               </div>
