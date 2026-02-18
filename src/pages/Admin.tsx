@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
@@ -125,8 +125,26 @@ const Admin = () => {
 
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
-  
   const [bulkEnriching, setBulkEnriching] = useState(false);
+
+  // Series Discovery
+  const [discoverSeriesName, setDiscoverSeriesName] = useState("");
+  const [discoverYear, setDiscoverYear] = useState(new Date().getFullYear().toString());
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResult, setDiscoverResult] = useState<any>(null);
+
+  // Import Sources
+  const [importSources, setImportSources] = useState<any[]>([]);
+  const [newSourceName, setNewSourceName] = useState("");
+  const [newSourceUrl, setNewSourceUrl] = useState("");
+  const [newSourceSeries, setNewSourceSeries] = useState("");
+  const [newSourceFrequency, setNewSourceFrequency] = useState("weekly");
+  const [addingSource, setAddingSource] = useState(false);
+  const [runningSourceId, setRunningSourceId] = useState<string | null>(null);
+
+  // Community Submissions
+  const [communitySubmissions, setCommunitySubmissions] = useState<any[]>([]);
+  const [approvingSubmission, setApprovingSubmission] = useState<string | null>(null);
 
   // Bulk selection
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(new Set());
@@ -229,6 +247,8 @@ const Admin = () => {
     fetchPendingEvents();
     fetchRaceEvents();
     fetchReports();
+    fetchImportSources();
+    fetchCommunitySubmissions();
   };
 
   const fetchDrivers = async () => {
@@ -272,6 +292,126 @@ const Admin = () => {
       .select("*")
       .order("created_at", { ascending: false });
     if (data) setReports(data as any[]);
+  };
+
+  const fetchImportSources = async () => {
+    const { data } = await supabase.from("import_sources" as any).select("*").order("created_at", { ascending: false });
+    if (data) setImportSources(data as any[]);
+  };
+
+  const fetchCommunitySubmissions = async () => {
+    const { data } = await supabase.from("community_submissions" as any).select("*").order("created_at", { ascending: false });
+    if (data) setCommunitySubmissions(data as any[]);
+  };
+
+  const handleDiscoverSeries = async () => {
+    if (!discoverSeriesName.trim()) { toast({ title: "Enter a series name", variant: "destructive" }); return; }
+    setDiscovering(true);
+    setDiscoverResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/discover-series`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ seriesName: discoverSeriesName, seasonYear: parseInt(discoverYear) || new Date().getFullYear() }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Discovery failed", description: result.error, variant: "destructive" });
+      } else {
+        setDiscoverResult(result);
+        toast({ title: "Series discovery complete!", description: `Found ${result.eventsFound} events, imported ${result.imported}.` });
+        fetchPendingEvents();
+        fetchRaceEvents();
+        fetchDrivers();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setDiscovering(false);
+  };
+
+  const handleAddImportSource = async () => {
+    if (!newSourceName.trim() || !newSourceUrl.trim()) { toast({ title: "Name and URL required", variant: "destructive" }); return; }
+    setAddingSource(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from("import_sources" as any).insert({
+      name: newSourceName, url: newSourceUrl, series_hint: newSourceSeries || null,
+      frequency: newSourceFrequency, is_active: true, created_by: session?.user?.id,
+    } as any);
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); }
+    else { toast({ title: "Import source added" }); setNewSourceName(""); setNewSourceUrl(""); setNewSourceSeries(""); fetchImportSources(); }
+    setAddingSource(false);
+  };
+
+  const handleDeleteImportSource = async (id: string) => {
+    const { error } = await supabase.from("import_sources" as any).delete().eq("id", id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else { toast({ title: "Source deleted" }); fetchImportSources(); }
+  };
+
+  const handleToggleSourceActive = async (id: string, isActive: boolean) => {
+    const { error } = await supabase.from("import_sources" as any).update({ is_active: !isActive } as any).eq("id", id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else fetchImportSources();
+  };
+
+  const handleRunSource = async (sourceId: string) => {
+    setRunningSourceId(sourceId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scheduled-import`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ sourceId }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) { toast({ title: "Import failed", description: result.error, variant: "destructive" }); }
+      else { toast({ title: "Import complete", description: `Processed ${result.sourcesProcessed} source(s)` }); fetchImportSources(); fetchPendingEvents(); fetchRaceEvents(); }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setRunningSourceId(null);
+  };
+
+  const handleApproveSubmission = async (submission: any) => {
+    setApprovingSubmission(submission.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Use import-race-results to actually import the parsed data
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-race-results`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+          body: JSON.stringify({ rawText: submission.raw_data, eventHint: submission.event_name, seriesHint: submission.series_name }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) { toast({ title: "Import failed", description: result.error, variant: "destructive" }); }
+      else {
+        // Update submission status
+        await supabase.from("community_submissions" as any).update({ status: "approved", reviewed_by: session?.user?.id, reviewed_at: new Date().toISOString() } as any).eq("id", submission.id);
+        toast({ title: "Submission approved & imported!", description: `${result.entriesCount} entries created.` });
+        fetchCommunitySubmissions();
+        fetchPendingEvents();
+        fetchRaceEvents();
+      }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setApprovingSubmission(null);
+  };
+
+  const handleRejectSubmission = async (submissionId: string, notes: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from("community_submissions" as any).update({
+      status: "rejected", admin_notes: notes || "Rejected", reviewed_by: session?.user?.id, reviewed_at: new Date().toISOString(),
+    } as any).eq("id", submissionId);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else { toast({ title: "Submission rejected" }); fetchCommunitySubmissions(); }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
@@ -996,6 +1136,12 @@ const Admin = () => {
             <TabsTrigger value="reports">
               <Flag className="h-3.5 w-3.5 mr-1" /> Reports {reports.filter((r: any) => r.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{reports.filter((r: any) => r.status === "pending").length}</span>}
             </TabsTrigger>
+            <TabsTrigger value="import-sources">
+              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sources ({importSources.length})
+            </TabsTrigger>
+            <TabsTrigger value="community">
+              <Send className="h-3.5 w-3.5 mr-1" /> Community {communitySubmissions.filter((s: any) => s.status === "pending").length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{communitySubmissions.filter((s: any) => s.status === "pending").length}</span>}
+            </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
@@ -1399,6 +1545,72 @@ const Admin = () => {
                 </div>
               )}
               </div>
+
+              {/* Import Entire Series */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold text-card-foreground">Import Entire Series</h2>
+                </div>
+                <p className="text-sm text-muted-foreground mb-4">Enter a series name and year. The AI will search the web, discover all race rounds, and import results for the entire season automatically.</p>
+                <div className="flex gap-3">
+                  <Input
+                    value={discoverSeriesName}
+                    onChange={(e) => setDiscoverSeriesName(e.target.value)}
+                    placeholder='e.g. "IMSA SportsCar Championship" or "F4 US Championship"'
+                    className="flex-1"
+                  />
+                  <Input
+                    value={discoverYear}
+                    onChange={(e) => setDiscoverYear(e.target.value)}
+                    type="number"
+                    className="w-24"
+                    placeholder="Year"
+                  />
+                  <Button onClick={handleDiscoverSeries} disabled={discovering || !discoverSeriesName.trim()}>
+                    {discovering ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Discovering…</> : <><Zap className="h-4 w-4 mr-2" /> Discover & Import</>}
+                  </Button>
+                </div>
+                {discovering && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Searching the web for {discoverSeriesName} {discoverYear} results… This may take a minute.</span>
+                    </div>
+                  </div>
+                )}
+                {discoverResult && (
+                  <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <h3 className="font-semibold text-card-foreground mb-2">Discovery Summary</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                      <div className="text-muted-foreground">Events found:</div>
+                      <div className="text-card-foreground">{discoverResult.eventsFound}</div>
+                      <div className="text-muted-foreground">Imported:</div>
+                      <div className="text-card-foreground">{discoverResult.imported}</div>
+                      <div className="text-muted-foreground">Skipped (existing):</div>
+                      <div className="text-card-foreground">{discoverResult.skipped}</div>
+                      <div className="text-muted-foreground">No URL found:</div>
+                      <div className="text-card-foreground">{discoverResult.noUrl}</div>
+                      <div className="text-muted-foreground">Failed:</div>
+                      <div className="text-card-foreground">{discoverResult.failed}</div>
+                    </div>
+                    {discoverResult.results && (
+                      <div className="space-y-1 max-h-60 overflow-y-auto">
+                        {discoverResult.results.map((r: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-xs">
+                            {r.status === "imported" && <CheckCircle2 className="h-3 w-3 text-green-500" />}
+                            {r.status === "skipped" && <Clock className="h-3 w-3 text-muted-foreground" />}
+                            {r.status === "error" && <XCircle className="h-3 w-3 text-destructive" />}
+                            {r.status === "no_url" && <Globe className="h-3 w-3 text-muted-foreground" />}
+                            <span className="text-card-foreground">{r.event_name}</span>
+                            <span className="text-muted-foreground">— {r.status}{r.entriesCount ? ` (${r.entriesCount} entries)` : ""}{r.reason ? `: ${r.reason}` : ""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
 
@@ -1682,6 +1894,99 @@ const Admin = () => {
                   {reports.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No reports yet.</td></tr>}
                 </tbody>
               </table>
+            </div>
+          </TabsContent>
+
+          {/* ── Import Sources ── */}
+          <TabsContent value="import-sources">
+            <div className="max-w-3xl space-y-6">
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Add Import Source</h2>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div><Label className="text-card-foreground">Name</Label><Input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder="e.g. IMSA Results Page" /></div>
+                  <div><Label className="text-card-foreground">URL</Label><Input value={newSourceUrl} onChange={(e) => setNewSourceUrl(e.target.value)} placeholder="https://results.example.com" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div><Label className="text-card-foreground">Series Hint</Label><Input value={newSourceSeries} onChange={(e) => setNewSourceSeries(e.target.value)} placeholder="Optional series name" /></div>
+                  <div><Label className="text-card-foreground">Frequency</Label>
+                    <Select value={newSourceFrequency} onValueChange={setNewSourceFrequency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem><SelectItem value="monthly">Monthly</SelectItem></SelectContent></Select>
+                  </div>
+                </div>
+                <Button onClick={handleAddImportSource} disabled={addingSource || !newSourceName.trim() || !newSourceUrl.trim()}>
+                  {addingSource ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />} Add Source
+                </Button>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">URL</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Frequency</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Last Run</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Status</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {importSources.map((s: any) => (
+                      <tr key={s.id} className={`border-b border-border/50 ${!s.is_active ? "opacity-50" : ""}`}>
+                        <td className="px-4 py-3 text-card-foreground font-medium">{s.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs max-w-[200px] truncate">{s.url}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">{s.frequency}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{s.last_run_at ? new Date(s.last_run_at).toLocaleDateString() : "Never"}</td>
+                        <td className="px-4 py-3"><Badge variant={s.last_status === "success" ? "default" : s.last_status === "error" ? "destructive" : "secondary"}>{s.last_status || "—"}</Badge></td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleRunSource(s.id)} disabled={runningSourceId === s.id} title="Run now">{runningSourceId === s.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}</Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleToggleSourceActive(s.id, s.is_active)} title={s.is_active ? "Disable" : "Enable"}>{s.is_active ? <XCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteImportSource(s.id)}><Trash className="h-4 w-4 text-destructive" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {importSources.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No import sources configured yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Community Submissions ── */}
+          <TabsContent value="community">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-foreground">Community Submissions</h2>
+              <p className="text-sm text-muted-foreground">Review results submitted by users.</p>
+              {communitySubmissions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" /><p className="text-muted-foreground">No community submissions yet.</p></div>
+              ) : (
+                <div className="space-y-3">
+                  {communitySubmissions.map((s: any) => (
+                    <div key={s.id} className="rounded-xl border border-border bg-card p-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <h3 className="font-semibold text-card-foreground">{s.event_name}</h3>
+                          <p className="text-sm text-muted-foreground">{s.series_name} · {s.season_year}{s.location ? ` · ${s.location}` : ""}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Submitted {new Date(s.created_at).toLocaleDateString()} · {s.parsed_entries?.entries?.length || 0} entries parsed</p>
+                        </div>
+                        <Badge variant={s.status === "approved" ? "default" : s.status === "rejected" ? "destructive" : "secondary"}>{s.status}</Badge>
+                      </div>
+                      {s.parsed_entries?.entries && s.parsed_entries.entries.length > 0 && (
+                        <details className="mb-3">
+                          <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">Preview parsed entries</summary>
+                          <div className="mt-2 max-h-40 overflow-y-auto rounded border border-border bg-muted/30 p-2">
+                            <table className="w-full text-xs"><thead><tr><th className="text-left px-1 text-muted-foreground">Pos</th><th className="text-left px-1 text-muted-foreground">Driver(s)</th><th className="text-left px-1 text-muted-foreground">Team</th></tr></thead>
+                              <tbody>{s.parsed_entries.entries.slice(0, 20).map((e: any, i: number) => (<tr key={i}><td className="px-1 text-card-foreground">{e.finishing_position ?? "—"}</td><td className="px-1 text-card-foreground">{(e.driver_names || []).join(", ")}</td><td className="px-1 text-muted-foreground">{e.team_name || "—"}</td></tr>))}</tbody>
+                            </table>
+                            {s.parsed_entries.entries.length > 20 && <p className="text-xs text-muted-foreground mt-1">…and {s.parsed_entries.entries.length - 20} more</p>}
+                          </div>
+                        </details>
+                      )}
+                      {s.status === "pending" && (
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => handleApproveSubmission(s)} disabled={approvingSubmission === s.id} className="gap-1">
+                            {approvingSubmission === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />} Approve & Import
+                          </Button>
+                          <Button size="sm" variant="outline" className="gap-1 text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleRejectSubmission(s.id, "")}>
+                            <XCircle className="h-3 w-3" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
 

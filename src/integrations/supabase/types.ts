@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      community_submissions: {
+        Row: {
+          admin_notes: string | null
+          category: Database["public"]["Enums"]["racing_category"] | null
+          created_at: string
+          event_date: string | null
+          event_name: string
+          id: string
+          location: string | null
+          parsed_entries: Json | null
+          raw_data: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          season_year: number
+          series_name: string
+          status: string
+          submitted_by: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          event_date?: string | null
+          event_name: string
+          id?: string
+          location?: string | null
+          parsed_entries?: Json | null
+          raw_data: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          season_year: number
+          series_name: string
+          status?: string
+          submitted_by: string
+        }
+        Update: {
+          admin_notes?: string | null
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          event_date?: string | null
+          event_name?: string
+          id?: string
+          location?: string | null
+          parsed_entries?: Json | null
+          raw_data?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          season_year?: number
+          series_name?: string
+          status?: string
+          submitted_by?: string
+        }
+        Relationships: []
+      }
       dismissed_duplicates: {
         Row: {
           dismissed_at: string
@@ -107,6 +161,45 @@ export type Database = {
           social_website?: string | null
           updated_at?: string
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      import_sources: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          frequency: string
+          id: string
+          is_active: boolean
+          last_run_at: string | null
+          last_status: string | null
+          name: string
+          series_hint: string | null
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_status?: string | null
+          name: string
+          series_hint?: string | null
+          url: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_run_at?: string | null
+          last_status?: string | null
+          name?: string
+          series_hint?: string | null
+          url?: string
         }
         Relationships: []
       }
