@@ -1,1 +1,4 @@
 project_id = "ywgfgetfdaefjxdtezei"
+
+[functions.import-race-results]
+verify_jwt = false

@@ -4,12 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import CountrySelect from "@/components/CountrySelect";
 import DriverPhotoUpload from "@/components/DriverPhotoUpload";
@@ -118,6 +120,27 @@ const Admin = () => {
   const [savingEvent, setSavingEvent] = useState(false);
   const [activeEntryKey, setActiveEntryKey] = useState<string | null>(null);
 
+  // AI Import
+  const [importText, setImportText] = useState("");
+  const [importEventHint, setImportEventHint] = useState("");
+  const [importSeriesHint, setImportSeriesHint] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+
+  // Pending approval queue
+  interface PendingEvent {
+    id: string;
+    event_name: string;
+    series_name: string;
+    season_year: number;
+    location: string | null;
+    category: string | null;
+    pendingCount: number;
+    entries: any[];
+  }
+  const [pendingEvents, setPendingEvents] = useState<PendingEvent[]>([]);
+  const [approvingEntries, setApprovingEntries] = useState<Set<string>>(new Set());
+
   useEffect(() => { checkAdmin(); }, []);
 
   const checkAdmin = async () => {
@@ -130,6 +153,7 @@ const Admin = () => {
     fetchDrivers();
     fetchRoles();
     fetchClaims();
+    fetchPendingEvents();
   };
 
   const fetchDrivers = async () => {
@@ -421,6 +445,125 @@ const Admin = () => {
     setEventDate("");
     setEventNotes("");
   };
+
+  // ── AI Import & Approval Queue ──
+
+  const fetchPendingEvents = async () => {
+    // Get events that have at least one pending entry
+    const { data: entries } = await supabase
+      .from("race_entries")
+      .select("*, race_events(*), race_entry_drivers(*, driver_profiles(*))")
+      .eq("verification_status", "pending");
+
+    if (!entries || entries.length === 0) {
+      setPendingEvents([]);
+      return;
+    }
+
+    // Group by event
+    const eventMap = new Map<string, PendingEvent>();
+    for (const entry of entries) {
+      const evt = (entry as any).race_events;
+      if (!evt) continue;
+      if (!eventMap.has(evt.id)) {
+        eventMap.set(evt.id, {
+          id: evt.id,
+          event_name: evt.event_name,
+          series_name: evt.series_name,
+          season_year: evt.season_year,
+          location: evt.location,
+          category: evt.category,
+          pendingCount: 0,
+          entries: [],
+        });
+      }
+      const pe = eventMap.get(evt.id)!;
+      pe.pendingCount++;
+      pe.entries.push(entry);
+    }
+    setPendingEvents(Array.from(eventMap.values()));
+  };
+
+  const handleImportResults = async () => {
+    if (!importText.trim()) {
+      toast({ title: "Paste race results text first", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-race-results`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({
+            rawText: importText,
+            eventHint: importEventHint || undefined,
+            seriesHint: importSeriesHint || undefined,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Import failed", description: result.error || "Unknown error", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      setImportResult(result);
+      toast({ title: "Results imported!", description: `${result.entriesCount} entries added as pending. ${result.matchedDrivers} drivers matched.` });
+      setImportText("");
+      setImportEventHint("");
+      setImportSeriesHint("");
+      fetchPendingEvents();
+    } catch (err: any) {
+      toast({ title: "Import error", description: err.message, variant: "destructive" });
+    }
+    setImporting(false);
+  };
+
+  const handleApproveEvent = async (eventId: string) => {
+    setApprovingEntries(prev => new Set(prev).add(eventId));
+    const { error } = await supabase
+      .from("race_entries")
+      .update({ verification_status: "verified" as const })
+      .eq("race_event_id", eventId)
+      .eq("verification_status", "pending");
+
+    if (error) {
+      toast({ title: "Error approving", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "All entries approved and published!" });
+      fetchPendingEvents();
+    }
+    setApprovingEntries(prev => { const n = new Set(prev); n.delete(eventId); return n; });
+  };
+
+  const handleRejectEvent = async (eventId: string) => {
+    setApprovingEntries(prev => new Set(prev).add(eventId));
+    const { error } = await supabase
+      .from("race_entries")
+      .update({ verification_status: "rejected" as const })
+      .eq("race_event_id", eventId)
+      .eq("verification_status", "pending");
+
+    if (error) {
+      toast({ title: "Error rejecting", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Entries rejected" });
+      fetchPendingEvents();
+    }
+    setApprovingEntries(prev => { const n = new Set(prev); n.delete(eventId); return n; });
+  };
+
   const handleGrantRole = async (e: React.FormEvent) => {
     e.preventDefault();
     setGrantingRole(true);
@@ -452,6 +595,12 @@ const Admin = () => {
               Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
             </TabsTrigger>
             <TabsTrigger value="race-results">Race Results</TabsTrigger>
+            <TabsTrigger value="ai-import">
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> AI Import
+            </TabsTrigger>
+            <TabsTrigger value="pending">
+              Pending {pendingEvents.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingEvents.length}</span>}
+            </TabsTrigger>
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
@@ -822,6 +971,162 @@ const Admin = () => {
                   </Button>
                 )}
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ── AI Import ── */}
+          <TabsContent value="ai-import">
+            <div className="max-w-3xl rounded-xl border border-border bg-card p-6">
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-5 w-5 text-primary" />
+                <h2 className="font-display text-xl font-bold text-card-foreground">AI Results Import</h2>
+              </div>
+              <p className="text-sm text-muted-foreground mb-6">Paste raw race results from a timing page, PDF, or any source. The AI will extract structured data and create pending entries for your review.</p>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-card-foreground">Event Name Hint (optional)</Label>
+                    <Input value={importEventHint} onChange={(e) => setImportEventHint(e.target.value)} placeholder="e.g. Monaco Grand Prix" />
+                  </div>
+                  <div>
+                    <Label className="text-card-foreground">Series Hint (optional)</Label>
+                    <Input value={importSeriesHint} onChange={(e) => setImportSeriesHint(e.target.value)} placeholder="e.g. Formula 1" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-card-foreground">Raw Results Text *</Label>
+                  <Textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Paste race results here…&#10;&#10;Example:&#10;1. Max Verstappen - Red Bull Racing - 58 laps&#10;2. Lewis Hamilton - Mercedes - +5.023s&#10;..."
+                    className="min-h-[200px] font-mono text-xs"
+                  />
+                </div>
+                <Button onClick={handleImportResults} disabled={importing || !importText.trim()} className="w-full">
+                  {importing ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing with AI…</> : <><Sparkles className="h-4 w-4 mr-2" /> Process with AI</>}
+                </Button>
+              </div>
+
+              {importResult && (
+                <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
+                  <h3 className="font-semibold text-card-foreground mb-2">Import Summary</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="text-muted-foreground">Event:</div>
+                    <div className="text-card-foreground">{importResult.eventName}</div>
+                    <div className="text-muted-foreground">Entries created:</div>
+                    <div className="text-card-foreground">{importResult.entriesCount}</div>
+                    <div className="text-muted-foreground">Drivers matched:</div>
+                    <div className="text-card-foreground">{importResult.matchedDrivers}</div>
+                    <div className="text-muted-foreground">Drivers unmatched:</div>
+                    <div className="text-card-foreground">{importResult.unmatchedDrivers}</div>
+                  </div>
+                  {importResult.unmatchedNames?.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs text-muted-foreground mb-1">Unmatched driver names (stored in entry notes):</p>
+                      <div className="flex flex-wrap gap-1">
+                        {importResult.unmatchedNames.map((n: string, i: number) => (
+                          <Badge key={i} variant="outline" className="text-xs">{n}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-3">Results are pending. Review and approve them in the "Pending" tab.</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Pending Approval ── */}
+          <TabsContent value="pending">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-xl font-bold text-foreground">Pending Approval</h2>
+                  <p className="text-sm text-muted-foreground">Review AI-imported results before they go live.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchPendingEvents}>
+                  <Loader2 className="h-3 w-3 mr-1" /> Refresh
+                </Button>
+              </div>
+
+              {pendingEvents.length === 0 && (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No pending results to review.</p>
+                </div>
+              )}
+
+              {pendingEvents.map((pe) => (
+                <div key={pe.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="p-4 border-b border-border flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-card-foreground">{pe.event_name}</h3>
+                      <p className="text-sm text-muted-foreground">{pe.series_name} · {pe.season_year}{pe.location ? ` · ${pe.location}` : ""}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{pe.pendingCount} pending</Badge>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveEvent(pe.id)}
+                        disabled={approvingEntries.has(pe.id)}
+                        className="gap-1"
+                      >
+                        {approvingEntries.has(pe.id) ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        Approve All
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRejectEvent(pe.id)}
+                        disabled={approvingEntries.has(pe.id)}
+                        className="gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      >
+                        <XCircle className="h-3 w-3" /> Reject All
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/50">
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Pos</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Car #</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Team</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Driver(s)</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Gap</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                          <th className="px-3 py-2 text-left font-medium text-muted-foreground">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pe.entries
+                          .sort((a: any, b: any) => (a.finishing_position || 999) - (b.finishing_position || 999))
+                          .map((entry: any) => (
+                          <tr key={entry.id} className="border-b border-border/50">
+                            <td className="px-3 py-2 text-card-foreground font-medium">{entry.finishing_position ?? "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{entry.car_number ?? "—"}</td>
+                            <td className="px-3 py-2 text-card-foreground">{entry.team_name ?? "—"}</td>
+                            <td className="px-3 py-2 text-card-foreground">
+                              {entry.race_entry_drivers?.length > 0
+                                ? entry.race_entry_drivers.map((red: any) =>
+                                    red.driver_profiles ? `${red.driver_profiles.first_name} ${red.driver_profiles.last_name}` : "?"
+                                  ).join(", ")
+                                : <span className="text-muted-foreground italic">No matched drivers</span>
+                              }
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground">{entry.race_class ?? "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{entry.gap_to_leader ?? "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{entry.status ?? "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[200px] truncate">{entry.notes ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
             </div>
           </TabsContent>
 
