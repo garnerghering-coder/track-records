@@ -427,11 +427,11 @@ const DriverProfilePage = () => {
             </div>
           )}
 
-          {results.length === 0 ? (
+          {results.length === 0 && eventResults.length === 0 ? (
             <div className="rounded-lg border border-border bg-card p-8 text-center">
               <p className="text-muted-foreground">No race results yet.</p>
             </div>
-          ) : (
+          ) : results.length === 0 ? null : (
             <div className="rounded-lg border border-border bg-card overflow-hidden">
               <Table>
                 <TableHeader>
