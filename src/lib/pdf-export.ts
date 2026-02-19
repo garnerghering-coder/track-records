@@ -15,19 +15,23 @@ interface ExportParams {
 }
 
 // Convert an image URL to base64 data URI
-async function loadImageAsBase64(url: string): Promise<string> {
+function loadImageAsBase64(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/png"));
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch (e) {
+        reject(e);
+      }
     };
-    img.onerror = reject;
+    img.onerror = () => reject(new Error("Failed to load image: " + url));
     img.src = url;
   });
 }
@@ -45,10 +49,10 @@ export async function exportSessionPdf(params: ExportParams) {
   let startY = 10;
   try {
     const logoData = await loadImageAsBase64(trackRecordsLogo);
-    // Logo roughly 40mm wide, auto height
     doc.addImage(logoData, "PNG", 14, 8, 40, 12);
     startY = 24;
-  } catch {
+  } catch (e) {
+    console.warn("Logo load failed, using text fallback:", e);
     doc.setFontSize(10);
     doc.setTextColor(30);
     doc.text("TRACK RECORDS", 14, 14);
@@ -179,7 +183,7 @@ export async function exportSessionPdf(params: ExportParams) {
       const y = (doc as any).lastAutoTable.finalY + (incidents.length > 0 ? incidents.length * 4 + 14 : 8);
       doc.setFontSize(8);
       doc.setTextColor(200, 120, 0);
-      doc.text(`⚡ Fastest Lap: ${fastest.v2_drivers?.full_name || "Unknown"} — ${fastest.fastest_lap_time}`, 14, y);
+      doc.text(`Fastest Lap: ${fastest.v2_drivers?.full_name || "Unknown"} — ${fastest.fastest_lap_time}`, 14, y);
     }
   }
 
