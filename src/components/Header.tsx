@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, X, Menu, LogOut, Shield } from "lucide-react";
@@ -8,6 +8,7 @@ import logoFull from "@/assets/logo-full.png";
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [session, setSession] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -69,10 +70,12 @@ const Header = () => {
   };
 
   const navLinks = [
-  { to: "/search?tab=drivers", label: "Drivers" },
-  { to: "/teams", label: "Teams" },
-  { to: "/results", label: "Results" },
-  { to: "/calendar", label: "Calendar" }];
+  { to: "/search?tab=drivers", label: "Drivers", match: "/search" },
+  { to: "/teams", label: "Teams", match: "/teams" },
+  { to: "/results", label: "Results", match: "/results" },
+  { to: "/calendar", label: "Calendar", match: "/calendar" }];
+
+  const isActive = (match: string) => location.pathname === match || location.pathname.startsWith(match + "/");
 
 
   return (
@@ -137,7 +140,7 @@ const Header = () => {
           </div>
 
           {navLinks.map((link) =>
-          <Link key={link.to} to={link.to} className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <Link key={link.to} to={link.to} className={`text-sm font-medium transition-colors hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
               {link.label}
             </Link>
           )}
@@ -175,7 +178,7 @@ const Header = () => {
       {mobileMenuOpen &&
       <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
           {navLinks.map((link) =>
-        <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+        <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className={`block py-2 text-sm font-medium hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
               {link.label}
             </Link>
         )}
