@@ -53,7 +53,7 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
       const q = query.trim() ? `%${query}%` : "%";
 
       if (entityType === "driver") {
-        const res = await supabase.from("v2_drivers").select("id, full_name").ilike("full_name", q).limit(8);
+        const res = await supabase.from("v2_drivers").select("id, full_name, nationality").ilike("full_name", q).limit(8);
         data = (res.data || []).map(d => ({ id: d.id, label: d.full_name }));
       } else if (entityType === "team") {
         const res = await supabase.from("v2_teams").select("id, full_name").ilike("full_name", q).limit(8);

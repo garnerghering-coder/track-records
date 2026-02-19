@@ -12,9 +12,9 @@ interface ExportParams {
   results: any[];
   incidents: any[];
   customColumns?: { key: string; name: string }[];
+  hasInt?: boolean;
 }
 
-// Convert an image URL to base64 data URI
 function loadImageAsBase64(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -37,7 +37,7 @@ function loadImageAsBase64(url: string): Promise<string> {
 }
 
 export async function exportSessionPdf(params: ExportParams) {
-  const { eventName, seriesName, circuitName, sessionName, sessionDate, sessionType, results, incidents, customColumns = [] } = params;
+  const { eventName, seriesName, circuitName, sessionName, sessionDate, sessionType, results, incidents, customColumns = [], hasInt = false } = params;
   const isRace = sessionType === "race" || sessionType === "sprint_race";
   const isQual = sessionType === "qualifying" || sessionType === "sprint_qualifying";
   const isPractice = sessionType === "practice" || sessionType === "warmup";
@@ -45,7 +45,6 @@ export async function exportSessionPdf(params: ExportParams) {
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Logo
   let startY = 10;
   try {
     const logoData = await loadImageAsBase64(trackRecordsLogo);
@@ -59,17 +58,14 @@ export async function exportSessionPdf(params: ExportParams) {
     startY = 20;
   }
 
-  // Date top-right
   doc.setFontSize(7);
   doc.setTextColor(150);
   doc.text(new Date().toLocaleDateString(), pageWidth - 14, 12, { align: "right" });
 
-  // Event name
   doc.setFontSize(16);
   doc.setTextColor(30);
   doc.text(eventName, 14, startY + 2);
 
-  // Subtitle
   doc.setFontSize(10);
   doc.setTextColor(100);
   const subtitle = [seriesName, circuitName, sessionName].filter(Boolean).join(" • ");
@@ -82,80 +78,85 @@ export async function exportSessionPdf(params: ExportParams) {
     tableStartY = startY + 19;
   }
 
-  // Build table
   let head: string[] = [];
   let body: string[][] = [];
   const customNames = customColumns.map(c => c.name);
 
   if (isPractice || sessionType === "other") {
-    head = ["Pos", "No.", "Driver", "Team", "Car", "Best Lap", "Gap", "Laps", ...customNames];
-    body = results.map(r => [
-      String(r.position || ""),
-      r.car_number || "",
-      r.v2_drivers?.full_name || "",
-      r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-      r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-      r.best_lap_time || "",
-      r.gap_to_p1 || "",
-      String(r.laps_run || ""),
-      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
-    ]);
+    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Best Lap", "Gap"];
+    if (hasInt) head.push("Int");
+    head.push("Laps", ...customNames);
+    body = results.map(r => {
+      const row = [
+        String(r.position || ""),
+        r.car_number || "",
+        r.v2_drivers?.full_name || "",
+        r.v2_drivers?.nationality || "",
+        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
+        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
+        r.best_lap_time || "",
+        r.gap_to_p1 || "",
+      ];
+      if (hasInt) row.push(r.extra_data?.Int || "");
+      row.push(String(r.laps_run || ""), ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")));
+      return row;
+    });
   } else if (isQual) {
-    head = ["Pos", "No.", "Driver", "Team", "Car", "Q1", "Q2", "Q3", "Best", "Gap", "Laps", ...customNames];
-    body = results.map(r => [
-      String(r.position || ""),
-      r.car_number || "",
-      r.v2_drivers?.full_name || "",
-      r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-      r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-      r.q1_time || "", r.q2_time || "", r.q3_time || "",
-      r.best_time || "", r.gap_to_pole || "",
-      String(r.laps_run || ""),
-      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
-    ]);
+    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Q1", "Q2", "Q3", "Best", "Gap"];
+    if (hasInt) head.push("Int");
+    head.push("Laps", ...customNames);
+    body = results.map(r => {
+      const row = [
+        String(r.position || ""),
+        r.car_number || "",
+        r.v2_drivers?.full_name || "",
+        r.v2_drivers?.nationality || "",
+        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
+        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
+        r.q1_time || "", r.q2_time || "", r.q3_time || "",
+        r.best_time || "", r.gap_to_pole || "",
+      ];
+      if (hasInt) row.push(r.extra_data?.Int || "");
+      row.push(String(r.laps_run || ""), ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")));
+      return row;
+    });
   } else {
-    head = ["Pos", "No.", "Driver", "Team", "Car", "Laps", "Time/Gap", "FL", "Pits", "Pts", "Status", ...customNames];
-    body = results.map(r => [
-      String(r.position || ""),
-      r.car_number || "",
-      r.v2_drivers?.full_name || "",
-      r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-      r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-      String(r.laps_completed || ""),
-      r.total_time || r.gap_to_leader || "",
-      r.fastest_lap_time || "",
-      String(r.pit_stops ?? ""),
-      String(r.points ?? ""),
-      r.status && r.status !== "finished" ? r.status.toUpperCase() : "",
-      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
-    ]);
+    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Laps", "Time/Gap", "FL"];
+    if (hasInt) head.push("Int");
+    head.push("Pits", "Pts", "Status", ...customNames);
+    body = results.map(r => {
+      const row = [
+        String(r.position || ""),
+        r.car_number || "",
+        r.v2_drivers?.full_name || "",
+        r.v2_drivers?.nationality || "",
+        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
+        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
+        String(r.laps_completed || ""),
+        r.total_time || r.gap_to_leader || "",
+        r.fastest_lap_time || "",
+      ];
+      if (hasInt) row.push(r.extra_data?.Int || "");
+      row.push(
+        String(r.pit_stops ?? ""),
+        String(r.points ?? ""),
+        r.status && r.status !== "finished" ? r.status.toUpperCase() : "",
+        ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
+      );
+      return row;
+    });
   }
 
   (doc as any).autoTable({
     startY: tableStartY,
     head: [head],
     body,
-    styles: {
-      fontSize: 7,
-      cellPadding: 1.5,
-      font: "courier",
-    },
-    headStyles: {
-      fillColor: [30, 30, 35],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      font: "helvetica",
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 248],
-    },
-    columnStyles: {
-      0: { halign: "center", cellWidth: 10 },
-      1: { halign: "center", cellWidth: 12 },
-    },
+    styles: { fontSize: 7, cellPadding: 1.5, font: "courier" },
+    headStyles: { fillColor: [30, 30, 35], textColor: [255, 255, 255], fontStyle: "bold", font: "helvetica" },
+    alternateRowStyles: { fillColor: [245, 245, 248] },
+    columnStyles: { 0: { halign: "center", cellWidth: 10 }, 1: { halign: "center", cellWidth: 12 } },
   });
 
-  // Incidents section
   if (isRace && incidents.length > 0) {
     const finalY = (doc as any).lastAutoTable.finalY + 8;
     doc.setFontSize(10);
@@ -172,7 +173,6 @@ export async function exportSessionPdf(params: ExportParams) {
     });
   }
 
-  // Fastest lap highlight for race
   if (isRace && results.length > 0) {
     const fastest = results.reduce((best: any, r: any) => {
       if (!r.fastest_lap_time) return best;
