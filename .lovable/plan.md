@@ -1,35 +1,55 @@
 
 
-## Fix: "Maximum call stack size exceeded" on PDF Upload
+## Fix: PDF Parsing with AI Fallback + Non-AI Text Extraction
 
-### Root Cause
+### Approach
 
-Line 123 in `ManageSessionResults.tsx`:
-```
-btoa(String.fromCharCode(...new Uint8Array(buffer)))
-```
+Use a two-layer strategy:
+1. **Primary: Text-based extraction (no AI needed)** -- Extract raw text from the PDF using a lightweight Deno-compatible PDF text extraction library (`pdf-parse`), then use regex/heuristic parsing to identify the tabular structure (position, car number, driver, team, times, etc.)
+2. **Fallback: AI extraction** -- If text extraction fails or produces too few results (e.g. scanned/image-only PDFs), fall back to the `callAI` shared helper which rotates through database-stored API keys before hitting the Lovable gateway
 
-The spread operator passes every single byte of the PDF as a separate argument to `String.fromCharCode()`. A 1MB PDF means ~1,000,000 arguments in a single function call, which blows the call stack.
+### How text-based parsing works
 
-### Fix
+FIA/motorsport classification PDFs follow consistent tabular formats. The text extractor pulls all text from the PDF, then a parser:
+- Splits into lines
+- Identifies header rows (looking for "POS", "NO", "DRIVER", "TEAM", "TIME", "GAP", "LAPS", etc.)
+- Parses each subsequent line by matching columns based on patterns (numbers for position/car number, names for driver/team, time patterns like `1:23.456` for lap times)
+- Returns structured JSON in the same format the AI would
 
-Replace line 123 with a chunked approach that processes the bytes in batches:
+This handles most official timing PDFs without any AI calls at all.
 
-```typescript
-const bytes = new Uint8Array(buffer);
-let binary = '';
-const chunkSize = 8192;
-for (let i = 0; i < bytes.length; i += chunkSize) {
-  binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-}
-const base64 = btoa(binary);
-```
+### Changes
 
-This processes 8KB chunks at a time, keeping the argument count well within limits.
+**File: `supabase/functions/parse-session-pdf/index.ts`**
 
-### Files Modified
+1. Add `pdf-parse` import for text extraction from PDF bytes
+2. Add a `parseTextResults(text, sessionType)` function that:
+   - Splits extracted text into lines
+   - Detects column headers via keyword matching
+   - Parses each data row using positional/regex logic
+   - Returns `{ results: [...] }` or `null` if it can't make sense of the text
+3. Restructure the main flow:
+   - Store PDF (unchanged)
+   - Extract text from PDF using pdf-parse
+   - Attempt `parseTextResults()` on the extracted text
+   - If it returns valid results (at least 3 rows), return those immediately -- no AI needed
+   - If it fails or returns too few rows, fall back to `callAI()` (using the shared helper with key rotation) instead of direct Lovable gateway calls
+4. Return a `method: "text"` or `method: "ai"` field so the frontend knows which path was used
 
-- `src/pages/manage/ManageSessionResults.tsx` -- replace the single-line base64 conversion (line 123) with the chunked version
+### Text parsing heuristics
 
-No other changes needed. The edge function and the rest of the flow are fine.
+Common motorsport PDF patterns to handle:
+- Position is always the first number (1, 2, 3...)
+- Car number follows position (often 2-3 digits)
+- Driver name is the first text field (may be "LASTNAME Firstname" or "Firstname LASTNAME")
+- Team/entrant name follows driver
+- Time fields match patterns like `\d+:\d+\.\d+` or `+\d+\.\d+s`
+- Status indicators: "DNF", "DNS", "DSQ", "RET", "NOT CLASSIFIED"
+- Laps are standalone integers near the end of a row
+
+### Files modified
+
+- `supabase/functions/parse-session-pdf/index.ts` -- complete rewrite with text-first approach + AI fallback using `callAI`
+
+No frontend changes needed -- the response format stays the same.
 
