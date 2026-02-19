@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowLeft, ClipboardList } from "lucide-react";
+import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock } from "lucide-react";
 
 const SESSION_TYPES = [
   { value: "practice", label: "Practice" },
@@ -60,8 +60,27 @@ export default function ManageEventDetail() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const toggleEventStatus = useMutation({
+    mutationFn: async () => {
+      const newStatus = event?.status === "published" ? "draft" : "published";
+      const { error } = await supabase.from("v2_events").update({ status: newStatus as any }).eq("id", id!);
+      if (error) throw error;
+      // Also update all sessions to match
+      const { error: sessErr } = await supabase.from("v2_sessions").update({ status: newStatus as any }).eq("event_id", id!);
+      if (sessErr) throw sessErr;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["v2_event", id] });
+      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+      toast.success(event?.status === "published" ? "Event unpublished" : "Event published");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
   if (!event) return <div className="p-6 text-muted-foreground">Event not found</div>;
+
+  const isPublished = event.status === "published";
 
   return (
     <div className="p-6 space-y-6">
@@ -70,7 +89,15 @@ export default function ManageEventDetail() {
       <div className="space-y-1">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold">{event.name}</h1>
-          <Badge variant={event.status === "published" ? "default" : "secondary"}>{event.status}</Badge>
+          <Badge variant={isPublished ? "default" : "secondary"}>{event.status}</Badge>
+          <Button
+            size="sm"
+            variant={isPublished ? "outline" : "default"}
+            onClick={() => toggleEventStatus.mutate()}
+            disabled={toggleEventStatus.isPending}
+          >
+            {isPublished ? <><GlobeLock className="h-4 w-4 mr-1" />Unpublish</> : <><Globe className="h-4 w-4 mr-1" />Publish Event</>}
+          </Button>
         </div>
         <p className="text-muted-foreground text-sm">
           {event.v2_seasons?.v2_series?.name} {event.v2_seasons?.year}

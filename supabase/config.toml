@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.enrich-race-event]
 verify_jwt = false
+
+[functions.parse-session-pdf]
+verify_jwt = false

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,13 +9,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Badge } from "@/components/ui/badge";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, ChevronDown } from "lucide-react";
+import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2 } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
 
 interface ResultRow {
   _key: string;
   position: string;
+  car_number: string;
   driver: Ref;
   team: Ref;
   car: Ref;
@@ -27,7 +28,7 @@ const RACE_STATUSES = ["finished", "dnf", "dns", "dsq", "classified"];
 const makeKey = () => Math.random().toString(36).slice(2, 10);
 
 const blankRow = (pos: number, type: string): ResultRow => {
-  const base: ResultRow = { _key: makeKey(), position: String(pos), driver: null, team: null, car: null };
+  const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, team: null, car: null };
   if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.laps_run = ""; base.notes = ""; }
   else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.laps_run = ""; }
   else if (type === "race" || type === "sprint_race") { base.laps_completed = ""; base.total_time = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; }
@@ -35,10 +36,23 @@ const blankRow = (pos: number, type: string): ResultRow => {
   return base;
 };
 
+// Fuzzy match helper
+function fuzzyMatch(needle: string, haystack: { id: string; label: string }[]): { id: string; label: string } | null {
+  const n = needle.toLowerCase().trim();
+  if (!n) return null;
+  // Exact match first
+  const exact = haystack.find(h => h.label.toLowerCase() === n);
+  if (exact) return exact;
+  // Partial match
+  const partial = haystack.find(h => h.label.toLowerCase().includes(n) || n.includes(h.label.toLowerCase()));
+  return partial || null;
+}
+
 export default function ManageSessionResults() {
   const { id: eventId, sessionId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const { data: session } = useQuery({
     queryKey: ["v2_session", sessionId],
@@ -54,6 +68,7 @@ export default function ManageSessionResults() {
   const [pitStops, setPitStops] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [qualSegments, setQualSegments] = useState(3);
 
   // Load existing data
@@ -64,8 +79,6 @@ export default function ManageSessionResults() {
       let table = "v2_practice_results";
       if (t === "qualifying" || t === "sprint_qualifying") table = "v2_qualifying_results";
       else if (t === "race" || t === "sprint_race") table = "v2_race_results";
-      else if (t === "practice") table = "v2_practice_results";
-      else table = "v2_practice_results"; // fallback for 'other'
 
       const { data } = await supabase.from(table as any).select("*, v2_drivers(id, full_name), v2_teams(id, full_name), v2_cars(id, model_name, manufacturer)").eq("session_id", sessionId!).order("position");
 
@@ -74,11 +87,11 @@ export default function ManageSessionResults() {
           const row: ResultRow = {
             _key: r.id,
             position: String(r.position || ""),
+            car_number: r.car_number || "",
             driver: r.v2_drivers ? { id: r.v2_drivers.id, label: r.v2_drivers.full_name } : null,
             team: r.v2_teams ? { id: r.v2_teams.id, label: r.v2_teams.full_name } : null,
             car: r.v2_cars ? { id: r.v2_cars.id, label: [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") } : null,
           };
-          // Copy type-specific fields
           if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; }
           else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; }
           else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; }
@@ -103,31 +116,119 @@ export default function ManageSessionResults() {
   const removeRow = (key: string) => setRows(r => r.filter(row => row._key !== key));
   const updateRow = (key: string, field: string, value: any) => setRows(r => r.map(row => row._key === key ? { ...row, [field]: value } : row));
 
+  const handlePdfImport = async (file: File) => {
+    setImporting(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
+      const { data, error } = await supabase.functions.invoke("parse-session-pdf", {
+        body: { session_id: sessionId, session_type: type, pdf_base64: base64, file_name: file.name },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const results = data?.results || [];
+      if (results.length === 0) { toast.warning("No results found in PDF"); return; }
+
+      // Fetch existing drivers and teams for matching
+      const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name");
+      const { data: existingTeams } = await supabase.from("v2_teams").select("id, full_name");
+      const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name }));
+      const teamList = (existingTeams || []).map(t => ({ id: t.id, label: t.full_name }));
+
+      const newRows: ResultRow[] = [];
+      for (const r of results) {
+        const row = blankRow(r.position || newRows.length + 1, type);
+        row.position = String(r.position || "");
+        row.car_number = String(r.car_number || "");
+
+        // Match or create driver
+        if (r.driver_name) {
+          let match = fuzzyMatch(r.driver_name, driverList);
+          if (!match) {
+            const { data: newDriver } = await supabase.from("v2_drivers").insert({ full_name: r.driver_name }).select("id, full_name").single();
+            if (newDriver) {
+              match = { id: newDriver.id, label: newDriver.full_name };
+              driverList.push(match);
+            }
+          }
+          row.driver = match;
+        }
+
+        // Match or create team
+        if (r.team_name) {
+          let match = fuzzyMatch(r.team_name, teamList);
+          if (!match) {
+            const { data: newTeam } = await supabase.from("v2_teams").insert({ full_name: r.team_name }).select("id, full_name").single();
+            if (newTeam) {
+              match = { id: newTeam.id, label: newTeam.full_name };
+              teamList.push(match);
+            }
+          }
+          row.team = match;
+        }
+
+        // Fill type-specific fields
+        if (type === "practice") {
+          row.best_lap_time = r.best_lap_time || "";
+          row.gap_to_p1 = r.gap || "";
+          row.laps_run = r.laps != null ? String(r.laps) : "";
+        } else if (type === "qualifying" || type === "sprint_qualifying") {
+          row.q1_time = r.q1_time || "";
+          row.q2_time = r.q2_time || "";
+          row.q3_time = r.q3_time || "";
+          row.best_time = r.best_time || "";
+          row.gap_to_pole = r.gap || "";
+          row.laps_run = r.laps != null ? String(r.laps) : "";
+        } else if (type === "race" || type === "sprint_race") {
+          row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : "";
+          row.total_time = r.total_time || "";
+          row.fastest_lap_time = r.fastest_lap_time || "";
+          row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : "";
+          row.points = r.points != null ? String(r.points) : "";
+          row.status = r.status || "finished";
+          row.dnf_reason = r.dnf_reason || "";
+        }
+
+        newRows.push(row);
+      }
+
+      setRows(newRows);
+      qc.invalidateQueries({ queryKey: ["v2_session", sessionId] });
+      toast.success(`Imported ${newRows.length} results from PDF`);
+    } catch (e: any) {
+      console.error("PDF import error:", e);
+      toast.error(e.message || "PDF import failed");
+    } finally {
+      setImporting(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  };
+
   const handleSave = useCallback(async (publish: boolean) => {
     if (!session) return;
     setSaving(true);
     try {
       const t = session.session_type;
-      // Delete existing results
       if (t === "practice" || t === "warmup" || t === "other") {
         await supabase.from("v2_practice_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
-        if (inserts.length) { const { error } = await supabase.from("v2_practice_results").insert(inserts); if (error) throw error; }
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
+        if (inserts.length) { const { error } = await supabase.from("v2_practice_results").insert(inserts as any); if (error) throw error; }
       } else if (t === "qualifying" || t === "sprint_qualifying") {
         await supabase.from("v2_qualifying_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
-        if (inserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(inserts); if (error) throw error; }
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
+        if (inserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(inserts as any); if (error) throw error; }
       } else {
         await supabase.from("v2_race_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.total_time || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null }));
-        if (inserts.length) { const { error } = await supabase.from("v2_race_results").insert(inserts); if (error) throw error; }
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.total_time || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null }));
+        if (inserts.length) { const { error } = await supabase.from("v2_race_results").insert(inserts as any); if (error) throw error; }
 
-        // Pit stops
         await supabase.from("v2_pit_stops").delete().eq("session_id", sessionId!);
         const psInserts = pitStops.filter(p => p.driver).map(p => ({ session_id: sessionId!, driver_id: p.driver?.id || null, lap_number: p.lap_number ? parseInt(p.lap_number) : null, stop_duration: p.stop_duration || null, total_pit_time: p.total_pit_time || null }));
         if (psInserts.length) { const { error } = await supabase.from("v2_pit_stops").insert(psInserts); if (error) throw error; }
 
-        // Incidents
         await supabase.from("v2_incidents").delete().eq("session_id", sessionId!);
         const incInserts = incidents.filter(i => i.description).map(i => ({ session_id: sessionId!, lap_number: i.lap_number ? parseInt(i.lap_number) : null, description: i.description || null, penalty_type: i.penalty_type || null, outcome: i.outcome || null, driver_ids: [] as string[] }));
         if (incInserts.length) { const { error } = await supabase.from("v2_incidents").insert(incInserts); if (error) throw error; }
@@ -150,6 +251,7 @@ export default function ManageSessionResults() {
 
   const isRace = type === "race" || type === "sprint_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
+  const sourceDoc = (session as any).source_document_url;
 
   return (
     <div className="p-4 space-y-4">
@@ -161,7 +263,22 @@ export default function ManageSessionResults() {
             <p className="text-xs text-muted-foreground">{session.v2_events?.name} • <Badge variant="outline" className="text-[10px]">{type.replace("_", " ")}</Badge></p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {sourceDoc && (
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
+              // Generate a signed URL to view the PDF
+              supabase.storage.from("session-documents").createSignedUrl(sourceDoc, 3600).then(({ data }) => {
+                if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+              });
+            }}>
+              <FileText className="h-4 w-4 mr-1" />View PDF
+            </Button>
+          )}
+          <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { if (e.target.files?.[0]) handlePdfImport(e.target.files[0]); }} />
+          <Button variant="outline" size="sm" onClick={() => pdfInputRef.current?.click()} disabled={importing}>
+            {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+            {importing ? "Importing…" : "Import PDF"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleSave(false)} disabled={saving}>Save Draft</Button>
           <Button size="sm" onClick={() => handleSave(true)} disabled={saving}>Publish Session</Button>
         </div>
@@ -181,6 +298,7 @@ export default function ManageSessionResults() {
           <thead className="bg-muted/50">
             <tr>
               <th className="px-2 py-2 text-left w-12">Pos</th>
+              <th className="px-2 py-2 text-left w-14">No.</th>
               <th className="px-2 py-2 text-left min-w-[160px]">Driver</th>
               <th className="px-2 py-2 text-left min-w-[140px]">Team</th>
               <th className="px-2 py-2 text-left min-w-[140px]">Car</th>
@@ -195,6 +313,7 @@ export default function ManageSessionResults() {
             {rows.map(row => (
               <tr key={row._key} className="border-t border-border hover:bg-muted/20">
                 <td className="px-2 py-1"><Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" /></td>
+                <td className="px-1 py-1"><Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" /></td>
                 <td className="px-1 py-1"><AutocompleteField entityType="driver" value={row.driver} onChange={v => updateRow(row._key, "driver", v)} /></td>
                 <td className="px-1 py-1"><AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} /></td>
                 <td className="px-1 py-1"><AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} /></td>

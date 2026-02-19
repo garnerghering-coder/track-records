@@ -1244,6 +1244,7 @@ export type Database = {
         Row: {
           best_lap_time: string | null
           car_id: string | null
+          car_number: string | null
           created_at: string
           driver_id: string | null
           gap_to_p1: string | null
@@ -1256,6 +1257,7 @@ export type Database = {
         Insert: {
           best_lap_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
           gap_to_p1?: string | null
@@ -1268,6 +1270,7 @@ export type Database = {
         Update: {
           best_lap_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
           gap_to_p1?: string | null
@@ -1312,6 +1315,7 @@ export type Database = {
         Row: {
           best_time: string | null
           car_id: string | null
+          car_number: string | null
           created_at: string
           driver_id: string | null
           gap_to_pole: string | null
@@ -1327,6 +1331,7 @@ export type Database = {
         Insert: {
           best_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
           gap_to_pole?: string | null
@@ -1342,6 +1347,7 @@ export type Database = {
         Update: {
           best_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
           gap_to_pole?: string | null
@@ -1389,6 +1395,7 @@ export type Database = {
         Row: {
           average_lap_time: string | null
           car_id: string | null
+          car_number: string | null
           created_at: string
           dnf_reason: string | null
           driver_id: string | null
@@ -1407,6 +1414,7 @@ export type Database = {
         Insert: {
           average_lap_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           dnf_reason?: string | null
           driver_id?: string | null
@@ -1425,6 +1433,7 @@ export type Database = {
         Update: {
           average_lap_time?: string | null
           car_id?: string | null
+          car_number?: string | null
           created_at?: string
           dnf_reason?: string | null
           driver_id?: string | null
@@ -1532,6 +1541,7 @@ export type Database = {
           id: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
+          source_document_url: string | null
           status: Database["public"]["Enums"]["event_status_enum"]
           updated_at: string
         }
@@ -1542,6 +1552,7 @@ export type Database = {
           id?: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
+          source_document_url?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
         }
@@ -1552,6 +1563,7 @@ export type Database = {
           id?: string
           name?: string
           session_type?: Database["public"]["Enums"]["session_type_enum"]
+          source_document_url?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
         }
