@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,6 @@ interface Props {
   value: { id: string; label: string } | null;
   onChange: (val: { id: string; label: string } | null) => void;
   className?: string;
-  /** For season autocomplete — filters by this series */
   filterSeriesId?: string;
   placeholder?: string;
 }
@@ -21,9 +21,30 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
   const [results, setResults] = useState<{ id: string; label: string }[]>([]);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setQuery(value?.label || ""); }, [value]);
+
+  // Position the dropdown using a portal
+  const updatePosition = useCallback(() => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      updatePosition();
+      window.addEventListener("scroll", updatePosition, true);
+      window.addEventListener("resize", updatePosition);
+      return () => {
+        window.removeEventListener("scroll", updatePosition, true);
+        window.removeEventListener("resize", updatePosition);
+      };
+    }
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) { setResults([]); return; }
@@ -59,37 +80,52 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
   }, [query, open, entityType, filterSeriesId]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        // Also check if click is inside the portal dropdown
+        const dropdown = document.getElementById(`ac-dropdown-${entityType}`);
+        if (dropdown && dropdown.contains(e.target as Node)) return;
+        setOpen(false);
+      }
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [entityType]);
 
   const entityLabel = entityType === "season" ? "season (year)" : entityType;
 
+  const dropdown = open && dropdownPos && createPortal(
+    <div
+      id={`ac-dropdown-${entityType}`}
+      className="fixed z-[9999] rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto"
+      style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+    >
+      {results.map(r => (
+        <button key={r.id} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors" onClick={() => { onChange(r); setQuery(r.label); setOpen(false); }}>
+          {r.label}
+        </button>
+      ))}
+      {results.length === 0 && query.trim() && (
+        <p className="px-3 py-1.5 text-xs text-muted-foreground">No matches</p>
+      )}
+      <button className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-accent transition-colors border-t border-border" onClick={() => { setCreating(true); setOpen(false); }}>
+        + Create new {entityLabel}
+      </button>
+    </div>,
+    document.body
+  );
+
   return (
-    <div ref={ref} className={cn("relative", className)}>
+    <div ref={containerRef} className={cn("relative", className)}>
       <Input
+        ref={inputRef}
         value={query}
         onChange={e => { setQuery(e.target.value); onChange(null); setOpen(true); }}
         onFocus={() => setOpen(true)}
         placeholder={placeholder || `Search ${entityLabel}…`}
         className="h-8 text-xs"
       />
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto">
-          {results.map(r => (
-            <button key={r.id} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors" onClick={() => { onChange(r); setQuery(r.label); setOpen(false); }}>
-              {r.label}
-            </button>
-          ))}
-          {results.length === 0 && query.trim() && (
-            <p className="px-3 py-1.5 text-xs text-muted-foreground">No matches</p>
-          )}
-          <button className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-accent transition-colors border-t border-border" onClick={() => { setCreating(true); setOpen(false); }}>
-            + Create new {entityLabel}
-          </button>
-        </div>
-      )}
+      {dropdown}
       {creating && (
         <QuickCreateModal
           open={creating}
