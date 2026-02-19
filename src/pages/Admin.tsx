@@ -1662,6 +1662,9 @@ Here are the results to parse:
             <TabsTrigger value="all-teams">
               <Car className="h-3.5 w-3.5 mr-1" /> All Teams ({allTeams.length})
             </TabsTrigger>
+            <TabsTrigger value="all-circuits">
+              <MapPin className="h-3.5 w-3.5 mr-1" /> All Circuits ({allCircuits.length})
+            </TabsTrigger>
             <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
             <TabsTrigger value="ai-import">
               <Sparkles className="h-3.5 w-3.5 mr-1" /> Race Import
@@ -1670,7 +1673,7 @@ Here are the results to parse:
               Pending {pendingEvents.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingEvents.length}</span>}
             </TabsTrigger>
             <TabsTrigger value="duplicates">
-              <Users className="h-3.5 w-3.5 mr-1" /> Duplicates {(duplicateCount + teamDuplicateCount) > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{duplicateCount + teamDuplicateCount}</span>}
+              <Users className="h-3.5 w-3.5 mr-1" /> Duplicates {(duplicateCount + teamDuplicateCount + circuitDuplicateCount) > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{duplicateCount + teamDuplicateCount + circuitDuplicateCount}</span>}
             </TabsTrigger>
             <TabsTrigger value="claims">
               Claims {pendingClaims.length > 0 && <span className="ml-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">{pendingClaims.length}</span>}
@@ -1940,6 +1943,10 @@ Here are the results to parse:
               <div>
                 <h3 className="font-display text-lg font-semibold text-foreground mb-3">Team Duplicates</h3>
                 <TeamDuplicatesTab onRefresh={() => { fetchRaceEvents(); fetchTeams(); }} onGroupCountChange={setTeamDuplicateCount} />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-semibold text-foreground mb-3">Circuit Duplicates</h3>
+                <CircuitDuplicatesTab onRefresh={fetchCircuits} onGroupCountChange={setCircuitDuplicateCount} />
               </div>
             </div>
           </TabsContent>
@@ -2412,6 +2419,76 @@ Here are the results to parse:
             </div>
           </TabsContent>
 
+          {/* ── All Circuits ── */}
+          <TabsContent value="all-circuits">
+            <div className="flex items-center gap-2 mb-4">
+              <Button size="sm" onClick={handleBulkEnrichCircuits} disabled={bulkEnrichingCircuits}>
+                {bulkEnrichingCircuits ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+                Enrich All Missing
+              </Button>
+            </div>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Country</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Location</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Length</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Turns</th>
+                    <th className="px-4 py-3 text-center font-semibold text-card-foreground">Map</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allCircuits.map((c: any) => (
+                    <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-card-foreground font-medium" onClick={() => navigate(`/circuit/${c.id}`)}>{c.name}</Button>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.country ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.location ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.length_km ? `${c.length_km} km` : "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.turns ?? "—"}</td>
+                      <td className="px-4 py-3 text-center">{c.image_url ? <Check className="h-4 w-4 text-green-400 mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichCircuit(c.id)} disabled={enrichingCircuitIds.has(c.id)} title="Enrich">
+                            {enrichingCircuitIds.has(c.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichCircuit(c.id, true)} disabled={enrichingCircuitIds.has(c.id)} title="Force re-enrich">
+                            {enrichingCircuitIds.has(c.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/circuit/${c.id}`)}><Eye className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm"><Trash className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete this circuit. Events linked to it will lose their circuit reference.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                                  const { error } = await supabase.from("circuits").delete().eq("id", c.id);
+                                  if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+                                  else { toast({ title: "Circuit deleted" }); fetchCircuits(); }
+                                }}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {allCircuits.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No circuits yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
           {/* ── All Races ── */}
           <TabsContent value="all-races">
             {selectedEventIds.size > 0 && (
@@ -2484,6 +2561,9 @@ Here are the results to parse:
                         <td className="px-4 py-3 text-center text-muted-foreground">{ev.race_entries?.length ?? 0}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichEvent(ev.id)} disabled={enrichingEventIds.has(ev.id)} title="Enrich event">
+                              {enrichingEventIds.has(ev.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                            </Button>
                             <Button variant="ghost" size="sm" onClick={() => toggleExpandEvent(ev.id)} title="Edit entries">
                               {expandedEventId === ev.id ? <ChevronUp className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                             </Button>
