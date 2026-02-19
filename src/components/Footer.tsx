@@ -8,7 +8,7 @@ const Footer = () => {
         <div className="grid gap-8 md:grid-cols-4">
           <div>
             <div className="flex items-center mb-3">
-              <img src={logoFull} alt="Track Records" className="h-7 w-auto" />
+              <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/c4e44093-bdee-41b1-bde6-0e0d54bf8054.png" />
             </div>
             <p className="text-sm text-muted-foreground font-light">
               The searchable motorsport database.
@@ -42,8 +42,8 @@ const Footer = () => {
           © {new Date().getFullYear()} Track Records. All rights reserved.
         </div>
       </div>
-    </footer>
-  );
+    </footer>);
+
 };
 
 export default Footer;

@@ -22,7 +22,7 @@ const Header = () => {
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) checkAdmin(session.user.id); else setIsAdmin(false);
+      if (session) checkAdmin(session.user.id);else setIsAdmin(false);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -38,16 +38,16 @@ const Header = () => {
   };
 
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    if (!searchQuery.trim()) {setSearchResults([]);return;}
     const timer = setTimeout(async () => {
       const lower = `%${searchQuery}%`;
       const [drivers, teams, events, series, circuits] = await Promise.all([
-        supabase.from("driver_profiles").select("id, first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(4),
-        supabase.from("team_profiles").select("id, name").ilike("name", lower).limit(4),
-        supabase.from("race_events").select("id, event_name, series_name").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(4),
-        supabase.from("series").select("id, name").ilike("name", lower).limit(3),
-        supabase.from("circuits").select("id, name").ilike("name", lower).limit(3),
-      ]);
+      supabase.from("driver_profiles").select("id, first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(4),
+      supabase.from("team_profiles").select("id, name").ilike("name", lower).limit(4),
+      supabase.from("race_events").select("id, event_name, series_name").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(4),
+      supabase.from("series").select("id, name").ilike("name", lower).limit(3),
+      supabase.from("circuits").select("id, name").ilike("name", lower).limit(3)]
+      );
       const results: any[] = [];
       (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: `${d.first_name} ${d.last_name}`, url: `/driver/${d.id}` }));
       (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.name, url: `/team/${t.id}` }));
@@ -69,98 +69,98 @@ const Header = () => {
   };
 
   const navLinks = [
-    { to: "/search", label: "Drivers" },
-    { to: "/teams", label: "Teams" },
-    { to: "/results", label: "Results" },
-    { to: "/calendar", label: "Calendar" },
-  ];
+  { to: "/search", label: "Drivers" },
+  { to: "/teams", label: "Teams" },
+  { to: "/results", label: "Results" },
+  { to: "/calendar", label: "Calendar" }];
+
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="container flex h-14 items-center justify-between">
         <Link to="/" className="flex items-center">
-          <img src={logoFull} alt="Track Records" className="h-7 w-auto" />
+          <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
           {/* Search toggle */}
           <div className="relative">
             <button
-              onClick={() => { setSearchOpen(!searchOpen); setSearchQuery(""); setSearchResults([]); }}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
+              onClick={() => {setSearchOpen(!searchOpen);setSearchQuery("");setSearchResults([]);}}
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+
               Search
             </button>
-            {searchOpen && (
-              <div className="absolute right-0 top-full mt-2 w-96 rounded-lg border border-border bg-card shadow-xl p-2 z-50">
+            {searchOpen &&
+            <div className="absolute right-0 top-full mt-2 w-96 rounded-lg border border-border bg-card shadow-xl p-2 z-50">
                 <form onSubmit={handleSearchSubmit} className="relative">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    autoFocus
-                    placeholder="Search everything…"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    className="pl-8 pr-8 h-9 text-sm"
-                  />
-                  <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  autoFocus
+                  placeholder="Search everything…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-8 h-9 text-sm" />
+
+                  <button type="button" onClick={() => {setSearchOpen(false);setSearchQuery("");setSearchResults([]);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </form>
-                {searchResults.length > 0 && (
-                  <div className="mt-2 max-h-72 overflow-y-auto space-y-0.5">
-                    {searchResults.map(r => (
-                      <Link
-                        key={`${r.type}-${r.id}`}
-                        to={r.url}
-                        onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
-                        className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                      >
+                {searchResults.length > 0 &&
+              <div className="mt-2 max-h-72 overflow-y-auto space-y-0.5">
+                    {searchResults.map((r) =>
+                <Link
+                  key={`${r.type}-${r.id}`}
+                  to={r.url}
+                  onClick={() => {setSearchOpen(false);setSearchQuery("");}}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors">
+
                         <span className="text-[10px] uppercase font-medium text-muted-foreground w-12 shrink-0">{r.type}</span>
                         <span className="text-card-foreground truncate">{r.label}</span>
                       </Link>
-                    ))}
-                    {searchQuery.trim() && (
-                      <button
-                        onClick={() => { navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`); setSearchOpen(false); setSearchQuery(""); }}
-                        className="w-full text-left rounded px-2 py-1.5 text-sm text-primary hover:bg-accent transition-colors"
-                      >
+                )}
+                    {searchQuery.trim() &&
+                <button
+                  onClick={() => {navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);setSearchOpen(false);setSearchQuery("");}}
+                  className="w-full text-left rounded px-2 py-1.5 text-sm text-primary hover:bg-accent transition-colors">
+
                         View all results for "{searchQuery}"
                       </button>
-                    )}
+                }
                   </div>
-                )}
-                {searchQuery.trim() && searchResults.length === 0 && (
-                  <p className="text-xs text-muted-foreground p-2 text-center">No results found.</p>
-                )}
+              }
+                {searchQuery.trim() && searchResults.length === 0 &&
+              <p className="text-xs text-muted-foreground p-2 text-center">No results found.</p>
+              }
               </div>
-            )}
+            }
           </div>
 
-          {navLinks.map(link => (
-            <Link key={link.to} to={link.to} className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          {navLinks.map((link) =>
+          <Link key={link.to} to={link.to} className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               {link.label}
             </Link>
-          ))}
-          {session && (
-            <Link to="/contribute" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          )}
+          {session &&
+          <Link to="/contribute" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Contribute
             </Link>
-          )}
-          {isAdmin && (
-            <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          }
+          {isAdmin &&
+          <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               <Shield className="h-3.5 w-3.5 inline mr-1" />Admin
             </Link>
-          )}
-          {session ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
+          }
+          {session ?
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
               Log Out
-            </Button>
-          ) : (
-            <div className="flex items-center gap-2">
+            </Button> :
+
+          <div className="flex items-center gap-2">
               <Link to="/auth"><Button variant="ghost" size="sm">Log In</Button></Link>
               <Link to="/auth?signup=true"><Button size="sm">Sign Up</Button></Link>
             </div>
-          )}
+          }
         </nav>
 
         {/* Mobile */}
@@ -172,36 +172,36 @@ const Header = () => {
       </div>
 
       {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
-          {navLinks.map(link => (
-            <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+      {mobileMenuOpen &&
+      <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
+          {navLinks.map((link) =>
+        <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               {link.label}
             </Link>
-          ))}
-          {session && (
-            <Link to="/contribute" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+        )}
+          {session &&
+        <Link to="/contribute" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Contribute
             </Link>
-          )}
-          {isAdmin && (
-            <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+        }
+          {isAdmin &&
+        <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Admin
             </Link>
-          )}
-          {session ? (
-            <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+        }
+          {session ?
+        <button onClick={() => {handleLogout();setMobileMenuOpen(false);}} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Log Out
-            </button>
-          ) : (
-            <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-primary">
+            </button> :
+
+        <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-primary">
               Sign Up / Log In
             </Link>
-          )}
+        }
         </div>
-      )}
-    </header>
-  );
+      }
+    </header>);
+
 };
 
 export default Header;
