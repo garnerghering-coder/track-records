@@ -94,7 +94,7 @@ const Index = () => {
             </form>
 
             <div className="mt-6 flex items-center justify-center gap-3 text-sm text-muted-foreground">
-              <Link to="/search" className="hover:text-foreground transition-colors">Drivers</Link>
+              <Link to="/search?tab=drivers" className="hover:text-foreground transition-colors">Drivers</Link>
               <span>·</span>
               <Link to="/teams" className="hover:text-foreground transition-colors">Teams</Link>
               <span>·</span>

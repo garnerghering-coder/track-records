@@ -69,7 +69,7 @@ const Header = () => {
   };
 
   const navLinks = [
-  { to: "/search", label: "Drivers" },
+  { to: "/search?tab=drivers", label: "Drivers" },
   { to: "/teams", label: "Teams" },
   { to: "/results", label: "Results" },
   { to: "/calendar", label: "Calendar" }];

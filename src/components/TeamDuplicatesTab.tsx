@@ -38,6 +38,15 @@ function normalizeTeamName(name: string): string {
   return name.toLowerCase().replace(/[-_\\s]+/g, " ").replace(/[^a-z0-9 ]/g, "").trim();
 }
 
+function namesAreSimilar(a: string, b: string): boolean {
+  const na = normalizeTeamName(a);
+  const nb = normalizeTeamName(b);
+  if (na === nb) return true;
+  // One contains the other (handles "Racing Team ABC" vs "ABC")
+  if (na.includes(nb) || nb.includes(na)) return true;
+  return false;
+}
+
 export default function TeamDuplicatesTab({ onRefresh, onGroupCountChange }: TeamDuplicatesTabProps) {
   const { toast } = useToast();
   const [teams, setTeams] = useState<TeamProfile[]>([]);
@@ -87,25 +96,34 @@ export default function TeamDuplicatesTab({ onRefresh, onGroupCountChange }: Tea
   }, [dismissed]);
 
   const groups = useMemo(() => {
-    const byNorm = new Map<string, TeamProfile[]>();
-    for (const t of teams) {
-      const key = normalizeTeamName(t.name);
-      if (!byNorm.has(key)) byNorm.set(key, []);
-      byNorm.get(key)!.push(t);
-    }
-
+    // Build groups using fuzzy name matching (not just exact normalized match)
+    const used = new Set<number>();
     const result: DuplicateGroup[] = [];
-    for (const [, group] of byNorm) {
-      if (group.length < 2) continue;
+
+    for (let i = 0; i < teams.length; i++) {
+      if (used.has(i)) continue;
+      const cluster: TeamProfile[] = [teams[i]];
+      used.add(i);
+
+      for (let j = i + 1; j < teams.length; j++) {
+        if (used.has(j)) continue;
+        const matches = cluster.some(c => namesAreSimilar(c.name, teams[j].name));
+        if (matches) {
+          cluster.push(teams[j]);
+          used.add(j);
+        }
+      }
+
+      if (cluster.length < 2) continue;
       let hasUndismissed = false;
-      for (let a = 0; a < group.length && !hasUndismissed; a++) {
-        for (let b = a + 1; b < group.length && !hasUndismissed; b++) {
-          if (!dismissedSet.has(makePairKey(group[a].id, group[b].id))) hasUndismissed = true;
+      for (let a = 0; a < cluster.length && !hasUndismissed; a++) {
+        for (let b = a + 1; b < cluster.length && !hasUndismissed; b++) {
+          if (!dismissedSet.has(makePairKey(cluster[a].id, cluster[b].id))) hasUndismissed = true;
         }
       }
       if (!hasUndismissed) continue;
-      const key = group.map(t => t.id).sort().join("|");
-      result.push({ key, teams: group.map(t => ({ ...t, entryCount: entryCounts[t.id] || 0 })) });
+      const key = cluster.map(t => t.id).sort().join("|");
+      result.push({ key, teams: cluster.map(t => ({ ...t, entryCount: entryCounts[t.id] || 0 })) });
     }
     return result;
   }, [teams, dismissedSet, entryCounts]);

@@ -46,11 +46,29 @@ const typeFilter = [
 
 const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab");
   const [search, setSearch] = useState(searchParams.get("q") || "");
-  const [typeFilterVal, setTypeFilterVal] = useState("all");
+  const [typeFilterVal, setTypeFilterVal] = useState(initialTab === "drivers" ? "driver" : "all");
   const [category, setCategory] = useState("all");
   const [results, setResults] = useState<ResultItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [allDrivers, setAllDrivers] = useState<ResultItem[]>([]);
+  const [driversLoading, setDriversLoading] = useState(false);
+
+  // If arriving at /search?tab=drivers with no query, load all drivers
+  useEffect(() => {
+    if (initialTab === "drivers" && !search.trim()) {
+      setDriversLoading(true);
+      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category")
+        .order("last_name").limit(500).then(({ data }) => {
+          setAllDrivers((data || []).map((d: any) => ({
+            type: "driver" as const, id: d.id, label: `${d.first_name} ${d.last_name}`,
+            url: `/driver/${d.id}`, nationality: d.nationality, category: d.primary_category,
+          })));
+          setDriversLoading(false);
+        });
+    }
+  }, [initialTab]);
 
   useEffect(() => {
     const q = searchParams.get("q");
@@ -174,7 +192,31 @@ const SearchPage = () => {
           </Select>
         </div>
 
-        {!search.trim() ? (
+        {!search.trim() && typeFilterVal === "driver" && allDrivers.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground mb-4">{allDrivers.length} drivers</p>
+            {allDrivers.filter(d => category === "all" || d.category === category).map(r => (
+              <Link
+                key={`${r.type}-${r.id}`}
+                to={r.url}
+                className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all"
+              >
+                <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {r.nationality && <FlagImage nationality={r.nationality} size={14} />}
+                    <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
+                  </div>
+                </div>
+                {r.category && (
+                  <span className="text-xs text-muted-foreground shrink-0">{categoryLabels[r.category] || r.category}</span>
+                )}
+              </Link>
+            ))}
+          </div>
+        ) : !search.trim() && driversLoading ? (
+          <p className="text-center text-muted-foreground py-12">Loading drivers…</p>
+        ) : !search.trim() ? (
           <p className="text-center text-muted-foreground py-12">Type something to search.</p>
         ) : loading ? (
           <p className="text-center text-muted-foreground py-12">Searching…</p>

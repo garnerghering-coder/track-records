@@ -28,7 +28,6 @@ const CircuitProfile = () => {
       const { data: c } = await supabase.from("circuits").select("*").eq("id", id).single();
       setCircuit(c);
 
-      // Events at this circuit via circuit_id or matching location
       let evQuery = supabase.from("race_events")
         .select("id, event_name, series_name, season_year, category, location, event_date")
         .order("event_date", { ascending: false });
@@ -38,7 +37,6 @@ const CircuitProfile = () => {
       }
       const { data: evData } = await evQuery.limit(100);
 
-      // Fallback: if no circuit_id linked events, try matching by location name
       if ((!evData || evData.length === 0) && c?.name) {
         const { data: locEvents } = await supabase.from("race_events")
           .select("id, event_name, series_name, season_year, category, location, event_date")
@@ -81,27 +79,47 @@ const CircuitProfile = () => {
       </section>
 
       <div className="container py-8">
-        {circuit.description && (
-          <div className="mb-8 rounded-lg border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground leading-relaxed">{circuit.description}</p>
-          </div>
-        )}
+        <div className="grid gap-8 lg:grid-cols-3">
+          <div className="space-y-6">
+            {circuit.description && (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <p className="text-sm text-muted-foreground leading-relaxed">{circuit.description}</p>
+              </div>
+            )}
 
-        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events at This Circuit</h2>
-        {events.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {events.map(ev => (
-              <Link key={ev.id} to={`/event/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
-                <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.event_name}</h3>
-                <p className="text-xs text-muted-foreground mt-1">{ev.series_name} · {ev.season_year}</p>
-                {ev.event_date && <p className="text-xs text-muted-foreground mt-0.5">{new Date(ev.event_date).toLocaleDateString()}</p>}
-                {ev.category && <Badge variant="secondary" className="mt-2 text-xs">{categoryLabels[ev.category] || ev.category}</Badge>}
-              </Link>
-            ))}
+            {circuit.image_url && (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Map</h3>
+                <img src={circuit.image_url} alt={`${circuit.name} layout`} className="w-full rounded" />
+              </div>
+            )}
+
+            {/* Contribute CTA */}
+            <div className="rounded-lg border border-border bg-card p-5 text-center">
+              <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
+              <p className="text-xs text-muted-foreground mb-3">Help us improve this circuit profile.</p>
+              <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
+            </div>
           </div>
-        )}
+
+          <div className="lg:col-span-2">
+            <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events at This Circuit</h2>
+            {events.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {events.map(ev => (
+                  <Link key={ev.id} to={`/event/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
+                    <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.event_name}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{ev.series_name} · {ev.season_year}</p>
+                    {ev.event_date && <p className="text-xs text-muted-foreground mt-0.5">{new Date(ev.event_date).toLocaleDateString()}</p>}
+                    {ev.category && <Badge variant="secondary" className="mt-2 text-xs">{categoryLabels[ev.category] || ev.category}</Badge>}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       <Footer />
     </div>

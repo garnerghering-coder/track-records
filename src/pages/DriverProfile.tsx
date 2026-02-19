@@ -353,38 +353,12 @@ const DriverProfilePage = () => {
             </div>
           }
 
-          {/* Claim section */}
-          {!profile.is_claimed &&
-          <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-5 text-center">
-              <p className="text-sm text-muted-foreground mb-3">Is this your profile?</p>
-              {!session ?
-            <Link to="/auth?signup=true"><Button size="sm">Sign Up to Claim</Button></Link> :
-            existingClaim ?
-            <p className="text-xs text-muted-foreground">Your claim is <span className="font-medium text-primary">{existingClaim.status}</span>.</p> :
-
-            <Dialog open={claimDialogOpen} onOpenChange={setClaimDialogOpen}>
-                  <DialogTrigger asChild><Button size="sm">Claim This Profile</Button></DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>Claim Profile: {profile.first_name} {profile.last_name}</DialogTitle></DialogHeader>
-                    <div className="space-y-4 mt-2">
-                      <p className="text-sm text-muted-foreground">Upload a document (racing license, ID, or similar) to verify your identity.</p>
-                      <div>
-                        <Label className="text-card-foreground">Verification Document</Label>
-                        <div className="mt-1 flex items-center justify-center rounded-lg border-2 border-dashed border-border p-6 cursor-pointer hover:border-primary/50 transition-colors" onClick={() => fileRef.current?.click()}>
-                          {claimFile ? <span className="text-sm text-card-foreground">{claimFile.name}</span> : <span className="text-sm text-muted-foreground">Click to upload (PDF, JPG, PNG)</span>}
-                          <input ref={fileRef} type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setClaimFile(e.target.files?.[0] || null)} />
-                        </div>
-                      </div>
-                      <div><Label className="text-card-foreground">Message (optional)</Label><Input value={claimMessage} onChange={(e) => setClaimMessage(e.target.value)} placeholder="Any additional info…" /></div>
-                      <Button onClick={handleSubmitClaim} disabled={claimSubmitting || !claimFile} className="w-full">
-                        {claimSubmitting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Submitting…</> : "Submit Claim"}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-            }
+          {/* Contribute CTA */}
+          <div className="rounded-lg border border-border bg-card p-5 text-center">
+              <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
+              <p className="text-xs text-muted-foreground mb-3">Help us improve this profile by contributing updates.</p>
+              <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
             </div>
-          }
         </div>
 
         {/* Results */}
