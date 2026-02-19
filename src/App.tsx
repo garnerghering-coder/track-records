@@ -18,6 +18,7 @@ import TeamProfile from "./pages/TeamProfile";
 import Contribute from "./pages/Contribute";
 import CircuitProfile from "./pages/CircuitProfile";
 import SeriesProfile from "./pages/SeriesProfile";
+import SeriesListing from "./pages/Series";
 import Calendar from "./pages/Calendar";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
           <Route path="/teams" element={<Teams />} />
           <Route path="/team/:id" element={<TeamProfile />} />
           <Route path="/circuit/:id" element={<CircuitProfile />} />
+          <Route path="/series" element={<SeriesListing />} />
           <Route path="/series/:id" element={<SeriesProfile />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/contribute" element={<Contribute />} />

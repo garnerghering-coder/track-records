@@ -114,7 +114,7 @@ const Index = () => {
               { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
               { label: "Teams", value: stats.teams, to: "/teams" },
               { label: "Race Events", value: stats.events, to: "/results" },
-              { label: "Series", value: stats.series, to: "/results" },
+              { label: "Series", value: stats.series, to: "/series" },
             ].map((stat) => (
               <Link key={stat.label} to={stat.to}>
                 <motion.div
