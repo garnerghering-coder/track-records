@@ -1,64 +1,131 @@
 
 
-## Four Fixes for Track Records
+## Comprehensive Results & Driver Enhancement
 
-### 1. Series Profile: Show V2 Events
-
-**Problem**: The Series Profile page (`/series/:id`) only queries the V1 `race_events` table. Published V2 events live in `v2_events`, linked through `v2_seasons` (which has a `series_id` foreign key to `v2_series`).
-
-**Fix**: In `src/pages/SeriesProfile.tsx`, add a second query that fetches V2 events by joining `v2_events -> v2_seasons -> v2_series` where `v2_series.id` matches the series ID. Merge both V1 and V2 events into the display, with V2 events linking to `/events/:id` instead of `/event/:id`. The series ID used in the URL corresponds to the `series` table (V1), so we also need to check if there's a matching `v2_series` record (by name) and include those events too.
+This plan covers several interconnected changes: persisting column order, fixing styling, enhancing driver creation, adding nationality display, adding an "Int" (interval) column, and implementing auto-calculation for lap time fields.
 
 ---
 
-### 2. Public Results: Add Car Number Column + Custom Columns
+### 1. Persist Column Order on Save/Publish
 
-**Problem**: The `EventPage.tsx` session results table is missing the "No." (car number) column. Also, any custom columns added during data entry are not displayed.
+**Problem**: When you reorder columns via drag-and-drop, the order is lost on save because it's not stored anywhere.
 
-**Fix**: In `src/pages/EventPage.tsx`:
-- Add a `No.` column between `Pos` and `Driver` in all session type table layouts, displaying `r.car_number`
-- For custom columns: since custom column data would need to be stored in the database to be displayed publicly (currently they're only in-memory during editing), we'll add the `car_number` fix now. Custom column persistence is a separate database migration task -- noted below.
+**Solution**: Add a `column_order JSONB` column to the `v2_sessions` table. When saving/publishing, persist the current `columnOrder` array. When loading, read it back and initialize `columnOrder` from it.
 
-**Note on custom columns**: Currently custom columns exist only in the manage UI's local state and are not saved to the database. To display them publicly, we'd need a JSONB `extra_data` column on each result table. This plan will add that database migration and wire it up end-to-end so custom columns persist and display publicly.
-
----
-
-### 3. PDF Export: Fix and Redesign Without AI
-
-**Problem**: The Export PDF button calls `exportSessionPdf` which uses jsPDF. It needs to:
-- Actually work (currently it does use jsPDF which should work client-side, but may be missing car_number)
-- Include the uploaded Track Records black logo as a header image
-- Include car number column
-- Include custom column data
-
-**Fix**: In `src/lib/pdf-export.ts`:
-- Copy the uploaded logo image to `src/assets/track-records-logo.png` and convert it to a base64 data URI for embedding in the PDF via `doc.addImage()`
-- Add "No." column to all table layouts (between Pos and Driver)
-- Accept optional `customColumns` parameter and append those to the table
-- Keep the existing jsPDF approach -- no AI involved, purely client-side rendering
+- **Database migration**: `ALTER TABLE v2_sessions ADD COLUMN column_order jsonb DEFAULT NULL;`
+- **ManageSessionResults.tsx**: On save, include `column_order` in the session update. On load, initialize `columnOrder` from `session.column_order` if present.
 
 ---
 
-### 4. Drag-and-Drop Column and Row Reordering in Manage
+### 2. Fix Gap Column Styling
 
-**Problem**: Admins want to reorder columns and rows by dragging.
+**Problem**: The Gap column in the public results view uses `text-muted-foreground` class, making it appear a different color than other mono-spaced values.
 
-**Fix**: In `src/pages/manage/ManageSessionResults.tsx`:
-- **Row reordering**: Make table rows draggable using HTML5 drag-and-drop (no extra library needed). Each row gets `draggable`, `onDragStart`, `onDragOver`, `onDrop` handlers. Dropping a row between others reorders the `rows` array and auto-updates position numbers.
-- **Column reordering**: Store the column order in state as an array of column keys (e.g., `["position", "car_number", "driver", "team", "car", "best_lap_time", ...]`). Column headers get drag handles. Dragging a column header to a new position reorders the array, which changes both the header and cell render order. This applies to the fixed columns as well as custom columns.
+**Solution**: In `EventPage.tsx`, remove the `text-muted-foreground` class from Gap cells (`gap_to_p1`, `gap_to_pole`) so they use the same styling as Best Lap and other time fields.
+
+---
+
+### 3. Driver Quick-Create: Add Nationality + DOB, Remove Short Name
+
+**Problem**: When creating a new driver inline (via the autocomplete "Create new driver" flow), only the name is captured. Users want to set nationality and DOB at creation time. The 3-letter code ("short_name") is not needed anywhere.
+
+**Changes**:
+
+- **QuickCreateModal.tsx**: For `entityType === "driver"`, add Nationality and Date of Birth fields (using the existing `extra` and `extra2` state). Pass nationality and date_of_birth in the insert payload.
+- **ManageDrivers.tsx**: Remove the "Code" column from the table header and body. Remove the Short Name field from the edit form. Keep nationality and DOB.
+- **EventPage.tsx**: Remove references to `v2_drivers.short_name` from the select query.
+- **Site-wide**: The `short_name` column stays in the database but is no longer displayed or collected.
+
+---
+
+### 4. Auto "Nat" Column Next to Driver
+
+**Problem**: The nationality flag should automatically appear next to the driver name, using the FlagImage component and flagcdn.com images.
+
+**Changes**:
+
+- **ManageSessionResults.tsx**: 
+  - Add "nat" as a built-in column in `getDefaultColumns()`, right after "driver"
+  - The "nat" column is auto-populated -- it reads the driver's nationality from the driver record and displays a small flag. No user input needed.
+  - Fetch driver nationality data when loading results (already selecting `v2_drivers`)-- add `nationality` to the select.
+  - Store `_driverNationality` on each row for display purposes.
+
+- **EventPage.tsx**: 
+  - Add "Nat" column after "Driver" in the public table
+  - Fetch `v2_drivers(full_name, nationality)` 
+  - Display FlagImage component
+
+- **PDF export**: Add a "Nat" text column (3-letter country code since images can't go in jsPDF easily).
+
+---
+
+### 5. Built-in "Int" (Interval) Column
+
+**Problem**: "Int" (interval to car ahead) should be a standard column, shown next to Gap.
+
+**Changes**:
+
+- **Database**: No new database column needed -- Int can be stored in `extra_data` under the key "Int", or we can add a dedicated `interval_to_ahead` column. Using `extra_data` is simpler and already works end-to-end.
+- **ManageSessionResults.tsx**: Add "gap_int" as a built-in column in `getDefaultColumns()` for all session types, positioned after the gap column. Map it to `extra_data.Int` on save and load.
+- **EventPage.tsx**: Display the "Int" value from extra_data.
+- **PDF export**: Include "Int" column.
+
+---
+
+### 6. Auto-Calculation: Best Lap / Gap / Int
+
+**Problem**: For practice (and all session types), when you type a Best Lap time, the system should auto-calculate Gap (difference to P1's best lap) and Int (difference to the row above). Editing any one of these three should update the others where possible.
+
+**Implementation approach** (pure client-side math, no AI):
+
+- **Time parsing utility functions**:
+  - `parseTime(str)` -- converts "M:SS.mmm" or "SS.mmm" to milliseconds
+  - `formatGap(ms)` -- formats a millisecond difference as "+S.mmm", "+SS.mmm", or "+M:SS.mmm"
+  - `formatLapTime(ms)` -- formats milliseconds as "M:SS.mmm"
+
+- **Auto-recalculation logic** in ManageSessionResults.tsx:
+  - When Best Lap changes on any row: recalculate Gap (= row's best lap - P1's best lap) and Int (= row's best lap - previous row's best lap)
+  - When Gap changes on a row: recalculate Best Lap (= P1's best lap + gap) and Int
+  - When Int changes on a row: recalculate Best Lap (= previous row's best lap + int) and Gap
+  - A flag tracks which field the user is currently editing to avoid circular updates
+  - This applies to practice (best_lap_time, gap_to_p1, gap_int), qualifying (best_time, gap_to_pole, gap_int), and race (fastest_lap_time equivalents where applicable)
 
 ---
 
 ### Technical Details
 
-**Files to modify:**
+**Database migration** (one statement):
+```sql
+ALTER TABLE v2_sessions ADD COLUMN IF NOT EXISTS column_order jsonb DEFAULT NULL;
+```
 
-1. **`src/pages/SeriesProfile.tsx`** -- Add V2 event query via `v2_events` joined through `v2_seasons` where series matches
-2. **`src/pages/EventPage.tsx`** -- Add `car_number` column to all three table layouts (practice, qualifying, race); add custom column rendering from `extra_data` JSONB
-3. **`src/lib/pdf-export.ts`** -- Add logo image embedding via `addImage()`, add car number column, accept custom columns param
-4. **`src/pages/manage/ManageSessionResults.tsx`** -- Add HTML5 drag-and-drop for rows and columns; wire up `extra_data` JSONB saving for custom columns
-5. **Copy logo asset** -- `user-uploads://Untitled_design_-_2026-02-19T131913.407.png` to `src/assets/track-records-logo.png`
+**Files to modify**:
 
-**Database migration needed:**
-- Add `extra_data JSONB DEFAULT '{}'` column to `v2_race_results`, `v2_qualifying_results`, and `v2_practice_results` tables to persist custom column data
+1. **`src/pages/manage/ManageSessionResults.tsx`**
+   - Add `column_order` persistence on save
+   - Load `column_order` from session data
+   - Add "nat" and "gap_int" as built-in columns
+   - Add auto-calculation logic for Best Lap / Gap / Int
+   - Fetch driver nationality in the select query
+   - Map "gap_int" to extra_data.Int on save/load
 
-**No new dependencies required** -- HTML5 drag-and-drop is native browser API, jsPDF is already installed.
+2. **`src/pages/EventPage.tsx`**
+   - Remove `text-muted-foreground` from Gap cells
+   - Add "Nat" column with FlagImage
+   - Add "Int" column from extra_data
+   - Remove `short_name` from driver select, add `nationality`
+
+3. **`src/components/manage/QuickCreateModal.tsx`**
+   - For driver: add Nationality and Date of Birth fields
+
+4. **`src/pages/manage/ManageDrivers.tsx`**
+   - Remove "Code" / short_name column and form field
+
+5. **`src/lib/pdf-export.ts`**
+   - Add "Nat" and "Int" columns to all table layouts
+
+6. **`src/components/manage/AutocompleteField.tsx`**
+   - For driver autocomplete: also fetch `nationality` so we can populate the nat column when a driver is selected
+
+**No new dependencies needed.** FlagImage component already exists and uses flagcdn.com.
+
