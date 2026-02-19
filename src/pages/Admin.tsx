@@ -113,6 +113,11 @@ const Admin = () => {
   const [bulkEnrichingCircuits, setBulkEnrichingCircuits] = useState(false);
   const [enrichingEventIds, setEnrichingEventIds] = useState<Set<string>>(new Set());
 
+  // Series
+  const [allSeries, setAllSeries] = useState<any[]>([]);
+  const [enrichingSeriesIds, setEnrichingSeriesIds] = useState<Set<string>>(new Set());
+  const [bulkEnrichingSeries, setBulkEnrichingSeries] = useState(false);
+
   // Driver editing on entries
   const [editingDriversEntryId, setEditingDriversEntryId] = useState<string | null>(null);
   const [driverSearchTerm, setDriverSearchTerm] = useState("");
@@ -314,6 +319,7 @@ const Admin = () => {
     fetchDrivers();
     fetchTeams();
     fetchCircuits();
+    fetchSeries();
     fetchRoles();
     fetchClaims();
     fetchPendingEvents();
@@ -337,6 +343,43 @@ const Admin = () => {
   const fetchCircuits = async () => {
     const { data } = await supabase.from("circuits").select("*").order("name");
     if (data) setAllCircuits(data);
+  };
+
+  const fetchSeries = async () => {
+    const { data } = await supabase.from("series").select("*").order("name");
+    if (data) setAllSeries(data);
+  };
+
+  const handleEnrichSeries = async (seriesId: string, force = false) => {
+    setEnrichingSeriesIds(prev => new Set(prev).add(seriesId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-series`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ seriesId, force }),
+      });
+      const result = await response.json();
+      if (!response.ok) toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      else { const r = result.results?.[0]; toast({ title: `Enriched ${r?.name}`, description: `Updated: ${r?.fieldsUpdated?.join(", ") || "none"}` }); fetchSeries(); }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setEnrichingSeriesIds(prev => { const n = new Set(prev); n.delete(seriesId); return n; });
+  };
+
+  const handleBulkEnrichSeries = async () => {
+    const missing = allSeries.filter((s: any) => !s.description || !s.category);
+    if (missing.length === 0) { toast({ title: "All series already enriched" }); return; }
+    setBulkEnrichingSeries(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-series`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ seriesIds: missing.map((s: any) => s.id), force: false }),
+    });
+    const result = await response.json();
+    if (!response.ok) toast({ title: "Bulk enrich failed", description: result.error, variant: "destructive" });
+    else { const updated = result.results?.filter((r: any) => r.fieldsUpdated?.length > 0).length || 0; toast({ title: `Enriched ${updated} series` }); fetchSeries(); }
+    setBulkEnrichingSeries(false);
   };
 
   const handleEnrichCircuit = async (circuitId: string, force = false) => {
@@ -1305,6 +1348,7 @@ Here are the results to parse:
       }
       
       toast({ title: "Series seeded", description: `${created} series created from ${seriesMap.size} unique series names.` });
+      fetchSeries();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -1665,6 +1709,9 @@ Here are the results to parse:
             <TabsTrigger value="all-circuits">
               <MapPin className="h-3.5 w-3.5 mr-1" /> All Circuits ({allCircuits.length})
             </TabsTrigger>
+            <TabsTrigger value="all-series">
+              <Trophy className="h-3.5 w-3.5 mr-1" /> All Series ({allSeries.length})
+            </TabsTrigger>
             <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
             <TabsTrigger value="ai-import">
               <Sparkles className="h-3.5 w-3.5 mr-1" /> Race Import
@@ -1839,12 +1886,6 @@ Here are the results to parse:
                 )}
                 <Button variant="outline" size="sm" onClick={handleBulkEnrichTeams} disabled={bulkEnrichingTeams}>
                   {bulkEnrichingTeams ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSeedCircuits} disabled={seedingCircuits}>
-                  {seedingCircuits ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><MapPin className="h-3.5 w-3.5 mr-1" /> Seed Circuits</>}
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleSeedSeries} disabled={seedingSeries}>
-                  {seedingSeries ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><Trophy className="h-3.5 w-3.5 mr-1" /> Seed Series</>}
                 </Button>
               </div>
             </div>
@@ -2421,11 +2462,16 @@ Here are the results to parse:
 
           {/* ── All Circuits ── */}
           <TabsContent value="all-circuits">
-            <div className="flex items-center gap-2 mb-4">
-              <Button size="sm" onClick={handleBulkEnrichCircuits} disabled={bulkEnrichingCircuits}>
-                {bulkEnrichingCircuits ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
-                Enrich All Missing
-              </Button>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-display text-xl font-bold text-foreground">All Circuits</h2>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleSeedCircuits} disabled={seedingCircuits}>
+                  {seedingCircuits ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><MapPin className="h-3.5 w-3.5 mr-1" /> Seed from Events</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleBulkEnrichCircuits} disabled={bulkEnrichingCircuits}>
+                  {bulkEnrichingCircuits ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+                </Button>
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <table className="w-full text-sm">
@@ -2484,6 +2530,77 @@ Here are the results to parse:
                     </tr>
                   ))}
                   {allCircuits.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No circuits yet.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* ── All Series ── */}
+          <TabsContent value="all-series">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-display text-xl font-bold text-foreground">All Series</h2>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleSeedSeries} disabled={seedingSeries}>
+                  {seedingSeries ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><Trophy className="h-3.5 w-3.5 mr-1" /> Seed from Events</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleBulkEnrichSeries} disabled={bulkEnrichingSeries}>
+                  {bulkEnrichingSeries ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Description</th>
+                    <th className="px-4 py-3 text-center font-semibold text-card-foreground">Website</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allSeries.map((s: any) => (
+                    <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-card-foreground font-medium" onClick={() => navigate(`/series/${s.id}`)}>{s.name}</Button>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{s.category?.replace(/_/g, " ") ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.description ?? "—"}</td>
+                      <td className="px-4 py-3 text-center">{s.website ? <Check className="h-4 w-4 text-green-400 mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichSeries(s.id)} disabled={enrichingSeriesIds.has(s.id)} title="Enrich">
+                            {enrichingSeriesIds.has(s.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichSeries(s.id, true)} disabled={enrichingSeriesIds.has(s.id)} title="Force re-enrich">
+                            {enrichingSeriesIds.has(s.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/series/${s.id}`)}><Eye className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm"><Trash className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {s.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete this series. Events linked to it will lose their series reference.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                                  const { error } = await supabase.from("series").delete().eq("id", s.id);
+                                  if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+                                  else { toast({ title: "Series deleted" }); fetchSeries(); }
+                                }}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {allSeries.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No series yet. Use "Seed from Events" to populate.</td></tr>}
                 </tbody>
               </table>
             </div>
