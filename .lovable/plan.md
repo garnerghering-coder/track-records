@@ -1,37 +1,49 @@
 
 
-## Fix: Restore All Missing Admin Panel Tab Contents
+## Plan: Allow Creating New Cars (and Drivers/Teams) Inline from Admin Panel
 
 ### Problem
-The last edit accidentally deleted all `TabsContent` blocks from `Admin.tsx` except "Manage Roles". The file went from ~3000+ lines to only 1980 lines. Every tab shows blank because their content sections were removed.
+When editing a race entry's car assignment, the search only matches existing `car_models` records. If the car doesn't exist yet (e.g., typing "McLaren 720S GT3"), it shows "No matching cars" with no way to create it.
 
-### What Needs to Be Restored
-All `TabsContent` blocks that were present before the last edit need to be re-added between line 1928 (end of TabsList) and line 1930 (start of the roles TabsContent):
+### Solution
+Add a "Create" button that appears when the search term has no matches. Clicking it will insert a new `car_models` record with the typed name, then automatically assign it to the entry. Apply the same pattern to driver and team selectors if they have the same limitation.
 
-1. **drivers** - Driver table with search, create form, edit/delete/enrich actions
-2. **all-teams** - Teams table with seed, bulk enrich, multi-select delete
-3. **all-circuits** - Circuits table with seed, enrich, lap record column
-4. **all-series** - Series table with seed, enrich
-5. **all-cars** - Cars table with seed from events, enrich (newly added)
-6. **all-races** - Race events table with expand/collapse entries, event editing, date fields
-7. **ai-import** - AI text/PDF import, URL scrape, Generate Race, Direct JSON Import
-8. **pending** - Pending verification queue with approve/reject per entry
-9. **duplicates** - Driver, team, and circuit duplicate detection tabs
-10. **claims** - Profile claim request review
-11. **flags** - Flagged content review
-12. **reports** - User reports management
-13. **import-sources** - Automated import source management
-14. **community** - Community submission review
-15. **edit-queue** - Edit request review queue
+### Changes to `src/pages/Admin.tsx`
 
-### Solution Approach
-Restore all TabsContent blocks using the previous version of the file (available in version history). The restoration will include the recent additions (car column in entries table, event_date fields, renderCarCell, etc.) that were correctly added to the function definitions but whose containing TabsContent blocks were lost.
+**`renderCarCell`** (lines 1747-1749):
+- Replace the "No matching cars" message with a "Create [search term]" button
+- On click:
+  1. Insert a new row into `car_models` with `name` set to the search term
+  2. Update the `race_entry` with the new `car_model_id`
+  3. Refresh `allCars` list so the new car is available everywhere
+  4. Close the popover
+
+**Code change** (approximately):
+```tsx
+// Replace: <p className="text-xs ...">No matching cars</p>
+// With:
+<button
+  className="w-full text-left px-2 py-1 text-xs rounded hover:bg-accent ..."
+  onClick={async () => {
+    const { data, error } = await supabase
+      .from("car_models")
+      .insert({ name: carSearchTerm.trim() })
+      .select("id")
+      .single();
+    if (data) {
+      await handleSelectCar(data.id);
+      fetchCars(); // refresh allCars list
+    }
+  }}
+>
+  + Create "{carSearchTerm.trim()}"
+</button>
+```
+
+This is a small, focused change -- just replacing the "No matching cars" text with a create action in the same popover.
 
 ### Files to Modify
 | File | Change |
 |------|--------|
-| `src/pages/Admin.tsx` | Restore all 15 missing TabsContent blocks between the TabsList closing tag and the existing roles TabsContent |
-
-### Risk
-This is a large restoration. The function definitions (renderCarCell, renderEntriesTable, handleSeedCars, etc.) are all still intact in the file -- only the JSX tab content that references them was removed.
+| `src/pages/Admin.tsx` | Add inline create option to `renderCarCell` when no matches found |
 
