@@ -35,6 +35,7 @@ interface EntryRow {
   car_number: string;
   team_name: string;
   driver_names: string;
+  car_model_name: string;
   laps_completed: string;
   gap_to_leader: string;
   gap_to_class_leader: string;
@@ -50,6 +51,7 @@ const emptyEntry = (): EntryRow => ({
   car_number: "",
   team_name: "",
   driver_names: "",
+  car_model_name: "",
   laps_completed: "",
   gap_to_leader: "",
   gap_to_class_leader: "",
@@ -266,6 +268,7 @@ const ContributePage = () => {
           car_number: e.car_number || null,
           team_name: e.team_name || null,
           driver_names: e.driver_names.split(",").map(n => n.trim()).filter(Boolean),
+          car_model_name: e.car_model_name || null,
           laps_completed: e.laps_completed ? parseInt(e.laps_completed) : null,
           gap_to_leader: e.gap_to_leader || null,
           gap_to_class_leader: e.gap_to_class_leader || null,
@@ -472,6 +475,7 @@ const ContributePage = () => {
                         <th className="text-left py-1 px-1 font-medium w-16">Car #</th>
                         <th className="text-left py-1 px-1 font-medium w-40">Team</th>
                         <th className="text-left py-1 px-1 font-medium min-w-[200px]">Driver(s) *</th>
+                        <th className="text-left py-1 px-1 font-medium w-36">Car</th>
                         <th className="text-left py-1 px-1 font-medium w-16">Laps</th>
                         <th className="text-left py-1 px-1 font-medium w-20">Gap</th>
                         <th className="text-left py-1 px-1 font-medium w-20">Cls Gap</th>
@@ -493,6 +497,7 @@ const ContributePage = () => {
                           <td className="py-1 px-1">
                             <AutocompleteInput value={entry.driver_names} onValueChange={v => updateEntry(i, "driver_names", v)} placeholder="Driver(s), comma-sep" fetchFn={fetchDriverSuggestions} className="h-8 text-xs" />
                           </td>
+                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="e.g. Porsche 963" value={entry.car_model_name} onChange={e => updateEntry(i, "car_model_name", e.target.value)} /></td>
                           <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Laps" value={entry.laps_completed} onChange={e => updateEntry(i, "laps_completed", e.target.value)} /></td>
                           <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Gap" value={entry.gap_to_leader} onChange={e => updateEntry(i, "gap_to_leader", e.target.value)} /></td>
                           <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Cls Gap" value={entry.gap_to_class_leader} onChange={e => updateEntry(i, "gap_to_class_leader", e.target.value)} /></td>

@@ -95,10 +95,15 @@ Fields:
 - "turns": number or null (number of corners/turns)
 - "website": string or null (official circuit website URL)
 - "image_url": string or null (URL to a circuit map/layout image. IMPORTANT: Use Wikimedia Commons thumbnail URLs in the format "https://upload.wikimedia.org/wikipedia/commons/thumb/{path}/{filename}/800px-{filename}.png". Do NOT use direct file URLs without /thumb/ as they often 404. For SVG files, append ".png" to render them. Example: for file at commons/a/ab/Track.svg, use "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Track.svg/800px-Track.svg.png")
+- "lap_record_time": string or null (the official lap record time, e.g. "1:27.584")
+- "lap_record_driver": string or null (full name of the driver who holds the lap record, e.g. "Lewis Hamilton")
+- "lap_record_car": string or null (the car/model used for the lap record, e.g. "Mercedes W11")
+- "lap_record_year": number or null (the year the lap record was set)
 
 IMPORTANT RULES:
 - Try your hardest to find information. Most racing circuits are well-documented.
 - Every circuit should at minimum have a country, location, and description.
+- Lap records are very important — try to find the official all-time lap record for the circuit.
 - For the image_url, try to find the official circuit layout/map image. Look for Wikipedia circuit layout images.
 - For fields you truly cannot determine, use JSON null (not the string "null").
 - NEVER return the string "null" — always use actual JSON null.`,
@@ -150,6 +155,42 @@ IMPORTANT RULES:
       if ((force || !circuit.turns) && enriched.turns) updates.turns = enriched.turns;
       if ((force || !circuit.website) && enriched.website) updates.website = enriched.website;
       if ((force || !circuit.image_url) && enriched.image_url) updates.image_url = enriched.image_url;
+
+      // Lap record
+      if ((force || !circuit.lap_record_time) && enriched.lap_record_time) {
+        updates.lap_record_time = enriched.lap_record_time;
+        if (enriched.lap_record_year) updates.lap_record_year = enriched.lap_record_year;
+
+        // Try to match lap record driver
+        if (enriched.lap_record_driver) {
+          const driverParts = enriched.lap_record_driver.trim().split(/\s+/);
+          if (driverParts.length >= 2) {
+            const firstName = driverParts[0];
+            const lastName = driverParts.slice(1).join(" ");
+            const { data: driverMatch } = await adminClient
+              .from("driver_profiles")
+              .select("id")
+              .ilike("first_name", firstName)
+              .ilike("last_name", lastName)
+              .limit(1);
+            if (driverMatch && driverMatch.length > 0) {
+              updates.lap_record_driver_id = driverMatch[0].id;
+            }
+          }
+        }
+
+        // Try to match lap record car
+        if (enriched.lap_record_car) {
+          const { data: carMatch } = await adminClient
+            .from("car_models")
+            .select("id")
+            .ilike("name", `%${enriched.lap_record_car}%`)
+            .limit(1);
+          if (carMatch && carMatch.length > 0) {
+            updates.lap_record_car_model_id = carMatch[0].id;
+          }
+        }
+      }
 
       // Fix circuit name if corrected
       if (enriched.corrected_name && enriched.corrected_name !== circuit.name && force) {
