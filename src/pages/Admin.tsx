@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson, PenLine, Undo2, Car } from "lucide-react";
+import { Plus, Trash2, Pencil, Eye, Trash, Search, X, Check, Loader2, Sparkles, Clock, CheckCircle2, XCircle, Flag, MapPin, Globe, Link, ChevronDown, ChevronUp, Upload, Users, AlertTriangle, Zap, Calendar, Play, RefreshCw, Send, Ban, ClipboardCopy, FileJson, PenLine, Undo2, Car, Trophy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
@@ -135,6 +135,11 @@ const Admin = () => {
   // Enrich
   const [enrichingIds, setEnrichingIds] = useState<Set<string>>(new Set());
   const [bulkEnriching, setBulkEnriching] = useState(false);
+  const [enrichingTeamIds, setEnrichingTeamIds] = useState<Set<string>>(new Set());
+  const [bulkEnrichingTeams, setBulkEnrichingTeams] = useState(false);
+  const [seedingCircuits, setSeedingCircuits] = useState(false);
+  const [seedingSeries, setSeedingSeries] = useState(false);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
 
   // Series Discovery (background jobs)
   const [discoverSeriesName, setDiscoverSeriesName] = useState("");
@@ -1100,6 +1105,150 @@ Here are the results to parse:
     setBulkEnriching(false);
   };
 
+  const handleEnrichTeam = async (teamId: string, force = false) => {
+    setEnrichingTeamIds(prev => new Set(prev).add(teamId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-team-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ teamProfileId: teamId, force }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      } else {
+        const r = result.results?.[0];
+        const fields = r?.fieldsUpdated?.length || 0;
+        if (fields > 0) {
+          toast({ title: `Enriched ${r.name}`, description: `Updated: ${r.fieldsUpdated.join(", ")}` });
+        } else if (!force) {
+          toast({
+            title: `No new data for ${r.name}`,
+            description: "Try force re-enrich to overwrite existing data.",
+            action: (
+              <Button variant="outline" size="sm" onClick={() => handleEnrichTeam(teamId, true)}>
+                Force Re-enrich
+              </Button>
+            ),
+          });
+        } else {
+          toast({ title: `No new data for ${r.name}` });
+        }
+        fetchTeams();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setEnrichingTeamIds(prev => { const n = new Set(prev); n.delete(teamId); return n; });
+  };
+
+  const handleBulkEnrichTeams = async () => {
+    const needsEnrich = allTeams.filter((t: any) => !t.nationality || !t.bio);
+    if (needsEnrich.length === 0) {
+      toast({ title: "All teams already enriched" });
+      return;
+    }
+    setBulkEnrichingTeams(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-team-profile`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ teamProfileIds: needsEnrich.map((t: any) => t.id) }),
+        }
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        toast({ title: "Bulk team enrichment failed", description: result.error, variant: "destructive" });
+      } else {
+        const updated = result.results?.filter((r: any) => r.fieldsUpdated?.length > 0).length || 0;
+        toast({ title: "Bulk team enrichment complete", description: `${updated} of ${needsEnrich.length} teams updated.` });
+        fetchTeams();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setBulkEnrichingTeams(false);
+  };
+
+  const handleSeedCircuits = async () => {
+    setSeedingCircuits(true);
+    try {
+      const { data: events } = await supabase.from("race_events").select("location").not("location", "is", null);
+      if (!events || events.length === 0) { toast({ title: "No locations found" }); setSeedingCircuits(false); return; }
+      
+      const locationMap = new Map<string, number>();
+      for (const e of events) {
+        if (!e.location) continue;
+        const key = e.location.trim().toLowerCase();
+        locationMap.set(key, (locationMap.get(key) || 0) + 1);
+      }
+      
+      // Get existing circuits
+      const { data: existing } = await supabase.from("circuits").select("name");
+      const existingNames = new Set((existing || []).map((c: any) => c.name.trim().toLowerCase()));
+      
+      let created = 0;
+      for (const [key, count] of locationMap) {
+        if (existingNames.has(key)) continue;
+        // Use the most common casing from events
+        const original = events.find(e => e.location?.trim().toLowerCase() === key)?.location || key;
+        await supabase.from("circuits").insert({ name: original, location: original });
+        created++;
+      }
+      
+      toast({ title: "Circuits seeded", description: `${created} circuits created from ${locationMap.size} unique locations.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSeedingCircuits(false);
+  };
+
+  const handleSeedSeries = async () => {
+    setSeedingSeries(true);
+    try {
+      const { data: events } = await supabase.from("race_events").select("series_name, category");
+      if (!events || events.length === 0) { toast({ title: "No series found" }); setSeedingSeries(false); return; }
+      
+      const seriesMap = new Map<string, { name: string; category: string | null }>();
+      for (const e of events) {
+        const key = e.series_name.trim().toLowerCase();
+        if (!seriesMap.has(key)) {
+          seriesMap.set(key, { name: e.series_name, category: e.category });
+        }
+      }
+      
+      const { data: existing } = await supabase.from("series").select("name");
+      const existingNames = new Set((existing || []).map((s: any) => s.name.trim().toLowerCase()));
+      
+      let created = 0;
+      for (const [key, val] of seriesMap) {
+        if (existingNames.has(key)) continue;
+        await supabase.from("series").insert({ name: val.name, category: val.category } as any);
+        created++;
+      }
+      
+      toast({ title: "Series seeded", description: `${created} series created from ${seriesMap.size} unique series names.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSeedingSeries(false);
+  };
+
   const handleApproveEvent = async (eventId: string) => {
     setApprovingEntries(prev => new Set(prev).add(eventId));
     const { error } = await supabase
@@ -1593,15 +1742,60 @@ Here are the results to parse:
             </div>
           </TabsContent>
 
-          {/* ── All Teams ── */}
           <TabsContent value="all-teams">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h2 className="font-display text-xl font-bold text-foreground">All Teams</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedTeamIds.size > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="sm">
+                        <Trash className="h-3.5 w-3.5 mr-1" /> Delete Selected ({selectedTeamIds.size})
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {selectedTeamIds.size} team(s)?</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete the selected team profiles.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                          for (const tId of selectedTeamIds) {
+                            await supabase.from("team_profiles" as any).delete().eq("id", tId);
+                          }
+                          setSelectedTeamIds(new Set());
+                          fetchTeams();
+                          toast({ title: "Teams deleted" });
+                        }}>Delete All</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" size="sm" onClick={handleBulkEnrichTeams} disabled={bulkEnrichingTeams}>
+                  {bulkEnrichingTeams ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSeedCircuits} disabled={seedingCircuits}>
+                  {seedingCircuits ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><MapPin className="h-3.5 w-3.5 mr-1" /> Seed Circuits</>}
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleSeedSeries} disabled={seedingSeries}>
+                  {seedingSeries ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Seeding…</> : <><Trophy className="h-3.5 w-3.5 mr-1" /> Seed Series</>}
+                </Button>
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
+                    <th className="px-2 py-3 w-10">
+                      <Checkbox
+                        checked={allTeams.length > 0 && selectedTeamIds.size === allTeams.length}
+                        onCheckedChange={(checked) => {
+                          if (checked) setSelectedTeamIds(new Set(allTeams.map((t: any) => t.id)));
+                          else setSelectedTeamIds(new Set());
+                        }}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Team</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Nationality</th>
@@ -1611,6 +1805,16 @@ Here are the results to parse:
                 <tbody>
                   {allTeams.map((t: any) => (
                     <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-2 py-3">
+                        <Checkbox
+                          checked={selectedTeamIds.has(t.id)}
+                          onCheckedChange={(checked) => {
+                            const next = new Set(selectedTeamIds);
+                            if (checked) next.add(t.id); else next.delete(t.id);
+                            setSelectedTeamIds(next);
+                          }}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
@@ -1627,6 +1831,9 @@ Here are the results to parse:
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichTeam(t.id)} disabled={enrichingTeamIds.has(t.id)} title="Enrich with AI">
+                            {enrichingTeamIds.has(t.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => navigate(`/team/${t.id}`)}><Eye className="h-4 w-4" /></Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
@@ -1651,7 +1858,7 @@ Here are the results to parse:
                       </td>
                     </tr>
                   ))}
-                  {allTeams.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No teams yet.</td></tr>}
+                  {allTeams.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No teams yet.</td></tr>}
                 </tbody>
               </table>
             </div>

@@ -50,6 +50,48 @@ export type Database = {
         }
         Relationships: []
       }
+      circuits: {
+        Row: {
+          country: string | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          length_km: number | null
+          location: string | null
+          name: string
+          turns: number | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          length_km?: number | null
+          location?: string | null
+          name: string
+          turns?: number | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          length_km?: number | null
+          location?: string | null
+          name?: string
+          turns?: number | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       community_submissions: {
         Row: {
           admin_notes: string | null
@@ -551,6 +593,7 @@ export type Database = {
       race_events: {
         Row: {
           category: Database["public"]["Enums"]["racing_category"] | null
+          circuit_id: string | null
           created_at: string
           event_date: string | null
           event_name: string
@@ -558,11 +601,14 @@ export type Database = {
           location: string | null
           notes: string | null
           season_year: number
+          series_id: string | null
           series_name: string
+          ticket_url: string | null
           updated_at: string
         }
         Insert: {
           category?: Database["public"]["Enums"]["racing_category"] | null
+          circuit_id?: string | null
           created_at?: string
           event_date?: string | null
           event_name: string
@@ -570,11 +616,14 @@ export type Database = {
           location?: string | null
           notes?: string | null
           season_year: number
+          series_id?: string | null
           series_name: string
+          ticket_url?: string | null
           updated_at?: string
         }
         Update: {
           category?: Database["public"]["Enums"]["racing_category"] | null
+          circuit_id?: string | null
           created_at?: string
           event_date?: string | null
           event_name?: string
@@ -582,10 +631,27 @@ export type Database = {
           location?: string | null
           notes?: string | null
           season_year?: number
+          series_id?: string | null
           series_name?: string
+          ticket_url?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "race_events_circuit_id_fkey"
+            columns: ["circuit_id"]
+            isOneToOne: false
+            referencedRelation: "circuits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "race_events_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       race_results: {
         Row: {
@@ -682,6 +748,39 @@ export type Database = {
           reviewed_by?: string | null
           status?: string
           target_id?: string
+        }
+        Relationships: []
+      }
+      series: {
+        Row: {
+          category: Database["public"]["Enums"]["racing_category"] | null
+          created_at: string
+          description: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          updated_at?: string
+          website?: string | null
         }
         Relationships: []
       }
