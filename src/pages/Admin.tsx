@@ -154,6 +154,12 @@ const Admin = () => {
   const [seedingSeries, setSeedingSeries] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
 
+  // Cars
+  const [allCars, setAllCars] = useState<any[]>([]);
+  const [enrichingCarIds, setEnrichingCarIds] = useState<Set<string>>(new Set());
+  const [bulkEnrichingCars, setBulkEnrichingCars] = useState(false);
+  const [seedingCars, setSeedingCars] = useState(false);
+
   // Series Discovery (background jobs)
   const [discoverSeriesName, setDiscoverSeriesName] = useState("");
   const [discoverYear, setDiscoverYear] = useState(new Date().getFullYear().toString());
@@ -320,6 +326,7 @@ const Admin = () => {
     fetchTeams();
     fetchCircuits();
     fetchSeries();
+    fetchCars();
     fetchRoles();
     fetchClaims();
     fetchPendingEvents();
@@ -348,6 +355,56 @@ const Admin = () => {
   const fetchSeries = async () => {
     const { data } = await supabase.from("series").select("*").order("name");
     if (data) setAllSeries(data);
+  };
+
+  const fetchCars = async () => {
+    const { data } = await supabase.from("car_models").select("*").order("name");
+    if (data) setAllCars(data);
+  };
+
+  const handleEnrichCar = async (carId: string, force = false) => {
+    setEnrichingCarIds(prev => new Set(prev).add(carId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-car-model`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ carModelId: carId, force }),
+      });
+      const result = await response.json();
+      if (!response.ok) toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      else { const r = result.results?.[0]; toast({ title: `Enriched ${r?.name}`, description: `Updated: ${r?.fieldsUpdated?.join(", ") || "none"}` }); fetchCars(); }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setEnrichingCarIds(prev => { const n = new Set(prev); n.delete(carId); return n; });
+  };
+
+  const handleBulkEnrichCars = async () => {
+    const missing = allCars.filter((c: any) => !c.description || !c.manufacturer);
+    if (missing.length === 0) { toast({ title: "All cars already enriched" }); return; }
+    setBulkEnrichingCars(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-car-model`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ carModelIds: missing.map((c: any) => c.id), force: false }),
+    });
+    const result = await response.json();
+    if (!response.ok) toast({ title: "Bulk enrich failed", description: result.error, variant: "destructive" });
+    else { const updated = result.results?.filter((r: any) => r.fieldsUpdated?.length > 0).length || 0; toast({ title: `Enriched ${updated} cars` }); fetchCars(); }
+    setBulkEnrichingCars(false);
+  };
+
+  const handleSeedCars = async () => {
+    setSeedingCars(true);
+    try {
+      const { data: entries } = await supabase.from("race_entries").select("team_name").not("team_name", "is", null);
+      if (!entries || entries.length === 0) { toast({ title: "No entries with car info found" }); setSeedingCars(false); return; }
+      // For now, just report — cars are auto-created during import
+      toast({ title: "Cars are auto-created during import", description: "Use Direct JSON Import with car_model_name to populate cars." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setSeedingCars(false);
   };
 
   const handleEnrichSeries = async (seriesId: string, force = false) => {
@@ -892,6 +949,7 @@ const Admin = () => {
       "class_position": number or null,
       "car_number": "string or null",
       "team_name": "string or null",
+      "car_model_name": "string or null (e.g. 'Cadillac V-Series.R', 'Porsche 963', 'Ferrari 296 GT3')",
       "driver_names": ["array of full driver name strings"],
       "race_class": "string or null",
       "laps_completed": number or null,
@@ -1711,6 +1769,9 @@ Here are the results to parse:
             </TabsTrigger>
             <TabsTrigger value="all-series">
               <Trophy className="h-3.5 w-3.5 mr-1" /> All Series ({allSeries.length})
+            </TabsTrigger>
+            <TabsTrigger value="all-cars">
+              <Car className="h-3.5 w-3.5 mr-1" /> All Cars ({allCars.length})
             </TabsTrigger>
             <TabsTrigger value="all-races">All Races ({raceEvents.length})</TabsTrigger>
             <TabsTrigger value="ai-import">
@@ -2601,6 +2662,76 @@ Here are the results to parse:
                     </tr>
                   ))}
                   {allSeries.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No series yet. Use "Seed from Events" to populate.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* ── All Cars ── */}
+          <TabsContent value="all-cars">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-display text-xl font-bold text-foreground">All Cars</h2>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleBulkEnrichCars} disabled={bulkEnrichingCars}>
+                  {bulkEnrichingCars ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich Missing</>}
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Manufacturer</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Year</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Description</th>
+                    <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allCars.map((c: any) => (
+                    <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <Button variant="link" size="sm" className="h-auto p-0 text-card-foreground font-medium" onClick={() => navigate(`/car/${c.id}`)}>{c.name}</Button>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.manufacturer ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground capitalize">{c.category?.replace(/_/g, " ") ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.year_introduced ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{c.description ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichCar(c.id)} disabled={enrichingCarIds.has(c.id)} title="Enrich">
+                            {enrichingCarIds.has(c.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleEnrichCar(c.id, true)} disabled={enrichingCarIds.has(c.id)} title="Force re-enrich">
+                            {enrichingCarIds.has(c.id) ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => navigate(`/car/${c.id}`)}><Eye className="h-4 w-4" /></Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm"><Trash className="h-4 w-4 text-destructive" /></Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
+                                <AlertDialogDescription>This will permanently delete this car model. Race entries referencing it will lose their car reference.</AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={async () => {
+                                  const { error } = await supabase.from("car_models").delete().eq("id", c.id);
+                                  if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+                                  else { toast({ title: "Car deleted" }); fetchCars(); }
+                                }}>Delete</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {allCars.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No car models yet. Cars are auto-created during imports with car_model_name.</td></tr>}
                 </tbody>
               </table>
             </div>
