@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns } from "lucide-react";
+import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns, GripVertical } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
 
@@ -41,14 +41,12 @@ const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): R
   else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.laps_run = ""; }
   else if (type === "race" || type === "sprint_race") { base.laps_completed = ""; base.total_time = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; }
   else { base.notes = ""; }
-  // Add custom columns with empty defaults
   for (const col of customCols) {
     base[`_custom_${col.key}`] = "";
   }
   return base;
 };
 
-// Fuzzy match helper
 function fuzzyMatch(needle: string, haystack: { id: string; label: string }[]): { id: string; label: string } | null {
   const n = needle.toLowerCase().trim();
   if (!n) return null;
@@ -85,6 +83,35 @@ export default function ManageSessionResults() {
   const [newColName, setNewColName] = useState("");
   const [newColType, setNewColType] = useState<"text" | "number">("text");
 
+  // Drag state for rows
+  const [dragRowIdx, setDragRowIdx] = useState<number | null>(null);
+  // Drag state for columns
+  const [dragColIdx, setDragColIdx] = useState<number | null>(null);
+
+  // Column order management
+  const getDefaultColumns = useCallback(() => {
+    const cols: string[] = ["position", "car_number", "driver", "team", "car"];
+    if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "laps_run", "notes");
+    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "laps_run");
+    else if (type === "race" || type === "sprint_race") cols.push("laps_completed", "total_time", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status");
+    else cols.push("notes");
+    return cols;
+  }, [type]);
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+
+  useEffect(() => {
+    setColumnOrder(prev => {
+      const defaults = getDefaultColumns();
+      const customKeys = customColumns.map(c => `_custom_${c.key}`);
+      // Keep existing order for columns that still exist, append new ones
+      const allKeys = [...defaults, ...customKeys];
+      const existing = prev.filter(k => allKeys.includes(k));
+      const newKeys = allKeys.filter(k => !existing.includes(k));
+      return [...existing, ...newKeys];
+    });
+  }, [type, customColumns, getDefaultColumns]);
+
   // Load existing data
   useEffect(() => {
     if (!session) return;
@@ -97,6 +124,22 @@ export default function ManageSessionResults() {
       const { data } = await supabase.from(table as any).select("*, v2_drivers(id, full_name), v2_teams(id, full_name), v2_cars(id, model_name, manufacturer)").eq("session_id", sessionId!).order("position");
 
       if (data && data.length > 0) {
+        // Extract custom columns from extra_data
+        const foundCustomCols: CustomColumn[] = [];
+        const seenKeys = new Set<string>();
+        for (const r of data) {
+          const ed = (r as any).extra_data;
+          if (ed && typeof ed === "object") {
+            for (const k of Object.keys(ed)) {
+              if (!seenKeys.has(k)) {
+                seenKeys.add(k);
+                foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
+              }
+            }
+          }
+        }
+        if (foundCustomCols.length > 0) setCustomColumns(foundCustomCols);
+
         setRows(data.map((r: any) => {
           const row: ResultRow = {
             _key: r.id,
@@ -110,6 +153,13 @@ export default function ManageSessionResults() {
           else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; }
           else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; }
           else { row.notes = ""; }
+          // Load custom column data from extra_data
+          const ed = (r as any).extra_data;
+          if (ed && typeof ed === "object") {
+            for (const k of Object.keys(ed)) {
+              row[`_custom_${k}`] = String(ed[k] ?? "");
+            }
+          }
           return row;
         }));
       } else {
@@ -135,7 +185,6 @@ export default function ManageSessionResults() {
     const key = makeKey();
     const col: CustomColumn = { key, name: newColName.trim(), type: newColType };
     setCustomColumns(prev => [...prev, col]);
-    // Add the column to all existing rows
     setRows(prev => prev.map(row => ({ ...row, [`_custom_${key}`]: "" })));
     setNewColName("");
     setNewColType("text");
@@ -150,6 +199,41 @@ export default function ManageSessionResults() {
       delete newRow[`_custom_${key}`];
       return newRow;
     }));
+  };
+
+  // Row drag handlers
+  const handleRowDragStart = (idx: number) => setDragRowIdx(idx);
+  const handleRowDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+  const handleRowDrop = (targetIdx: number) => {
+    if (dragRowIdx === null || dragRowIdx === targetIdx) return;
+    setRows(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(dragRowIdx, 1);
+      arr.splice(targetIdx, 0, moved);
+      // Re-number positions
+      return arr.map((r, i) => ({ ...r, position: String(i + 1) }));
+    });
+    setDragRowIdx(null);
+  };
+
+  // Column drag handlers
+  const handleColDragStart = (idx: number) => setDragColIdx(idx);
+  const handleColDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+  const handleColDrop = (targetIdx: number) => {
+    if (dragColIdx === null || dragColIdx === targetIdx) return;
+    setColumnOrder(prev => {
+      const arr = [...prev];
+      const [moved] = arr.splice(dragColIdx, 1);
+      arr.splice(targetIdx, 0, moved);
+      return arr;
+    });
+    setDragColIdx(null);
   };
 
   const handlePdfImport = async (file: File) => {
@@ -245,6 +329,18 @@ export default function ManageSessionResults() {
     }
   };
 
+  // Build extra_data from custom columns for a row
+  const buildExtraData = (row: ResultRow): Record<string, any> => {
+    const ed: Record<string, any> = {};
+    for (const col of customColumns) {
+      const val = row[`_custom_${col.key}`];
+      if (val !== undefined && val !== "") {
+        ed[col.name] = col.type === "number" ? parseFloat(val) || 0 : val;
+      }
+    }
+    return ed;
+  };
+
   const handleSave = useCallback(async (publish: boolean) => {
     if (!session) return;
     setSaving(true);
@@ -252,15 +348,15 @@ export default function ManageSessionResults() {
       const t = session.session_type;
       if (t === "practice" || t === "warmup" || t === "other") {
         await supabase.from("v2_practice_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, extra_data: buildExtraData(r) }));
         if (inserts.length) { const { error } = await supabase.from("v2_practice_results").insert(inserts as any); if (error) throw error; }
       } else if (t === "qualifying" || t === "sprint_qualifying") {
         await supabase.from("v2_qualifying_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null }));
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, extra_data: buildExtraData(r) }));
         if (inserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(inserts as any); if (error) throw error; }
       } else {
         await supabase.from("v2_race_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.total_time || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null }));
+        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.total_time || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, extra_data: buildExtraData(r) }));
         if (inserts.length) { const { error } = await supabase.from("v2_race_results").insert(inserts as any); if (error) throw error; }
 
         await supabase.from("v2_pit_stops").delete().eq("session_id", sessionId!);
@@ -283,13 +379,58 @@ export default function ManageSessionResults() {
     } finally {
       setSaving(false);
     }
-  }, [session, sessionId, rows, pitStops, incidents, qc]);
+  }, [session, sessionId, rows, pitStops, incidents, customColumns, qc]);
 
   if (!session) return <div className="p-6 text-muted-foreground">Loading…</div>;
 
   const isRace = type === "race" || type === "sprint_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
   const sourceDoc = (session as any).source_document_url;
+
+  // Column label map
+  const colLabels: Record<string, string> = {
+    position: "Pos", car_number: "No.", driver: "Driver", team: "Team", car: "Car",
+    best_lap_time: "Best Lap", gap_to_p1: "Gap", laps_run: "Laps", notes: "Notes",
+    q1_time: "Q1", q2_time: "Q2", q3_time: "Q3", best_time: "Best", gap_to_pole: "Gap",
+    laps_completed: "Laps", total_time: "Time/Gap", fastest_lap_time: "FL", average_lap_time: "Avg",
+    pit_stops: "Pits", points: "Pts", status: "Status",
+  };
+  for (const col of customColumns) {
+    colLabels[`_custom_${col.key}`] = col.name;
+  }
+
+  // Filter columns based on qual segments
+  const visibleColumns = columnOrder.filter(col => {
+    if (isQual && col === "q2_time" && qualSegments < 2) return false;
+    if (isQual && col === "q3_time" && qualSegments < 3) return false;
+    return true;
+  });
+
+  // Render cell for a column
+  const renderCell = (row: ResultRow, col: string) => {
+    if (col === "position") return <Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" />;
+    if (col === "car_number") return <Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" />;
+    if (col === "driver") return <AutocompleteField entityType="driver" value={row.driver} onChange={v => updateRow(row._key, "driver", v)} />;
+    if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
+    if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
+    if (col === "status") return (
+      <div>
+        <Select value={row.status} onValueChange={v => updateRow(row._key, "status", v)}>
+          <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+          <SelectContent>{RACE_STATUSES.map(s => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}</SelectContent>
+        </Select>
+        {row.status === "dnf" && <Input value={row.dnf_reason} onChange={e => updateRow(row._key, "dnf_reason", e.target.value)} className="h-6 text-xs mt-1" placeholder="DNF reason" />}
+      </div>
+    );
+    if (col.startsWith("_custom_")) {
+      const customCol = customColumns.find(c => `_custom_${c.key}` === col);
+      return <Input type={customCol?.type === "number" ? "number" : "text"} value={row[col] || ""} onChange={e => updateRow(row._key, col, e.target.value)} className="h-7 text-xs" />;
+    }
+    // Generic text/number fields
+    const placeholder = col.includes("time") || col.includes("lap") ? "1:23.456" : "";
+    const isSmall = ["laps_run", "laps_completed", "pit_stops", "points"].includes(col);
+    return <Input value={row[col] || ""} onChange={e => updateRow(row._key, col, e.target.value)} className={`h-7 text-xs ${isSmall ? "w-14" : ""}`} placeholder={placeholder} />;
+  };
 
   return (
     <div className="p-4 space-y-4">
@@ -349,68 +490,38 @@ export default function ManageSessionResults() {
         <table className="w-full text-xs">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-2 py-2 text-left w-12">Pos</th>
-              <th className="px-2 py-2 text-left w-14">No.</th>
-              <th className="px-2 py-2 text-left min-w-[160px]">Driver</th>
-              <th className="px-2 py-2 text-left min-w-[140px]">Team</th>
-              <th className="px-2 py-2 text-left min-w-[140px]">Car</th>
-              {type === "practice" && <><th className="px-2 py-2">Best Lap</th><th className="px-2 py-2">Gap</th><th className="px-2 py-2">Laps</th><th className="px-2 py-2">Notes</th></>}
-              {isQual && <><th className="px-2 py-2">Q1</th>{qualSegments >= 2 && <th className="px-2 py-2">Q2</th>}{qualSegments >= 3 && <th className="px-2 py-2">Q3</th>}<th className="px-2 py-2">Best</th><th className="px-2 py-2">Gap</th><th className="px-2 py-2">Laps</th></>}
-              {isRace && <><th className="px-2 py-2">Laps</th><th className="px-2 py-2">Time/Gap</th><th className="px-2 py-2">FL</th><th className="px-2 py-2">Avg</th><th className="px-2 py-2">Pits</th><th className="px-2 py-2">Pts</th><th className="px-2 py-2">Status</th></>}
-              {type === "other" && <th className="px-2 py-2">Notes</th>}
-              {customColumns.map(col => (
-                <th key={col.key} className="px-2 py-2">{col.name}</th>
+              <th className="px-1 py-2 w-6" /> {/* drag handle column */}
+              {visibleColumns.map((col, colIdx) => (
+                <th
+                  key={col}
+                  className="px-2 py-2 text-left cursor-grab select-none"
+                  draggable
+                  onDragStart={() => handleColDragStart(colIdx)}
+                  onDragOver={handleColDragOver}
+                  onDrop={() => handleColDrop(colIdx)}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <GripVertical className="h-3 w-3 text-muted-foreground/50 rotate-90" />
+                    {colLabels[col] || col}
+                  </span>
+                </th>
               ))}
               <th className="px-2 py-2 w-8" />
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
-              <tr key={row._key} className="border-t border-border hover:bg-muted/20">
-                <td className="px-2 py-1"><Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" /></td>
-                <td className="px-1 py-1"><Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" /></td>
-                <td className="px-1 py-1"><AutocompleteField entityType="driver" value={row.driver} onChange={v => updateRow(row._key, "driver", v)} /></td>
-                <td className="px-1 py-1"><AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} /></td>
-                <td className="px-1 py-1"><AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} /></td>
-                {type === "practice" && <>
-                  <td className="px-1 py-1"><Input value={row.best_lap_time} onChange={e => updateRow(row._key, "best_lap_time", e.target.value)} className="h-7 text-xs" placeholder="1:23.456" /></td>
-                  <td className="px-1 py-1"><Input value={row.gap_to_p1} onChange={e => updateRow(row._key, "gap_to_p1", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.laps_run} onChange={e => updateRow(row._key, "laps_run", e.target.value)} className="h-7 w-14 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.notes} onChange={e => updateRow(row._key, "notes", e.target.value)} className="h-7 text-xs" /></td>
-                </>}
-                {isQual && <>
-                  <td className="px-1 py-1"><Input value={row.q1_time} onChange={e => updateRow(row._key, "q1_time", e.target.value)} className="h-7 text-xs" /></td>
-                  {qualSegments >= 2 && <td className="px-1 py-1"><Input value={row.q2_time} onChange={e => updateRow(row._key, "q2_time", e.target.value)} className="h-7 text-xs" /></td>}
-                  {qualSegments >= 3 && <td className="px-1 py-1"><Input value={row.q3_time} onChange={e => updateRow(row._key, "q3_time", e.target.value)} className="h-7 text-xs" /></td>}
-                  <td className="px-1 py-1"><Input value={row.best_time} onChange={e => updateRow(row._key, "best_time", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.gap_to_pole} onChange={e => updateRow(row._key, "gap_to_pole", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.laps_run} onChange={e => updateRow(row._key, "laps_run", e.target.value)} className="h-7 w-14 text-xs" /></td>
-                </>}
-                {isRace && <>
-                  <td className="px-1 py-1"><Input value={row.laps_completed} onChange={e => updateRow(row._key, "laps_completed", e.target.value)} className="h-7 w-14 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.total_time} onChange={e => updateRow(row._key, "total_time", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.fastest_lap_time} onChange={e => updateRow(row._key, "fastest_lap_time", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.average_lap_time} onChange={e => updateRow(row._key, "average_lap_time", e.target.value)} className="h-7 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.pit_stops} onChange={e => updateRow(row._key, "pit_stops", e.target.value)} className="h-7 w-14 text-xs" /></td>
-                  <td className="px-1 py-1"><Input value={row.points} onChange={e => updateRow(row._key, "points", e.target.value)} className="h-7 w-14 text-xs" /></td>
-                  <td className="px-1 py-1">
-                    <Select value={row.status} onValueChange={v => updateRow(row._key, "status", v)}>
-                      <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-                      <SelectContent>{RACE_STATUSES.map(s => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}</SelectContent>
-                    </Select>
-                    {row.status === "dnf" && <Input value={row.dnf_reason} onChange={e => updateRow(row._key, "dnf_reason", e.target.value)} className="h-6 text-xs mt-1" placeholder="DNF reason" />}
-                  </td>
-                </>}
-                {type === "other" && <td className="px-1 py-1"><Input value={row.notes} onChange={e => updateRow(row._key, "notes", e.target.value)} className="h-7 text-xs" /></td>}
-                {customColumns.map(col => (
-                  <td key={col.key} className="px-1 py-1">
-                    <Input
-                      type={col.type === "number" ? "number" : "text"}
-                      value={row[`_custom_${col.key}`] || ""}
-                      onChange={e => updateRow(row._key, `_custom_${col.key}`, e.target.value)}
-                      className="h-7 text-xs"
-                    />
-                  </td>
+            {rows.map((row, rowIdx) => (
+              <tr
+                key={row._key}
+                className={`border-t border-border hover:bg-muted/20 ${dragRowIdx === rowIdx ? "opacity-50" : ""}`}
+                draggable
+                onDragStart={() => handleRowDragStart(rowIdx)}
+                onDragOver={e => handleRowDragOver(e, rowIdx)}
+                onDrop={() => handleRowDrop(rowIdx)}
+              >
+                <td className="px-1 py-1 cursor-grab"><GripVertical className="h-3.5 w-3.5 text-muted-foreground/50" /></td>
+                {visibleColumns.map(col => (
+                  <td key={col} className="px-1 py-1">{renderCell(row, col)}</td>
                 ))}
                 <td className="px-1 py-1"><Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeRow(row._key)}><X className="h-3 w-3" /></Button></td>
               </tr>
