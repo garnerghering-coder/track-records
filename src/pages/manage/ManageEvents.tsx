@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Plus, Trash2 } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
 
@@ -32,6 +33,18 @@ export default function ManageEvents() {
       if (error) throw error;
       return data;
     },
+  });
+
+  const deleteEvent = useMutation({
+    mutationFn: async (eventId: string) => {
+      // Delete sessions first (cascade), then event
+      const { error: sessErr } = await supabase.from("v2_sessions").delete().eq("event_id", eventId);
+      if (sessErr) throw sessErr;
+      const { error } = await supabase.from("v2_events").delete().eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_events_list"] }); toast.success("Event deleted"); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const save = useMutation({
@@ -68,7 +81,7 @@ export default function ManageEvents() {
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Rd</TableHead><TableHead>Event</TableHead><TableHead>Circuit</TableHead><TableHead>Series</TableHead><TableHead>Dates</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Rd</TableHead><TableHead>Event</TableHead><TableHead>Circuit</TableHead><TableHead>Series</TableHead><TableHead>Dates</TableHead><TableHead>Status</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
           <TableBody>
             {events.map((e: any) => (
               <TableRow key={e.id} className="cursor-pointer hover:bg-accent/50" onClick={() => navigate(`/manage/events/${e.id}`)}>
@@ -78,6 +91,25 @@ export default function ManageEvents() {
                 <TableCell>{e.v2_seasons?.v2_series?.name} {e.v2_seasons?.year}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.start_date}{e.end_date && e.end_date !== e.start_date ? ` – ${e.end_date}` : ""}</TableCell>
                 <TableCell><Badge variant={e.status === "published" ? "default" : "secondary"}>{e.status}</Badge></TableCell>
+                <TableCell>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={ev => ev.stopPropagation()}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent onClick={ev => ev.stopPropagation()}>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Event</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete "{e.name}" and all its sessions and results. This action cannot be undone.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteEvent.mutate(e.id)}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
