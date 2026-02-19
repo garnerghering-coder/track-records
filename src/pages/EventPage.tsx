@@ -135,6 +135,23 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     enabled: isRace,
   });
 
+  // Extract custom columns from extra_data
+  const extraDataKeys: { key: string; name: string }[] = [];
+  if (results.length > 0) {
+    const seenKeys = new Set<string>();
+    for (const r of results) {
+      const ed = (r as any).extra_data;
+      if (ed && typeof ed === "object") {
+        for (const [k, v] of Object.entries(ed)) {
+          if (!seenKeys.has(k)) {
+            seenKeys.add(k);
+            extraDataKeys.push({ key: k, name: k });
+          }
+        }
+      }
+    }
+  }
+
   const handleExport = () => {
     exportSessionPdf({
       eventName: event.name,
@@ -145,6 +162,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
       sessionType: type,
       results,
       incidents,
+      customColumns: extraDataKeys,
     });
   };
 
@@ -166,18 +184,23 @@ function SessionResults({ session, event }: { session: any; event: any }) {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-12">Pos</TableHead>
+              <TableHead className="w-14">No.</TableHead>
               <TableHead>Driver</TableHead>
               <TableHead>Team</TableHead>
               <TableHead>Car</TableHead>
               {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead><TableHead>Laps</TableHead></>}
               {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead><TableHead>Laps</TableHead></>}
               {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>FL</TableHead><TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
+              {extraDataKeys.map(col => (
+                <TableHead key={col.key}>{col.name}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {results.map((r: any, i: number) => (
               <TableRow key={r.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
+                <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>
                 <TableCell className="font-medium">{r.v2_drivers?.full_name || "—"}</TableCell>
                 <TableCell className="text-muted-foreground">{r.v2_teams?.short_name || r.v2_teams?.full_name || "—"}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</TableCell>
@@ -206,9 +229,12 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                     ) : null}
                   </TableCell>
                 </>}
+                {extraDataKeys.map(col => (
+                  <TableCell key={col.key} className="text-xs">{(r.extra_data as any)?.[col.key] || "—"}</TableCell>
+                ))}
               </TableRow>
             ))}
-            {results.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
+            {results.length === 0 && <TableRow><TableCell colSpan={20} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>

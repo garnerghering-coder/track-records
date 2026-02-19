@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import trackRecordsLogo from "@/assets/track-records-logo.png";
 
 interface ExportParams {
   eventName: string;
@@ -10,67 +11,109 @@ interface ExportParams {
   sessionType: string;
   results: any[];
   incidents: any[];
+  customColumns?: { key: string; name: string }[];
 }
 
-export function exportSessionPdf(params: ExportParams) {
-  const { eventName, seriesName, circuitName, sessionName, sessionDate, sessionType, results, incidents } = params;
+// Convert an image URL to base64 data URI
+async function loadImageAsBase64(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+export async function exportSessionPdf(params: ExportParams) {
+  const { eventName, seriesName, circuitName, sessionName, sessionDate, sessionType, results, incidents, customColumns = [] } = params;
   const isRace = sessionType === "race" || sessionType === "sprint_race";
   const isQual = sessionType === "qualifying" || sessionType === "sprint_qualifying";
   const isPractice = sessionType === "practice" || sessionType === "warmup";
 
-  // Landscape for wide tables
-  const doc = new jsPDF({ orientation: isRace || isQual ? "landscape" : "portrait", unit: "mm", format: "a4" });
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Header
-  doc.setFontSize(8);
-  doc.setTextColor(150);
-  doc.text("TRACK RECORDS", 14, 10);
-  doc.text(new Date().toLocaleDateString(), pageWidth - 14, 10, { align: "right" });
+  // Logo
+  let startY = 10;
+  try {
+    const logoData = await loadImageAsBase64(trackRecordsLogo);
+    // Logo roughly 40mm wide, auto height
+    doc.addImage(logoData, "PNG", 14, 8, 40, 12);
+    startY = 24;
+  } catch {
+    doc.setFontSize(10);
+    doc.setTextColor(30);
+    doc.text("TRACK RECORDS", 14, 14);
+    startY = 20;
+  }
 
+  // Date top-right
+  doc.setFontSize(7);
+  doc.setTextColor(150);
+  doc.text(new Date().toLocaleDateString(), pageWidth - 14, 12, { align: "right" });
+
+  // Event name
   doc.setFontSize(16);
   doc.setTextColor(30);
-  doc.text(eventName, 14, 22);
+  doc.text(eventName, 14, startY + 2);
 
+  // Subtitle
   doc.setFontSize(10);
   doc.setTextColor(100);
   const subtitle = [seriesName, circuitName, sessionName].filter(Boolean).join(" • ");
-  doc.text(subtitle, 14, 29);
+  doc.text(subtitle, 14, startY + 9);
+
+  let tableStartY = startY + 13;
 
   if (sessionDate) {
-    doc.text(new Date(sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }), 14, 35);
+    doc.text(new Date(sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }), 14, startY + 15);
+    tableStartY = startY + 19;
   }
 
   // Build table
   let head: string[] = [];
   let body: string[][] = [];
+  const customNames = customColumns.map(c => c.name);
 
   if (isPractice || sessionType === "other") {
-    head = ["Pos", "Driver", "Team", "Car", "Best Lap", "Gap", "Laps"];
+    head = ["Pos", "No.", "Driver", "Team", "Car", "Best Lap", "Gap", "Laps", ...customNames];
     body = results.map(r => [
       String(r.position || ""),
+      r.car_number || "",
       r.v2_drivers?.full_name || "",
       r.v2_teams?.short_name || r.v2_teams?.full_name || "",
       r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
       r.best_lap_time || "",
       r.gap_to_p1 || "",
       String(r.laps_run || ""),
+      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
     ]);
   } else if (isQual) {
-    head = ["Pos", "Driver", "Team", "Car", "Q1", "Q2", "Q3", "Best", "Gap", "Laps"];
+    head = ["Pos", "No.", "Driver", "Team", "Car", "Q1", "Q2", "Q3", "Best", "Gap", "Laps", ...customNames];
     body = results.map(r => [
       String(r.position || ""),
+      r.car_number || "",
       r.v2_drivers?.full_name || "",
       r.v2_teams?.short_name || r.v2_teams?.full_name || "",
       r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
       r.q1_time || "", r.q2_time || "", r.q3_time || "",
       r.best_time || "", r.gap_to_pole || "",
       String(r.laps_run || ""),
+      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
     ]);
   } else {
-    head = ["Pos", "Driver", "Team", "Car", "Laps", "Time/Gap", "FL", "Pits", "Pts", "Status"];
+    head = ["Pos", "No.", "Driver", "Team", "Car", "Laps", "Time/Gap", "FL", "Pits", "Pts", "Status", ...customNames];
     body = results.map(r => [
       String(r.position || ""),
+      r.car_number || "",
       r.v2_drivers?.full_name || "",
       r.v2_teams?.short_name || r.v2_teams?.full_name || "",
       r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
@@ -80,11 +123,12 @@ export function exportSessionPdf(params: ExportParams) {
       String(r.pit_stops ?? ""),
       String(r.points ?? ""),
       r.status && r.status !== "finished" ? r.status.toUpperCase() : "",
+      ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
     ]);
   }
 
   (doc as any).autoTable({
-    startY: sessionDate ? 40 : 34,
+    startY: tableStartY,
     head: [head],
     body,
     styles: {
@@ -103,6 +147,7 @@ export function exportSessionPdf(params: ExportParams) {
     },
     columnStyles: {
       0: { halign: "center", cellWidth: 10 },
+      1: { halign: "center", cellWidth: 12 },
     },
   });
 

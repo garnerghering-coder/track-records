@@ -1247,6 +1247,7 @@ export type Database = {
           car_number: string | null
           created_at: string
           driver_id: string | null
+          extra_data: Json | null
           gap_to_p1: string | null
           id: string
           laps_run: number | null
@@ -1260,6 +1261,7 @@ export type Database = {
           car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          extra_data?: Json | null
           gap_to_p1?: string | null
           id?: string
           laps_run?: number | null
@@ -1273,6 +1275,7 @@ export type Database = {
           car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          extra_data?: Json | null
           gap_to_p1?: string | null
           id?: string
           laps_run?: number | null
@@ -1318,6 +1321,7 @@ export type Database = {
           car_number: string | null
           created_at: string
           driver_id: string | null
+          extra_data: Json | null
           gap_to_pole: string | null
           id: string
           laps_run: number | null
@@ -1334,6 +1338,7 @@ export type Database = {
           car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          extra_data?: Json | null
           gap_to_pole?: string | null
           id?: string
           laps_run?: number | null
@@ -1350,6 +1355,7 @@ export type Database = {
           car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          extra_data?: Json | null
           gap_to_pole?: string | null
           id?: string
           laps_run?: number | null
@@ -1399,6 +1405,7 @@ export type Database = {
           created_at: string
           dnf_reason: string | null
           driver_id: string | null
+          extra_data: Json | null
           fastest_lap_time: string | null
           gap_to_leader: string | null
           id: string
@@ -1418,6 +1425,7 @@ export type Database = {
           created_at?: string
           dnf_reason?: string | null
           driver_id?: string | null
+          extra_data?: Json | null
           fastest_lap_time?: string | null
           gap_to_leader?: string | null
           id?: string
@@ -1437,6 +1445,7 @@ export type Database = {
           created_at?: string
           dnf_reason?: string | null
           driver_id?: string | null
+          extra_data?: Json | null
           fastest_lap_time?: string | null
           gap_to_leader?: string | null
           id?: string
