@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,18 +7,28 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 
 export default function ManageCars() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ model_name: "", manufacturer: "" });
+  const [search, setSearch] = useState("");
 
   const { data: cars = [], isLoading } = useQuery({
     queryKey: ["v2_cars"],
     queryFn: async () => { const { data, error } = await supabase.from("v2_cars").select("*").order("model_name"); if (error) throw error; return data; },
   });
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return cars;
+    const q = search.toLowerCase();
+    return cars.filter((c: any) =>
+      c.model_name.toLowerCase().includes(q) ||
+      (c.manufacturer || "").toLowerCase().includes(q)
+    );
+  }, [cars, search]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -45,11 +55,15 @@ export default function ManageCars() {
         <h1 className="text-2xl font-bold">Cars</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Car</Button>
       </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search cars…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
           <TableHeader><TableRow><TableHead>Model</TableHead><TableHead>Manufacturer</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
           <TableBody>
-            {cars.map((c: any) => (
+            {filtered.map((c: any) => (
               <TableRow key={c.id}>
                 <TableCell className="font-medium">{c.model_name}</TableCell>
                 <TableCell>{c.manufacturer}</TableCell>
@@ -59,6 +73,7 @@ export default function ManageCars() {
                 </TableCell>
               </TableRow>
             ))}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-4">No cars found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}

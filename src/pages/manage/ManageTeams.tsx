@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,18 +7,29 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 
 export default function ManageTeams() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", short_name: "", nationality: "" });
+  const [search, setSearch] = useState("");
 
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ["v2_teams"],
     queryFn: async () => { const { data, error } = await supabase.from("v2_teams").select("*").order("full_name"); if (error) throw error; return data; },
   });
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return teams;
+    const q = search.toLowerCase();
+    return teams.filter((t: any) =>
+      t.full_name.toLowerCase().includes(q) ||
+      (t.short_name || "").toLowerCase().includes(q) ||
+      (t.nationality || "").toLowerCase().includes(q)
+    );
+  }, [teams, search]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -45,11 +56,15 @@ export default function ManageTeams() {
         <h1 className="text-2xl font-bold">Teams</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Team</Button>
       </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search teams…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
           <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Short</TableHead><TableHead>Nationality</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
           <TableBody>
-            {teams.map((t: any) => (
+            {filtered.map((t: any) => (
               <TableRow key={t.id}>
                 <TableCell className="font-medium">{t.full_name}</TableCell>
                 <TableCell>{t.short_name}</TableCell>
@@ -60,6 +75,7 @@ export default function ManageTeams() {
                 </TableCell>
               </TableRow>
             ))}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No teams found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}
