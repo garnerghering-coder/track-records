@@ -152,8 +152,9 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     }
   }
 
-  const handleExport = () => {
-    exportSessionPdf({
+  const handleExport = async () => {
+    try {
+      await exportSessionPdf({
       eventName: event.name,
       seriesName: event.v2_seasons?.v2_series?.name || "",
       circuitName: event.v2_circuits?.name || "",
@@ -162,8 +163,11 @@ function SessionResults({ session, event }: { session: any; event: any }) {
       sessionType: type,
       results,
       incidents,
-      customColumns: extraDataKeys,
-    });
+        customColumns: extraDataKeys,
+      });
+    } catch (e: any) {
+      console.error("PDF export failed:", e);
+    }
   };
 
   return (
