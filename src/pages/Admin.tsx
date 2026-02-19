@@ -19,6 +19,7 @@ import CountrySelect from "@/components/CountrySelect";
 import FlagImage from "@/components/FlagImage";
 import DuplicatesTab from "@/components/DuplicatesTab";
 import TeamDuplicatesTab from "@/components/TeamDuplicatesTab";
+import CircuitDuplicatesTab from "@/components/CircuitDuplicatesTab";
 import FlagsTab from "@/components/FlagsTab";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -103,7 +104,14 @@ const Admin = () => {
   const [reports, setReports] = useState<any[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [teamDuplicateCount, setTeamDuplicateCount] = useState(0);
+  const [circuitDuplicateCount, setCircuitDuplicateCount] = useState(0);
   const [flagCount, setFlagCount] = useState(0);
+
+  // Circuits
+  const [allCircuits, setAllCircuits] = useState<any[]>([]);
+  const [enrichingCircuitIds, setEnrichingCircuitIds] = useState<Set<string>>(new Set());
+  const [bulkEnrichingCircuits, setBulkEnrichingCircuits] = useState(false);
+  const [enrichingEventIds, setEnrichingEventIds] = useState<Set<string>>(new Set());
 
   // Driver editing on entries
   const [editingDriversEntryId, setEditingDriversEntryId] = useState<string | null>(null);
@@ -305,6 +313,7 @@ const Admin = () => {
     setLoading(false);
     fetchDrivers();
     fetchTeams();
+    fetchCircuits();
     fetchRoles();
     fetchClaims();
     fetchPendingEvents();
@@ -323,6 +332,59 @@ const Admin = () => {
   const fetchTeams = async () => {
     const { data } = await supabase.from("team_profiles" as any).select("*").order("name") as any;
     if (data) setAllTeams(data);
+  };
+
+  const fetchCircuits = async () => {
+    const { data } = await supabase.from("circuits").select("*").order("name");
+    if (data) setAllCircuits(data);
+  };
+
+  const handleEnrichCircuit = async (circuitId: string, force = false) => {
+    setEnrichingCircuitIds(prev => new Set(prev).add(circuitId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-circuit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ circuitId, force }),
+      });
+      const result = await response.json();
+      if (!response.ok) toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      else { const r = result.results?.[0]; toast({ title: `Enriched ${r?.name}`, description: `Updated: ${r?.fieldsUpdated?.join(", ") || "none"}` }); fetchCircuits(); }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setEnrichingCircuitIds(prev => { const n = new Set(prev); n.delete(circuitId); return n; });
+  };
+
+  const handleBulkEnrichCircuits = async () => {
+    const missing = allCircuits.filter((c: any) => !c.description || !c.country);
+    if (missing.length === 0) { toast({ title: "All circuits already enriched" }); return; }
+    setBulkEnrichingCircuits(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-circuit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+      body: JSON.stringify({ circuitIds: missing.map((c: any) => c.id), force: false }),
+    });
+    const result = await response.json();
+    if (!response.ok) toast({ title: "Bulk enrich failed", description: result.error, variant: "destructive" });
+    else { const updated = result.results?.filter((r: any) => r.fieldsUpdated?.length > 0).length || 0; toast({ title: `Enriched ${updated} circuits` }); fetchCircuits(); }
+    setBulkEnrichingCircuits(false);
+  };
+
+  const handleEnrichEvent = async (eventId: string, force = false) => {
+    setEnrichingEventIds(prev => new Set(prev).add(eventId));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enrich-race-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}`, apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        body: JSON.stringify({ eventId, force }),
+      });
+      const result = await response.json();
+      if (!response.ok) toast({ title: "Enrichment failed", description: result.error, variant: "destructive" });
+      else { const r = result.results?.[0]; toast({ title: `Enriched ${r?.name}`, description: `Updated: ${r?.fieldsUpdated?.join(", ") || "none"}` }); fetchRaceEvents(); }
+    } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
+    setEnrichingEventIds(prev => { const n = new Set(prev); n.delete(eventId); return n; });
   };
 
   const fetchRoles = async () => {

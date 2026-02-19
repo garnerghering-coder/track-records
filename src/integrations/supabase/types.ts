@@ -194,6 +194,30 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_circuit_duplicates: {
+        Row: {
+          circuit_id_1: string
+          circuit_id_2: string
+          dismissed_at: string
+          dismissed_by: string | null
+          id: string
+        }
+        Insert: {
+          circuit_id_1: string
+          circuit_id_2: string
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+        }
+        Update: {
+          circuit_id_1?: string
+          circuit_id_2?: string
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       dismissed_duplicates: {
         Row: {
           dismissed_at: string

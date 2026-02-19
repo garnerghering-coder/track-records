@@ -184,6 +184,13 @@ const TeamProfilePage = () => {
               </div>
             </div>
           )}
+
+          {/* Contribute CTA */}
+          <div className="rounded-lg border border-border bg-card p-5 text-center">
+            <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
+            <p className="text-xs text-muted-foreground mb-3">Help us improve this team profile by contributing updates.</p>
+            <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
+          </div>
         </div>
 
         {/* Race History */}
