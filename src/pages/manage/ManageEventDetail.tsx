@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2 } from "lucide-react";
 
 const SESSION_TYPES = [
   { value: "practice", label: "Practice" },
@@ -60,6 +61,36 @@ export default function ManageEventDetail() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const deleteSession = useMutation({
+    mutationFn: async (sessionId: string) => {
+      // Delete results first, then session
+      for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
+        const { error } = await supabase.from(table).delete().eq("session_id", sessionId);
+        if (error) throw error;
+      }
+      const { error } = await supabase.from("v2_sessions").delete().eq("id", sessionId);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_sessions", id] }); toast.success("Session deleted"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteEvent = useMutation({
+    mutationFn: async () => {
+      // Delete all session data, sessions, then event
+      for (const s of sessions) {
+        for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
+          await supabase.from(table).delete().eq("session_id", s.id);
+        }
+      }
+      await supabase.from("v2_sessions").delete().eq("event_id", id!);
+      const { error } = await supabase.from("v2_events").delete().eq("id", id!);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Event deleted"); navigate("/manage"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const toggleEventStatus = useMutation({
     mutationFn: async () => {
       const newStatus = event?.status === "published" ? "draft" : "published";
@@ -96,8 +127,25 @@ export default function ManageEventDetail() {
             onClick={() => toggleEventStatus.mutate()}
             disabled={toggleEventStatus.isPending}
           >
-            {isPublished ? <><GlobeLock className="h-4 w-4 mr-1" />Unpublish</> : <><Globe className="h-4 w-4 mr-1" />Publish Event</>}
+           {isPublished ? <><GlobeLock className="h-4 w-4 mr-1" />Unpublish</> : <><Globe className="h-4 w-4 mr-1" />Publish Event</>}
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/10">
+                <Trash2 className="h-4 w-4 mr-1" />Delete Event
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Event</AlertDialogTitle>
+                <AlertDialogDescription>This will permanently delete "{event.name}" and all its sessions and results. This action cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteEvent.mutate()}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
         <p className="text-muted-foreground text-sm">
           {event.v2_seasons?.v2_series?.name} {event.v2_seasons?.year}
@@ -128,9 +176,28 @@ export default function ManageEventDetail() {
               {s.date && <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleString()}</p>}
               <div className="flex items-center justify-between">
                 <Badge variant={s.status === "published" ? "default" : "secondary"} className="text-[10px]">{s.status}</Badge>
-                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate(`/manage/events/${id}/session/${s.id}`)}>
-                  <ClipboardList className="h-3 w-3 mr-1" />Enter Results
-                </Button>
+                <div className="flex items-center gap-1">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Session</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete "{s.name}" and all its results. This action cannot be undone.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteSession.mutate(s.id)}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate(`/manage/events/${id}/session/${s.id}`)}>
+                    <ClipboardList className="h-3 w-3 mr-1" />Enter Results
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
