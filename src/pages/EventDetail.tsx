@@ -52,6 +52,9 @@ interface RaceEvent {
   location: string | null;
   event_date: string | null;
   notes: string | null;
+  circuit_id: string | null;
+  series_id: string | null;
+  ticket_url: string | null;
 }
 
 const EventDetailPage = () => {
@@ -168,7 +171,11 @@ const EventDetailPage = () => {
                 {event.event_name}
               </h1>
               <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-                <span>{event.series_name}</span>
+                {event.series_id ? (
+                  <Link to={`/series/${event.series_id}`} className="hover:text-primary transition-colors">{event.series_name}</Link>
+                ) : (
+                  <span>{event.series_name}</span>
+                )}
                 <span>• {event.season_year}</span>
                 {event.category && (
                   <Badge variant="secondary" className="text-xs">{categoryLabels[event.category] || event.category}</Badge>
@@ -176,10 +183,19 @@ const EventDetailPage = () => {
               </div>
               <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.5)" }}>
                 {event.location && (
-                  <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {event.location}</span>
+                  event.circuit_id ? (
+                    <Link to={`/circuit/${event.circuit_id}`} className="flex items-center gap-1 hover:text-primary transition-colors">
+                      <MapPin className="h-3.5 w-3.5" /> {event.location}
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> {event.location}</span>
+                  )
                 )}
                 {event.event_date && (
                   <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(event.event_date).toLocaleDateString()}</span>
+                )}
+                {event.ticket_url && (
+                  <a href={event.ticket_url} target="_blank" rel="noopener" className="text-primary hover:underline text-xs">Tickets</a>
                 )}
               </div>
             </div>

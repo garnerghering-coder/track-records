@@ -1,44 +1,65 @@
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Shield, Search, Trophy, Users, ChevronRight, CheckCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Search, ChevronRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import heroImage from "@/assets/hero-racing.jpg";
 
-const benefits = [
-  {
-    icon: Shield,
-    title: "Verified Results",
-    description: "Every race result is community-submitted and admin-verified, ensuring accuracy and trust.",
-  },
-  {
-    icon: Search,
-    title: "Discoverable Profiles",
-    description: "Teams and sponsors search by category, nationality, license grade, and more to find the right talent.",
-  },
-  {
-    icon: Trophy,
-    title: "Complete Race History",
-    description: "Build a comprehensive career record — series, championships, and individual race finishes all in one place.",
-  },
-  {
-    icon: Users,
-    title: "Community Driven",
-    description: "Anyone can contribute race data, add drivers, and help build the most complete motorsport database.",
-  },
-];
-
 const Index = () => {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [stats, setStats] = useState({ drivers: 0, teams: 0, events: 0, series: 0 });
+  const [recentEvents, setRecentEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const [d, t, e, s] = await Promise.all([
+        supabase.from("driver_profiles").select("id", { count: "exact", head: true }),
+        supabase.from("team_profiles").select("id", { count: "exact", head: true }),
+        supabase.from("race_events").select("id", { count: "exact", head: true }),
+        supabase.from("series").select("id", { count: "exact", head: true }),
+      ]);
+      setStats({
+        drivers: d.count ?? 0,
+        teams: t.count ?? 0,
+        events: e.count ?? 0,
+        series: s.count ?? 0,
+      });
+    };
+
+    const fetchRecent = async () => {
+      const { data } = await supabase
+        .from("race_events")
+        .select("id, event_name, series_name, season_year, location, event_date")
+        .order("created_at", { ascending: false })
+        .limit(6);
+      setRecentEvents(data ?? []);
+    };
+
+    fetchStats();
+    fetchRecent();
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       {/* Hero */}
-      <section className="relative flex min-h-[90vh] items-center justify-center overflow-hidden pt-16">
+      <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0">
-          <img src={heroImage} alt="GT cars racing on track" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-black/60" />
+          <img src={heroImage} alt="Racing on track" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/70 to-background" />
         </div>
 
         <div className="container relative z-10 text-center">
@@ -47,133 +68,129 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
           >
-            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-white">
-              Your Racing Career,
+            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-foreground">
+              The Motorsport
               <br />
-              <span className="text-primary">Verified.</span>
+              <span className="text-primary">Database.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg font-body text-white/70">
-              The community-driven motorsport database. Contribute race results,
-              discover drivers and teams, all backed by verified data.
+            <p className="mx-auto mt-4 max-w-xl text-lg font-body text-muted-foreground font-light">
+              Search drivers, teams, series, circuits, and race results — all in one place.
             </p>
-            <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <Link to="/contribute">
-                <Button size="lg" className="gap-2 text-base font-semibold px-8">
-                  Start Contributing <ChevronRight className="h-4 w-4" />
+
+            {/* Search bar */}
+            <form onSubmit={handleSearch} className="mx-auto mt-8 max-w-xl">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search drivers, teams, series, circuits…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-14 pl-12 pr-32 text-base bg-card border-border"
+                />
+                <Button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6">
+                  Search
                 </Button>
-              </Link>
-              <Link to="/search">
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  className="gap-2 text-base px-8 border border-white/20 text-white hover:bg-white/10"
-                >
-                  <Search className="h-4 w-4" /> Find Drivers
-                </Button>
-              </Link>
+              </div>
+            </form>
+
+            <div className="mt-6 flex items-center justify-center gap-3 text-sm text-muted-foreground">
+              <Link to="/search" className="hover:text-foreground transition-colors">Drivers</Link>
+              <span>·</span>
+              <Link to="/teams" className="hover:text-foreground transition-colors">Teams</Link>
+              <span>·</span>
+              <Link to="/results" className="hover:text-foreground transition-colors">Results</Link>
+              <span>·</span>
+              <Link to="/calendar" className="hover:text-foreground transition-colors">Calendar</Link>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Benefits */}
-      <section className="py-24">
+      {/* Live Stats */}
+      <section className="border-y border-border bg-card py-12">
         <div className="container">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl font-bold sm:text-4xl text-foreground">
-              Why TrackRecord?
-            </h2>
-            <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-              A platform built for motorsport — connecting drivers with teams and sponsors through verified career data.
-            </p>
-          </div>
-
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            {benefits.map((b, i) => (
-              <motion.div
-                key={b.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="rounded-lg border border-border bg-card p-6 shadow-sm"
-              >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                  <b.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="font-display text-lg font-semibold text-card-foreground">{b.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                  {b.description}
-                </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="bg-secondary py-24">
-        <div className="container">
-          <h2 className="font-display text-3xl font-bold text-center sm:text-4xl mb-16 text-secondary-foreground">
-            How It Works
-          </h2>
-          <div className="grid gap-12 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
             {[
-              { step: "01", title: "Join the Community", desc: "Sign up for free and start contributing race data, driver profiles, and team info." },
-              { step: "02", title: "Add & Verify", desc: "Submit race results, add drivers and teams. Admins review and verify contributions." },
-              { step: "03", title: "Get Discovered", desc: "Teams and sponsors search the platform to find drivers by category, nationality, and verified performance." },
-            ].map((item, i) => (
+              { label: "Drivers", value: stats.drivers },
+              { label: "Teams", value: stats.teams },
+              { label: "Race Events", value: stats.events },
+              { label: "Series", value: stats.series },
+            ].map((stat) => (
               <motion.div
-                key={item.step}
-                initial={{ opacity: 0, y: 20 }}
+                key={stat.label}
+                initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: i * 0.15, duration: 0.5 }}
                 className="text-center"
               >
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground font-display text-xl font-bold">
-                  {item.step}
+                <div className="font-display text-4xl font-bold text-primary">
+                  {stat.value.toLocaleString()}
                 </div>
-                <h3 className="font-display text-xl font-semibold text-secondary-foreground">{item.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
-                  {item.desc}
-                </p>
+                <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                  {stat.label}
+                </div>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-24">
-        <div className="container">
-          <div
-            className="relative overflow-hidden rounded-2xl p-12 text-center"
-            style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 50%, hsl(270 40% 20%) 100%)" }}
-          >
-            <div className="relative z-10">
-              <h2 className="font-display text-3xl font-bold sm:text-4xl text-white">
-                Ready to Build Your Track Record?
+      {/* Recently Added */}
+      {recentEvents.length > 0 && (
+        <section className="py-16">
+          <div className="container">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="font-display text-2xl font-semibold text-foreground">
+                Recently Added
               </h2>
-              <p className="mt-4 max-w-lg mx-auto text-white/70">
-                Join the platform where motorsport data is built by the community — verified, discoverable, professional.
-              </p>
-              <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                <Link to="/auth?signup=true">
-                  <Button size="lg" className="gap-2 px-8 font-semibold">
-                    <CheckCircle className="h-4 w-4" /> Sign Up Free
-                  </Button>
+              <Link to="/results" className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                View all <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {recentEvents.map((ev) => (
+                <Link
+                  key={ev.id}
+                  to={`/event/${ev.id}`}
+                  className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all"
+                >
+                  <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
+                    {ev.event_name}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1 truncate">{ev.series_name}</p>
+                  <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>{ev.season_year}</span>
+                    {ev.location && <span>{ev.location}</span>}
+                    {ev.event_date && <span>{new Date(ev.event_date).toLocaleDateString()}</span>}
+                  </div>
                 </Link>
-                <Link to="/contribute">
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="px-8 border border-white/20 text-white hover:bg-white/10"
-                  >
-                    Start Contributing
-                  </Button>
-                </Link>
-              </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* CTA */}
+      <section className="py-16">
+        <div className="container">
+          <div className="rounded-2xl border border-border bg-card p-12 text-center">
+            <h2 className="font-display text-3xl font-bold text-foreground">
+              Help Build the Database
+            </h2>
+            <p className="mt-4 max-w-lg mx-auto text-muted-foreground">
+              Contribute race results, add driver and team profiles, and help create the most complete motorsport database.
+            </p>
+            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <Link to="/contribute">
+                <Button size="lg" className="gap-2 px-8 font-medium">
+                  Start Contributing <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link to="/auth?signup=true">
+                <Button size="lg" variant="outline" className="px-8">
+                  Sign Up Free
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
