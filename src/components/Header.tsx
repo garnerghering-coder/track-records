@@ -150,9 +150,14 @@ const Header = () => {
             </Link>
           }
           {isAdmin &&
-          <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+          <>
+            <Link to="/manage" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              Manage
+            </Link>
+            <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               <Shield className="h-3.5 w-3.5 inline mr-1" />Admin
             </Link>
+          </>
           }
           {session ?
           <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
@@ -188,9 +193,14 @@ const Header = () => {
             </Link>
         }
           {isAdmin &&
-        <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+        <>
+          <Link to="/manage" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Manage
+            </Link>
+          <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Admin
             </Link>
+        </>
         }
           {session ?
         <button onClick={() => {handleLogout();setMobileMenuOpen(false);}} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">

@@ -968,6 +968,630 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_cars: {
+        Row: {
+          created_at: string
+          id: string
+          manufacturer: string | null
+          model_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          manufacturer?: string | null
+          model_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          manufacturer?: string | null
+          model_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v2_circuits: {
+        Row: {
+          country: string | null
+          created_at: string
+          id: string
+          layout_image_url: string | null
+          location: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string
+          id?: string
+          layout_image_url?: string | null
+          location?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string | null
+          created_at?: string
+          id?: string
+          layout_image_url?: string | null
+          location?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v2_drivers: {
+        Row: {
+          created_at: string
+          date_of_birth: string | null
+          full_name: string
+          id: string
+          nationality: string | null
+          short_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date_of_birth?: string | null
+          full_name: string
+          id?: string
+          nationality?: string | null
+          short_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date_of_birth?: string | null
+          full_name?: string
+          id?: string
+          nationality?: string | null
+          short_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v2_events: {
+        Row: {
+          circuit_id: string | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          round_number: number | null
+          season_id: string
+          start_date: string | null
+          status: Database["public"]["Enums"]["event_status_enum"]
+          updated_at: string
+        }
+        Insert: {
+          circuit_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          round_number?: number | null
+          season_id: string
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["event_status_enum"]
+          updated_at?: string
+        }
+        Update: {
+          circuit_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          round_number?: number | null
+          season_id?: string
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["event_status_enum"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_events_circuit_id_fkey"
+            columns: ["circuit_id"]
+            isOneToOne: false
+            referencedRelation: "v2_circuits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "v2_seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_fastest_laps: {
+        Row: {
+          created_at: string
+          driver_id: string | null
+          id: string
+          lap_number: number | null
+          lap_time: string | null
+          position: number | null
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          lap_number?: number | null
+          lap_time?: string | null
+          position?: number | null
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          lap_number?: number | null
+          lap_time?: string | null
+          position?: number | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_fastest_laps_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_fastest_laps_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_incidents: {
+        Row: {
+          created_at: string
+          description: string | null
+          driver_ids: string[] | null
+          id: string
+          lap_number: number | null
+          outcome: string | null
+          penalty_type: string | null
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          driver_ids?: string[] | null
+          id?: string
+          lap_number?: number | null
+          outcome?: string | null
+          penalty_type?: string | null
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          driver_ids?: string[] | null
+          id?: string
+          lap_number?: number | null
+          outcome?: string | null
+          penalty_type?: string | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_incidents_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_pit_stops: {
+        Row: {
+          created_at: string
+          driver_id: string | null
+          id: string
+          lap_number: number | null
+          session_id: string
+          stop_duration: string | null
+          total_pit_time: string | null
+        }
+        Insert: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          lap_number?: number | null
+          session_id: string
+          stop_duration?: string | null
+          total_pit_time?: string | null
+        }
+        Update: {
+          created_at?: string
+          driver_id?: string | null
+          id?: string
+          lap_number?: number | null
+          session_id?: string
+          stop_duration?: string | null
+          total_pit_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_pit_stops_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_pit_stops_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_practice_results: {
+        Row: {
+          best_lap_time: string | null
+          car_id: string | null
+          created_at: string
+          driver_id: string | null
+          gap_to_p1: string | null
+          id: string
+          laps_run: number | null
+          position: number | null
+          session_id: string
+          team_id: string | null
+        }
+        Insert: {
+          best_lap_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          driver_id?: string | null
+          gap_to_p1?: string | null
+          id?: string
+          laps_run?: number | null
+          position?: number | null
+          session_id: string
+          team_id?: string | null
+        }
+        Update: {
+          best_lap_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          driver_id?: string | null
+          gap_to_p1?: string | null
+          id?: string
+          laps_run?: number | null
+          position?: number | null
+          session_id?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_practice_results_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "v2_cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_practice_results_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_practice_results_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_practice_results_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v2_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_qualifying_results: {
+        Row: {
+          best_time: string | null
+          car_id: string | null
+          created_at: string
+          driver_id: string | null
+          gap_to_pole: string | null
+          id: string
+          laps_run: number | null
+          position: number | null
+          q1_time: string | null
+          q2_time: string | null
+          q3_time: string | null
+          session_id: string
+          team_id: string | null
+        }
+        Insert: {
+          best_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          driver_id?: string | null
+          gap_to_pole?: string | null
+          id?: string
+          laps_run?: number | null
+          position?: number | null
+          q1_time?: string | null
+          q2_time?: string | null
+          q3_time?: string | null
+          session_id: string
+          team_id?: string | null
+        }
+        Update: {
+          best_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          driver_id?: string | null
+          gap_to_pole?: string | null
+          id?: string
+          laps_run?: number | null
+          position?: number | null
+          q1_time?: string | null
+          q2_time?: string | null
+          q3_time?: string | null
+          session_id?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_qualifying_results_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "v2_cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_qualifying_results_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_qualifying_results_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_qualifying_results_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v2_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_race_results: {
+        Row: {
+          average_lap_time: string | null
+          car_id: string | null
+          created_at: string
+          dnf_reason: string | null
+          driver_id: string | null
+          fastest_lap_time: string | null
+          gap_to_leader: string | null
+          id: string
+          laps_completed: number | null
+          pit_stops: number | null
+          points: number | null
+          position: number | null
+          session_id: string
+          status: Database["public"]["Enums"]["result_status_enum"] | null
+          team_id: string | null
+          total_time: string | null
+        }
+        Insert: {
+          average_lap_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          dnf_reason?: string | null
+          driver_id?: string | null
+          fastest_lap_time?: string | null
+          gap_to_leader?: string | null
+          id?: string
+          laps_completed?: number | null
+          pit_stops?: number | null
+          points?: number | null
+          position?: number | null
+          session_id: string
+          status?: Database["public"]["Enums"]["result_status_enum"] | null
+          team_id?: string | null
+          total_time?: string | null
+        }
+        Update: {
+          average_lap_time?: string | null
+          car_id?: string | null
+          created_at?: string
+          dnf_reason?: string | null
+          driver_id?: string | null
+          fastest_lap_time?: string | null
+          gap_to_leader?: string | null
+          id?: string
+          laps_completed?: number | null
+          pit_stops?: number | null
+          points?: number | null
+          position?: number | null
+          session_id?: string
+          status?: Database["public"]["Enums"]["result_status_enum"] | null
+          team_id?: string | null
+          total_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_race_results_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "v2_cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_race_results_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_race_results_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_race_results_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v2_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_seasons: {
+        Row: {
+          created_at: string
+          id: string
+          series_id: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          series_id: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          series_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_seasons_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "v2_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_series: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          short_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          short_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      v2_sessions: {
+        Row: {
+          created_at: string
+          date: string | null
+          event_id: string
+          id: string
+          name: string
+          session_type: Database["public"]["Enums"]["session_type_enum"]
+          status: Database["public"]["Enums"]["event_status_enum"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string | null
+          event_id: string
+          id?: string
+          name: string
+          session_type: Database["public"]["Enums"]["session_type_enum"]
+          status?: Database["public"]["Enums"]["event_status_enum"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date?: string | null
+          event_id?: string
+          id?: string
+          name?: string
+          session_type?: Database["public"]["Enums"]["session_type_enum"]
+          status?: Database["public"]["Enums"]["event_status_enum"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_sessions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v2_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_teams: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          nationality: string | null
+          short_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          nationality?: string | null
+          short_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          nationality?: string | null
+          short_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -986,6 +1610,7 @@ export type Database = {
     Enums: {
       app_role: "driver" | "team_sponsor" | "admin"
       claim_status: "pending" | "approved" | "rejected"
+      event_status_enum: "draft" | "published"
       racing_category:
         | "karting"
         | "single_seater"
@@ -996,6 +1621,15 @@ export type Database = {
         | "endurance"
         | "formula"
         | "stock_car"
+        | "other"
+      result_status_enum: "finished" | "dnf" | "dns" | "dsq" | "classified"
+      session_type_enum:
+        | "practice"
+        | "qualifying"
+        | "sprint_qualifying"
+        | "sprint_race"
+        | "race"
+        | "warmup"
         | "other"
       verification_status: "pending" | "verified" | "rejected"
     }
@@ -1127,6 +1761,7 @@ export const Constants = {
     Enums: {
       app_role: ["driver", "team_sponsor", "admin"],
       claim_status: ["pending", "approved", "rejected"],
+      event_status_enum: ["draft", "published"],
       racing_category: [
         "karting",
         "single_seater",
@@ -1137,6 +1772,16 @@ export const Constants = {
         "endurance",
         "formula",
         "stock_car",
+        "other",
+      ],
+      result_status_enum: ["finished", "dnf", "dns", "dsq", "classified"],
+      session_type_enum: [
+        "practice",
+        "qualifying",
+        "sprint_qualifying",
+        "sprint_race",
+        "race",
+        "warmup",
         "other",
       ],
       verification_status: ["pending", "verified", "rejected"],
