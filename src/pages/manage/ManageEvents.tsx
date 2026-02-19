@@ -10,14 +10,20 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+
+type Ref = { id: string; label: string } | null;
 
 export default function ManageEvents() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ series_id: "", season_id: "", name: "", round_number: "", circuit_id: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
+  const [series, setSeries] = useState<Ref>(null);
+  const [season, setSeason] = useState<Ref>(null);
+  const [circuit, setCircuit] = useState<Ref>(null);
+  const [form, setForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["v2_events_list"],
@@ -28,17 +34,12 @@ export default function ManageEvents() {
     },
   });
 
-  const { data: seriesList = [] } = useQuery({ queryKey: ["v2_series"], queryFn: async () => { const { data } = await supabase.from("v2_series").select("*").order("name"); return data || []; } });
-  const { data: seasons = [] } = useQuery({ queryKey: ["v2_seasons"], queryFn: async () => { const { data } = await supabase.from("v2_seasons").select("*").order("year", { ascending: false }); return data || []; } });
-  const { data: circuits = [] } = useQuery({ queryKey: ["v2_circuits"], queryFn: async () => { const { data } = await supabase.from("v2_circuits").select("id, name").order("name"); return data || []; } });
-
-  const filteredSeasons = seasons.filter((s: any) => s.series_id === form.series_id);
-
   const save = useMutation({
     mutationFn: async () => {
+      if (!season) throw new Error("Season is required");
       const payload = {
-        season_id: form.season_id,
-        circuit_id: form.circuit_id || null,
+        season_id: season.id,
+        circuit_id: circuit?.id || null,
         name: form.name,
         round_number: form.round_number ? parseInt(form.round_number) : null,
         start_date: form.start_date || null,
@@ -53,13 +54,17 @@ export default function ManageEvents() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const openNew = () => {
+    setSeries(null); setSeason(null); setCircuit(null);
+    setForm({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" });
+    setOpen(true);
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Events</h1>
-        <Button onClick={() => { setForm({ series_id: "", season_id: "", name: "", round_number: "", circuit_id: "", start_date: "", end_date: "", description: "", status: "draft" }); setOpen(true); }} size="sm">
-          <Plus className="h-4 w-4 mr-1" />New Event
-        </Button>
+        <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Event</Button>
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
@@ -82,27 +87,21 @@ export default function ManageEvents() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>New Event</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <div><Label>Series *</Label>
-              <Select value={form.series_id} onValueChange={v => setForm(f => ({ ...f, series_id: v, season_id: "" }))}>
-                <SelectTrigger><SelectValue placeholder="Select series" /></SelectTrigger>
-                <SelectContent>{seriesList.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-              </Select>
+            <div>
+              <Label>Series *</Label>
+              <AutocompleteField entityType="series" value={series} onChange={v => { setSeries(v); setSeason(null); }} />
             </div>
-            <div><Label>Season *</Label>
-              <Select value={form.season_id} onValueChange={v => setForm(f => ({ ...f, season_id: v }))} disabled={!form.series_id}>
-                <SelectTrigger><SelectValue placeholder="Select season" /></SelectTrigger>
-                <SelectContent>{filteredSeasons.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.year}</SelectItem>)}</SelectContent>
-              </Select>
+            <div>
+              <Label>Season *</Label>
+              <AutocompleteField entityType="season" value={season} onChange={setSeason} filterSeriesId={series?.id} placeholder={series ? "Search or create season year…" : "Select a series first…"} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Round #</Label><Input type="number" value={form.round_number} onChange={e => setForm(f => ({ ...f, round_number: e.target.value }))} /></div>
               <div><Label>Event Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             </div>
-            <div><Label>Circuit</Label>
-              <Select value={form.circuit_id} onValueChange={v => setForm(f => ({ ...f, circuit_id: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select circuit" /></SelectTrigger>
-                <SelectContent>{circuits.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
+            <div>
+              <Label>Circuit</Label>
+              <AutocompleteField entityType="circuit" value={circuit} onChange={setCircuit} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Start Date</Label><Input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} /></div>
@@ -116,7 +115,7 @@ export default function ManageEvents() {
               </Select>
             </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.name.trim() || !form.season_id}>Create</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.name.trim() || !season}>Create</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

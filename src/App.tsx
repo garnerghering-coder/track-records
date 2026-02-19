@@ -22,6 +22,7 @@ import SeriesListing from "./pages/Series";
 import Calendar from "./pages/Calendar";
 import Cars from "./pages/Cars";
 import CarProfile from "./pages/CarProfile";
+import EventPage from "./pages/EventPage";
 import ManageLayout from "./pages/manage/ManageLayout";
 import ManageEvents from "./pages/manage/ManageEvents";
 import ManageEventDetail from "./pages/manage/ManageEventDetail";
@@ -57,6 +58,7 @@ const App = () => (
           <Route path="/cars" element={<Cars />} />
           <Route path="/car/:id" element={<CarProfile />} />
           <Route path="/calendar" element={<Calendar />} />
+          <Route path="/events/:slug" element={<EventPage />} />
           <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/manage" element={<ManageLayout />}>
