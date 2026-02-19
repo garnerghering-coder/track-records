@@ -2,8 +2,12 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI } from "../_shared/call-ai.ts";
 
-// Use the npm: specifier for Deno-compatible pdf-parse
-import pdf from "npm:pdf-parse/lib/pdf-parse.js";
+// Dynamic import for pdf-parse to handle CJS/ESM compatibility
+const pdfParse = async (data: Uint8Array) => {
+  const mod = await import("npm:pdf-parse");
+  const fn = mod.default || mod;
+  return fn(Buffer.from(data));
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -243,7 +247,7 @@ serve(async (req) => {
     // ── Layer 1: Text-based extraction ──
     let textResults: ParsedResult[] | null = null;
     try {
-      const pdfData = await pdf(Buffer.from(pdfBytes));
+      const pdfData = await pdfParse(pdfBytes);
       const extractedText = pdfData.text || "";
       console.log(`Extracted ${extractedText.length} chars of text from PDF`);
 
