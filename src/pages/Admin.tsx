@@ -251,6 +251,7 @@ const Admin = () => {
     { value: "gap_to_leader", label: "Gap to Leader" },
     { value: "gap_to_class_leader", label: "Gap to Class Leader" },
     { value: "notes", label: "Notes" },
+    { value: "car_model_id", label: "Car Model" },
     { value: "finishing_position", label: "Position" },
     { value: "class_position", label: "Class Position" },
     { value: "laps_completed", label: "Laps" },
@@ -821,7 +822,7 @@ const Admin = () => {
   const fetchPendingEvents = async () => {
     const { data: entries } = await supabase
       .from("race_entries")
-      .select("*, race_events(*), race_entry_drivers(*, driver_profiles(*))")
+      .select("*, race_events(*), race_entry_drivers(*, driver_profiles(*)), car_models(*)")
       .eq("verification_status", "pending");
 
     if (!entries || entries.length === 0) {
@@ -857,7 +858,7 @@ const Admin = () => {
     setLoadingExpanded(true);
     const { data: rawEntries } = await supabase
       .from("race_entries")
-      .select("*, race_entry_drivers(*, driver_profiles(*))")
+      .select("*, race_entry_drivers(*, driver_profiles(*)), car_models(*)")
       .eq("race_event_id", eventId)
       .order("finishing_position", { ascending: true, nullsFirst: false });
     setExpandedEntries(rawEntries || []);
@@ -1707,6 +1708,7 @@ Here are the results to parse:
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Car #</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Team</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Driver(s)</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Car</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Class</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Gap</th>
               <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
@@ -1732,6 +1734,11 @@ Here are the results to parse:
                   {renderCell(entry, "car_number", entry.car_number)}
                   {renderCell(entry, "team_name", entry.team_name, "text-card-foreground")}
                   {renderDriverCell(entry)}
+                  <td className="px-3 py-2 text-muted-foreground">
+                    {entry.car_models?.name ? (
+                      <span className="cursor-pointer hover:text-primary" onClick={() => navigate(`/car/${entry.car_model_id}`)}>{entry.car_models.name}</span>
+                    ) : "—"}
+                  </td>
                   {renderCell(entry, "race_class", entry.race_class)}
                   {renderCell(entry, "gap_to_leader", entry.gap_to_leader)}
                   {renderCell(entry, "status", entry.status)}
@@ -2543,6 +2550,7 @@ Here are the results to parse:
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Location</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Length</th>
                     <th className="px-4 py-3 text-left font-semibold text-card-foreground">Turns</th>
+                    <th className="px-4 py-3 text-left font-semibold text-card-foreground">Lap Record</th>
                     <th className="px-4 py-3 text-center font-semibold text-card-foreground">Map</th>
                     <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
                   </tr>
@@ -2557,6 +2565,7 @@ Here are the results to parse:
                       <td className="px-4 py-3 text-muted-foreground">{c.location ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.length_km ? `${c.length_km} km` : "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{c.turns ?? "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{c.lap_record_time ? <span className="font-mono text-xs text-primary">{c.lap_record_time}</span> : "—"}</td>
                       <td className="px-4 py-3 text-center">{c.image_url ? <Check className="h-4 w-4 text-green-400 mx-auto" /> : <X className="h-4 w-4 text-muted-foreground mx-auto" />}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
@@ -2590,7 +2599,7 @@ Here are the results to parse:
                       </td>
                     </tr>
                   ))}
-                  {allCircuits.length === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No circuits yet.</td></tr>}
+                  {allCircuits.length === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">No circuits yet.</td></tr>}
                 </tbody>
               </table>
             </div>
