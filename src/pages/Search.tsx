@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon, ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -160,6 +160,9 @@ const SearchPage = () => {
 
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">
+          <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Back to Home
+          </Link>
           <h1 className="font-display text-3xl font-bold text-foreground">Search</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Search across drivers, teams, events, series, and circuits.

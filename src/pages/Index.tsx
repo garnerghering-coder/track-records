@@ -111,25 +111,26 @@ const Index = () => {
         <div className="container">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
             {[
-              { label: "Drivers", value: stats.drivers },
-              { label: "Teams", value: stats.teams },
-              { label: "Race Events", value: stats.events },
-              { label: "Series", value: stats.series },
+              { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
+              { label: "Teams", value: stats.teams, to: "/teams" },
+              { label: "Race Events", value: stats.events, to: "/results" },
+              { label: "Series", value: stats.series, to: "/results" },
             ].map((stat) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                className="text-center"
-              >
-                <div className="font-accent text-4xl font-bold text-primary">
-                  {stat.value.toLocaleString()}
-                </div>
-                <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                  {stat.label}
-                </div>
-              </motion.div>
+              <Link key={stat.label} to={stat.to}>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  className="text-center group cursor-pointer"
+                >
+                  <div className="font-accent text-4xl font-bold text-primary group-hover:scale-110 transition-transform">
+                    {stat.value.toLocaleString()}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+                    {stat.label}
+                  </div>
+                </motion.div>
+              </Link>
             ))}
           </div>
         </div>

@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { Mail, X } from "lucide-react";
 import Header from "@/components/Header";
 
 type AuthMode = "login" | "signup";
@@ -20,6 +21,7 @@ const Auth = () => {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showVerifyOverlay, setShowVerifyOverlay] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -60,13 +62,55 @@ const Auth = () => {
     if (error) {
       toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Check your email", description: "We've sent you a verification link to confirm your account." });
+      setShowVerifyOverlay(true);
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
+
+      {/* Email verification lightbox */}
+      {showVerifyOverlay && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm">
+          <div className="relative w-full max-w-md mx-4 rounded-xl border border-border bg-card p-10 text-center shadow-2xl">
+            <button
+              onClick={() => setShowVerifyOverlay(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/15">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="font-display text-2xl font-bold text-card-foreground">
+              Check Your Email
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+              We've sent a verification link to <span className="text-foreground font-medium">{email}</span>.
+              Click the link in the email to verify your account.
+            </p>
+            <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+              Can't find it? <span className="text-foreground font-medium">Check your spam or junk folder</span> — it sometimes ends up there.
+            </p>
+            <div className="mt-8 space-y-3">
+              <Button
+                onClick={() => { setShowVerifyOverlay(false); setMode("login"); }}
+                className="w-full"
+              >
+                Done verifying? Sign In
+              </Button>
+              <button
+                onClick={() => setShowVerifyOverlay(false)}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex min-h-screen items-center justify-center pt-16 px-4">
         <div className="w-full max-w-md">
           <div className="rounded-xl border border-border bg-card p-8 shadow-lg">
