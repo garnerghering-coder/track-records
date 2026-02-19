@@ -425,8 +425,8 @@ const DriverProfilePage = () => {
                       <TableCell className="font-medium">{r.season_year}</TableCell>
                       <TableCell>{r.series_name}</TableCell>
                       <TableCell className="text-muted-foreground">{r.event_name || "—"}</TableCell>
-                      <TableCell className="text-center">{r.finishing_position ?? "—"}</TableCell>
-                      <TableCell className="text-center">{r.championship_position ?? "—"}</TableCell>
+                      <TableCell className="text-center font-accent text-base">{r.finishing_position ?? "—"}</TableCell>
+                      <TableCell className="text-center font-accent text-base">{r.championship_position ?? "—"}</TableCell>
                       <TableCell className="text-right"><VerificationBadge status={r.verification_status} /></TableCell>
                       {isAdmin &&
                   <TableCell className="text-right">
@@ -465,7 +465,7 @@ const DriverProfilePage = () => {
 
                       <div className="w-10 text-center shrink-0">
                         {entry.finishing_position != null ?
-                      <span className={`font-display text-lg font-bold ${entry.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
+                      <span className={`font-accent text-lg font-bold ${entry.finishing_position === 1 ? "text-primary" : "text-card-foreground"}`}>
                             P{entry.finishing_position}
                           </span> :
 

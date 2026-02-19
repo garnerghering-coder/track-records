@@ -243,10 +243,10 @@ const EventDetailPage = () => {
                   <TableBody>
                     {classEntries.map(entry => (
                       <TableRow key={entry.id}>
-                        <TableCell className="font-display font-bold text-card-foreground">
+                        <TableCell className="font-accent font-bold text-card-foreground text-base">
                           {entry.finishing_position ?? "—"}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="font-accent text-muted-foreground text-base">
                           {entry.class_position ?? "—"}
                         </TableCell>
                         <TableCell className="font-mono text-card-foreground font-medium">
