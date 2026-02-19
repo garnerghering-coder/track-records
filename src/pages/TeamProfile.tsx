@@ -44,7 +44,7 @@ const TeamProfilePage = () => {
       // Fetch race entries linked to this team
       const entriesRes: any = await supabase
         .from("race_entries" as any)
-        .select("id, team_name, car_number, race_class, finishing_position, class_position, status, race_event_id, race_events(id, event_name, series_name, season_year, category, location, event_date)")
+        .select("id, team_name, car_number, race_class, finishing_position, class_position, status, race_event_id, car_model_id, car_models(id, name), race_events(id, event_name, series_name, season_year, category, location, event_date)")
         .eq("team_profile_id", id)
         .order("created_at", { ascending: false });
       const entries = entriesRes.data;
@@ -54,7 +54,7 @@ const TeamProfilePage = () => {
       if (allEntries.length === 0 && (teamData as any).name) {
         const { data: nameEntries } = await supabase
           .from("race_entries")
-          .select("id, team_name, car_number, race_class, finishing_position, class_position, status, race_event_id, race_events(id, event_name, series_name, season_year, category, location, event_date)")
+          .select("id, team_name, car_number, race_class, finishing_position, class_position, status, race_event_id, car_model_id, car_models(id, name), race_events(id, event_name, series_name, season_year, category, location, event_date)")
           .eq("team_name", (teamData as any).name)
           .order("created_at", { ascending: false });
         allEntries = nameEntries || [];
@@ -66,6 +66,24 @@ const TeamProfilePage = () => {
         if (dateA || dateB) return dateB.localeCompare(dateA);
         return (b.race_events?.season_year || 0) - (a.race_events?.season_year || 0);
       }));
+
+      // Fetch drivers for each entry
+      const entryIdsAll = allEntries.map((e: any) => e.id);
+      if (entryIdsAll.length > 0) {
+        const { data: junctions } = await supabase
+          .from("race_entry_drivers")
+          .select("race_entry_id, driver_profiles(id, first_name, last_name, nationality)")
+          .in("race_entry_id", entryIdsAll);
+
+        const entryDriverMap: Record<string, any[]> = {};
+        (junctions || []).forEach((j: any) => {
+          if (!entryDriverMap[j.race_entry_id]) entryDriverMap[j.race_entry_id] = [];
+          if (j.driver_profiles) entryDriverMap[j.race_entry_id].push(j.driver_profiles);
+        });
+
+        allEntries = allEntries.map((e: any) => ({ ...e, entryDrivers: entryDriverMap[e.id] || [] }));
+        setRaceHistory(allEntries);
+      }
 
       // Get current drivers from most recent entries
       const entryIds = allEntries.slice(0, 20).map((e: any) => e.id);
@@ -205,8 +223,9 @@ const TeamProfilePage = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Event</TableHead>
-                      <TableHead>Series</TableHead>
-                      <TableHead>Year</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Driver(s)</TableHead>
+                      <TableHead>Car</TableHead>
                       <TableHead>Class</TableHead>
                       <TableHead className="text-center">Pos</TableHead>
                       <TableHead>Status</TableHead>
@@ -216,15 +235,35 @@ const TeamProfilePage = () => {
                     {raceHistory.map((entry: any) => (
                       <TableRow key={entry.id}>
                         <TableCell>
-                          <Link
-                            to={`/event/${entry.race_events?.id}`}
-                            className="text-primary hover:underline font-medium"
-                          >
+                          <Link to={`/event/${entry.race_events?.id}`} className="text-primary hover:underline font-medium">
                             {entry.race_events?.event_name || "—"}
                           </Link>
+                          <p className="text-xs text-muted-foreground">{entry.race_events?.series_name}</p>
                         </TableCell>
-                        <TableCell className="text-muted-foreground">{entry.race_events?.series_name || "—"}</TableCell>
-                        <TableCell className="text-muted-foreground">{entry.race_events?.season_year || "—"}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {entry.race_events?.event_date
+                            ? new Date(entry.race_events.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
+                            : entry.race_events?.season_year || "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            {(entry.entryDrivers || []).length === 0 ? (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            ) : (
+                              (entry.entryDrivers || []).map((d: any) => (
+                                <Link key={d.id} to={`/driver/${d.id}`} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                  <FlagImage nationality={d.nationality} size={12} />
+                                  {d.first_name} {d.last_name}
+                                </Link>
+                              ))
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {entry.car_models ? (
+                            <Link to={`/car/${entry.car_models.id}`} className="text-xs text-primary hover:underline">{entry.car_models.name}</Link>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{entry.race_class || "—"}</TableCell>
                         <TableCell className="text-center font-accent font-bold text-card-foreground text-base">
                           {entry.finishing_position ?? "—"}
