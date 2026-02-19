@@ -1927,6 +1927,706 @@ Here are the results to parse:
             <TabsTrigger value="roles">Manage Roles</TabsTrigger>
           </TabsList>
 
+          {/* ── All Drivers ── */}
+          <TabsContent value="drivers">
+            <div className="space-y-6">
+              {/* Create Driver Form */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Create Driver Profile</h2>
+                <form onSubmit={handleCreateDriver} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-card-foreground">First Name</Label><Input value={driverFirst} onChange={(e) => setDriverFirst(e.target.value)} required /></div>
+                    <div><Label className="text-card-foreground">Last Name</Label><Input value={driverLast} onChange={(e) => setDriverLast(e.target.value)} required /></div>
+                  </div>
+                  <div><Label className="text-card-foreground">Nationality</Label><CountrySelect value={driverNationality} onChange={setDriverNationality} /></div>
+                  <div>
+                    <Label className="text-card-foreground">Category</Label>
+                    <Select value={driverCategory} onValueChange={setDriverCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</SelectItem>))}</SelectContent></Select>
+                  </div>
+                  <div><Label className="text-card-foreground">Bio</Label><Input value={driverBio} onChange={(e) => setDriverBio(e.target.value)} /></div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between"><Label className="text-card-foreground">Race Results</Label><Button type="button" variant="outline" size="sm" onClick={() => setRaceResults([...raceResults, emptyResult()])}><Plus className="h-3 w-3 mr-1" /> Add Result</Button></div>
+                    {raceResults.map((r) => (
+                      <div key={r.key} className="grid grid-cols-7 gap-2 items-end border border-border rounded-lg p-3">
+                        <div><Label className="text-xs text-muted-foreground">Year</Label><Input value={r.season_year} onChange={(e) => updateResult(r.key, "season_year", e.target.value)} className="h-8 text-xs" /></div>
+                        <div><Label className="text-xs text-muted-foreground">Series</Label><Input value={r.series_name} onChange={(e) => updateResult(r.key, "series_name", e.target.value)} className="h-8 text-xs" /></div>
+                        <div><Label className="text-xs text-muted-foreground">Event</Label><Input value={r.event_name} onChange={(e) => updateResult(r.key, "event_name", e.target.value)} className="h-8 text-xs" /></div>
+                        <div><Label className="text-xs text-muted-foreground">Category</Label>
+                          <Select value={r.category} onValueChange={(v) => updateResult(r.key, "category", v)}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ")}</SelectItem>))}</SelectContent></Select>
+                        </div>
+                        <div><Label className="text-xs text-muted-foreground">Finish Pos</Label><Input value={r.finishing_position} onChange={(e) => updateResult(r.key, "finishing_position", e.target.value)} className="h-8 text-xs" type="number" /></div>
+                        <div><Label className="text-xs text-muted-foreground">Champ Pos</Label><Input value={r.championship_position} onChange={(e) => updateResult(r.key, "championship_position", e.target.value)} className="h-8 text-xs" type="number" /></div>
+                        <div className="flex items-end gap-1">
+                          <div className="flex-1"><Label className="text-xs text-muted-foreground">Notes</Label><Input value={r.notes} onChange={(e) => updateResult(r.key, "notes", e.target.value)} className="h-8 text-xs" /></div>
+                          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0 text-destructive" onClick={() => removeResult(r.key)}><Trash2 className="h-3 w-3" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Button type="submit" disabled={creatingDriver} className="w-full">{creatingDriver ? "Creating…" : "Create Driver Profile"}</Button>
+                </form>
+              </div>
+
+              {/* Drivers List */}
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Drivers ({drivers.length})</h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleBulkEnrich} disabled={bulkEnriching}>{bulkEnriching ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich</>}</Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Nationality</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Bio</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {drivers.map((d) => (
+                      <tr key={d.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 text-card-foreground font-medium">{d.first_name} {d.last_name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{d.nationality ? <FlagImage nationality={d.nationality} size={16} /> : "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">{d.primary_category?.replace(/_/g, " ") || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">{d.bio || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/driver/${d.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(d)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichDriver(d.id)} disabled={enrichingIds.has(d.id)}>{enrichingIds.has(d.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete driver?</AlertDialogTitle><AlertDialogDescription>This will permanently delete {d.first_name} {d.last_name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDelete(d.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── All Teams ── */}
+          <TabsContent value="all-teams">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Teams ({allTeams.length})</h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSeedCircuits} disabled={seedingCircuits}>{seedingCircuits ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />} Seed from Events</Button>
+                  <Button variant="outline" size="sm" onClick={handleBulkEnrichTeams} disabled={bulkEnrichingTeams}>{bulkEnrichingTeams ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich</>}</Button>
+                  {selectedTeamIds.size > 0 && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-3.5 w-3.5 mr-1" /> Delete {selectedTeamIds.size} Teams</Button></AlertDialogTrigger>
+                      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {selectedTeamIds.size} teams?</AlertDialogTitle><AlertDialogDescription>This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={async () => { for (const id of selectedTeamIds) { await supabase.from("team_profiles" as any).delete().eq("id", id); } setSelectedTeamIds(new Set()); fetchTeams(); toast({ title: `Deleted ${selectedTeamIds.size} teams` }); }}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-2 py-3 w-8"><Checkbox checked={selectedTeamIds.size === allTeams.length && allTeams.length > 0} onCheckedChange={(checked) => setSelectedTeamIds(checked ? new Set(allTeams.map((t: any) => t.id)) : new Set())} /></th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Nationality</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {allTeams.map((t: any) => (
+                      <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-2 py-3"><Checkbox checked={selectedTeamIds.has(t.id)} onCheckedChange={(checked) => { const next = new Set(selectedTeamIds); if (checked) next.add(t.id); else next.delete(t.id); setSelectedTeamIds(next); }} /></td>
+                        <td className="px-4 py-3 text-card-foreground font-medium">{t.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{t.nationality ? <FlagImage nationality={t.nationality} size={16} /> : "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">{t.primary_category?.replace(/_/g, " ") || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/team/${t.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichTeam(t.id)} disabled={enrichingTeamIds.has(t.id)}>{enrichingTeamIds.has(t.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete team?</AlertDialogTitle><AlertDialogDescription>This will permanently delete {t.name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={async () => { await supabase.from("team_profiles" as any).delete().eq("id", t.id); fetchTeams(); toast({ title: "Team deleted" }); }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── All Circuits ── */}
+          <TabsContent value="all-circuits">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Circuits ({allCircuits.length})</h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSeedCircuits} disabled={seedingCircuits}>{seedingCircuits ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />} Seed from Events</Button>
+                  <Button variant="outline" size="sm" onClick={handleBulkEnrichCircuits} disabled={bulkEnrichingCircuits}>{bulkEnrichingCircuits ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich</>}</Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Location</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Country</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Lap Record</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {allCircuits.map((c: any) => (
+                      <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-4 py-3 text-card-foreground font-medium">{c.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{c.location || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{c.country ? <FlagImage nationality={c.country} size={16} /> : "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{c.lap_record_time || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/circuit/${c.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichCircuit(c.id)} disabled={enrichingCircuitIds.has(c.id)}>{enrichingCircuitIds.has(c.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete circuit?</AlertDialogTitle><AlertDialogDescription>This will permanently delete {c.name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={async () => { await supabase.from("circuits").delete().eq("id", c.id); fetchCircuits(); toast({ title: "Circuit deleted" }); }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── All Series ── */}
+          <TabsContent value="all-series">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Series ({allSeries.length})</h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSeedSeries} disabled={seedingSeries}>{seedingSeries ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />} Seed from Events</Button>
+                  <Button variant="outline" size="sm" onClick={handleBulkEnrichSeries} disabled={bulkEnrichingSeries}>{bulkEnrichingSeries ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich</>}</Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Website</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {allSeries.map((s: any) => (
+                      <tr key={s.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-4 py-3 text-card-foreground font-medium">{s.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">{s.category?.replace(/_/g, " ") || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{s.website ? <a href={s.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{s.website}</a> : "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/series/${s.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichSeries(s.id)} disabled={enrichingSeriesIds.has(s.id)}>{enrichingSeriesIds.has(s.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete series?</AlertDialogTitle><AlertDialogDescription>This will permanently delete {s.name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={async () => { await supabase.from("series").delete().eq("id", s.id); fetchSeries(); toast({ title: "Series deleted" }); }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── All Cars ── */}
+          <TabsContent value="all-cars">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Cars ({allCars.length})</h2>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={handleSeedCars} disabled={seedingCars}>{seedingCars ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Zap className="h-3.5 w-3.5 mr-1" />} Seed from Events</Button>
+                  <Button variant="outline" size="sm" onClick={handleBulkEnrichCars} disabled={bulkEnrichingCars}>{bulkEnrichingCars ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Enriching…</> : <><Sparkles className="h-3.5 w-3.5 mr-1" /> Bulk Enrich</>}</Button>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border bg-muted/50"><th className="px-4 py-3 text-left font-semibold text-card-foreground">Name</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Manufacturer</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Category</th><th className="px-4 py-3 text-left font-semibold text-card-foreground">Year</th><th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th></tr></thead>
+                  <tbody>
+                    {allCars.map((c: any) => (
+                      <tr key={c.id} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-4 py-3 text-card-foreground font-medium">{c.name}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{c.manufacturer || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">{c.category?.replace(/_/g, " ") || "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{c.year_introduced || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/car/${c.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEnrichCar(c.id)} disabled={enrichingCarIds.has(c.id)}>{enrichingCarIds.has(c.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                              <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete car?</AlertDialogTitle><AlertDialogDescription>This will permanently delete {c.name}.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={async () => { await supabase.from("car_models").delete().eq("id", c.id); fetchCars(); toast({ title: "Car deleted" }); }} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── All Races ── */}
+          <TabsContent value="all-races">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-xl font-bold text-card-foreground">All Race Events ({raceEvents.length})</h2>
+                <div className="flex gap-2">
+                  {selectedEventIds.size > 0 && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild><Button variant="destructive" size="sm"><Trash2 className="h-3.5 w-3.5 mr-1" /> Delete {selectedEventIds.size} Events</Button></AlertDialogTrigger>
+                      <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {selectedEventIds.size} events?</AlertDialogTitle><AlertDialogDescription>This will delete the events and all associated entries. This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground" onClick={async () => { for (const id of selectedEventIds) { await handleDeleteEvent(id); } setSelectedEventIds(new Set()); }}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-2 py-3 w-8"><Checkbox checked={selectedEventIds.size === raceEvents.length && raceEvents.length > 0} onCheckedChange={(checked) => setSelectedEventIds(checked ? new Set(raceEvents.map((e: any) => e.id)) : new Set())} /></th>
+                      <th className="px-4 py-3 text-left font-semibold text-card-foreground">Event</th>
+                      <th className="px-4 py-3 text-left font-semibold text-card-foreground">Series</th>
+                      <th className="px-4 py-3 text-left font-semibold text-card-foreground">Date</th>
+                      <th className="px-4 py-3 text-left font-semibold text-card-foreground">Location</th>
+                      <th className="px-4 py-3 text-left font-semibold text-card-foreground">Entries</th>
+                      <th className="px-4 py-3 text-right font-semibold text-card-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {raceEvents.map((ev: any) => (
+                      <>
+                        <tr key={ev.id} className={`border-b border-border/50 hover:bg-muted/30 ${expandedEventId === ev.id ? "bg-muted/40" : ""}`}>
+                          <td className="px-2 py-3"><Checkbox checked={selectedEventIds.has(ev.id)} onCheckedChange={(checked) => { const next = new Set(selectedEventIds); if (checked) next.add(ev.id); else next.delete(ev.id); setSelectedEventIds(next); }} /></td>
+                          <td className="px-4 py-3 text-card-foreground font-medium">
+                            {editingEventId === ev.id ? <Input value={editingEventFields.event_name} onChange={(e) => setEditingEventFields({ ...editingEventFields, event_name: e.target.value })} className="h-7 text-xs" /> : ev.event_name}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {editingEventId === ev.id ? <Input value={editingEventFields.series_name} onChange={(e) => setEditingEventFields({ ...editingEventFields, series_name: e.target.value })} className="h-7 text-xs" /> : ev.series_name}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {editingEventId === ev.id ? (
+                              <div className="space-y-1">
+                                <Input type="date" value={editingEventFields.event_date} onChange={(e) => setEditingEventFields({ ...editingEventFields, event_date: e.target.value })} className="h-7 text-xs" />
+                                <Input type="number" value={editingEventFields.season_year} onChange={(e) => setEditingEventFields({ ...editingEventFields, season_year: e.target.value })} className="h-7 text-xs" placeholder="Year" />
+                              </div>
+                            ) : (
+                              ev.event_date ? new Date(ev.event_date + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : ev.season_year
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {editingEventId === ev.id ? <Input value={editingEventFields.location} onChange={(e) => setEditingEventFields({ ...editingEventFields, location: e.target.value })} className="h-7 text-xs" /> : (ev.location || "—")}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{ev.race_entries?.length || 0}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              {editingEventId === ev.id ? (
+                                <>
+                                  <Button variant="ghost" size="sm" onClick={handleUpdateEvent}><Check className="h-3.5 w-3.5" /></Button>
+                                  <Button variant="ghost" size="sm" onClick={() => setEditingEventId(null)}><X className="h-3.5 w-3.5" /></Button>
+                                </>
+                              ) : (
+                                <Button variant="ghost" size="sm" onClick={() => startEditEvent(ev)}><Pencil className="h-3.5 w-3.5" /></Button>
+                              )}
+                              <Button variant="ghost" size="sm" onClick={() => toggleExpandEvent(ev.id)}>{expandedEventId === ev.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}</Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleEnrichEvent(ev.id)} disabled={enrichingEventIds.has(ev.id)}>{enrichingEventIds.has(ev.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive/80"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                                <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete event?</AlertDialogTitle><AlertDialogDescription>This will delete "{ev.event_name}" and all entries.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteEvent(ev.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </td>
+                        </tr>
+                        {expandedEventId === ev.id && (
+                          <tr key={`${ev.id}-expanded`}>
+                            <td colSpan={7} className="p-0">
+                              <div className="border-t border-border bg-muted/20 p-4">
+                                {loadingExpanded ? <p className="text-muted-foreground text-sm text-center py-4">Loading entries…</p> : (
+                                  expandedEntries.length === 0 ? <p className="text-muted-foreground text-sm text-center py-4">No entries for this event.</p> : renderEntriesTable(expandedEntries)
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── AI Import ── */}
+          <TabsContent value="ai-import">
+            <div className="space-y-6">
+              {/* Text/PDF Import */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Import Race Results (AI)</h2>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-card-foreground">Event Hint</Label><Input value={importEventHint} onChange={(e) => setImportEventHint(e.target.value)} placeholder="e.g. 24 Hours of Le Mans 2024" /></div>
+                    <div><Label className="text-card-foreground">Series Hint</Label><Input value={importSeriesHint} onChange={(e) => setImportSeriesHint(e.target.value)} placeholder="e.g. FIA WEC" /></div>
+                  </div>
+                  <div>
+                    <Label className="text-card-foreground">Upload PDF</Label>
+                    <Input type="file" accept=".pdf" onChange={(e) => setImportPdfFile(e.target.files?.[0] || null)} />
+                    {importPdfFile && <p className="text-xs text-muted-foreground mt-1">Selected: {importPdfFile.name}</p>}
+                  </div>
+                  <div><Label className="text-card-foreground">Or paste results text</Label><Textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste race results here…" rows={8} /></div>
+                  <Button onClick={handleImportResults} disabled={importing} className="w-full">{importing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Importing…</> : <><Upload className="h-4 w-4 mr-2" /> Import Results</>}</Button>
+                  {importResult && (
+                    <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm space-y-1">
+                      <p className="text-card-foreground font-medium">{importResult.event} — {importResult.series} ({importResult.year})</p>
+                      <p className="text-muted-foreground">{importResult.entriesCount} entries imported, {importResult.matchedDrivers} drivers matched</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Import from URL */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Import from URL</h2>
+                <div className="space-y-4">
+                  <div><Label className="text-card-foreground">Results Page URL</Label><Input value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://example.com/results" /></div>
+                  <Button onClick={handleImportFromUrl} disabled={importingUrl} className="w-full">{importingUrl ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Scraping…</> : <><Globe className="h-4 w-4 mr-2" /> Import from URL</>}</Button>
+                  {importUrlResult && (
+                    <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm space-y-1">
+                      <p className="text-card-foreground font-medium">{importUrlResult.event} — {importUrlResult.series}</p>
+                      <p className="text-muted-foreground">{importUrlResult.entriesCount} entries imported</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Generate Race */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Generate Race Event</h2>
+                <div className="space-y-4">
+                  <div><Label className="text-card-foreground">Race Name</Label><Input value={generateRaceName} onChange={(e) => setGenerateRaceName(e.target.value)} placeholder="e.g. 2024 Rolex 24 at Daytona" /></div>
+                  <Button onClick={handleGenerateRace} disabled={generating} className="w-full">{generating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating…</> : <><Sparkles className="h-4 w-4 mr-2" /> Generate Race</>}</Button>
+                  {generateResult && (
+                    <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm space-y-1">
+                      <p className="text-card-foreground font-medium">{generateResult.event} — {generateResult.series}</p>
+                      <p className="text-muted-foreground">{generateResult.entriesCount} entries generated</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Series Discovery */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Discover Full Series Season</h2>
+                <p className="text-sm text-muted-foreground mb-4">Enter a series name and year to discover and import all races for that season automatically.</p>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-card-foreground">Series Name</Label><Input value={discoverSeriesName} onChange={(e) => setDiscoverSeriesName(e.target.value)} placeholder="e.g. IMSA SportsCar Championship" /></div>
+                    <div><Label className="text-card-foreground">Season Year</Label><Input value={discoverYear} onChange={(e) => setDiscoverYear(e.target.value)} type="number" /></div>
+                  </div>
+                  <Button onClick={handleDiscoverSeries} disabled={submittingJob} className="w-full">{submittingJob ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Queuing…</> : <><Play className="h-4 w-4 mr-2" /> Discover Season</>}</Button>
+                </div>
+
+                {/* Discovery Jobs */}
+                {discoveryJobs.length > 0 && (
+                  <div className="mt-6 space-y-3">
+                    <h3 className="font-display text-sm font-semibold text-card-foreground">Discovery Jobs</h3>
+                    {discoveryJobs.map((job: any) => (
+                      <div key={job.id} className="rounded-lg border border-border bg-muted/30 p-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-card-foreground">{job.series_name} ({job.season_year})</p>
+                            <p className="text-xs text-muted-foreground">
+                              Status: <Badge variant={job.status === "completed" ? "default" : job.status === "running" ? "secondary" : job.status === "failed" || job.status === "cancelled" ? "destructive" : "outline"} className="text-xs ml-1">{job.status}</Badge>
+                              {job.events_found != null && <span className="ml-2">Found: {job.events_found} | Imported: {job.events_imported} | Skipped: {job.events_skipped} | Failed: {job.events_failed}</span>}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {(job.status === "queued" || job.status === "running") && (
+                              <Button variant="ghost" size="sm" onClick={() => handleCancelJob(job.id)}><Ban className="h-3.5 w-3.5" /></Button>
+                            )}
+                            <Button variant="ghost" size="sm" onClick={() => setExpandedJobId(expandedJobId === job.id ? null : job.id)}>{expandedJobId === job.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}</Button>
+                            {(job.status === "completed" || job.status === "failed" || job.status === "cancelled") && (
+                              <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDeleteJob(job.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                            )}
+                          </div>
+                        </div>
+                        {expandedJobId === job.id && Array.isArray(job.progress_log) && (
+                          <div className="mt-2 max-h-48 overflow-y-auto text-xs font-mono space-y-0.5 bg-background rounded p-2 border border-border">
+                            {(job.progress_log as any[]).map((log: any, i: number) => (
+                              <p key={i} className={log.status === "error" ? "text-destructive" : log.status === "skipped" ? "text-muted-foreground" : "text-card-foreground"}>
+                                [{log.status}] {log.event} {log.message && `— ${log.message}`}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Direct JSON Import */}
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Direct JSON Import</h2>
+                <p className="text-sm text-muted-foreground mb-3">Paste race results in the JSON format below. Use the template button to copy the format.</p>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { navigator.clipboard.writeText(DIRECT_IMPORT_TEMPLATE); toast({ title: "Template copied to clipboard" }); }}><ClipboardCopy className="h-3.5 w-3.5 mr-1" /> Copy Template</Button>
+                  </div>
+                  <Textarea value={directJsonText} onChange={(e) => setDirectJsonText(e.target.value)} placeholder="Paste JSON here…" rows={12} className="font-mono text-xs" />
+                  <Button onClick={handleDirectImport} disabled={directImporting} className="w-full">{directImporting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Importing…</> : <><FileJson className="h-4 w-4 mr-2" /> Import JSON</>}</Button>
+                  {directImportResult && (
+                    <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm space-y-1">
+                      <p className="text-card-foreground font-medium">{directImportResult.event} — {directImportResult.series}</p>
+                      <p className="text-muted-foreground">{directImportResult.entriesCount} entries imported</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Pending ── */}
+          <TabsContent value="pending">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-card-foreground">Pending Verification ({pendingEvents.length} events)</h2>
+              {pendingEvents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+                  <CheckCircle2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No pending entries to review.</p>
+                </div>
+              ) : (
+                pendingEvents.map((pe) => (
+                  <div key={pe.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b border-border">
+                      <div>
+                        {editingEventId === pe.id ? (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Input value={editingEventFields.event_name} onChange={(e) => setEditingEventFields({ ...editingEventFields, event_name: e.target.value })} className="h-7 text-xs w-48" />
+                            <Input value={editingEventFields.series_name} onChange={(e) => setEditingEventFields({ ...editingEventFields, series_name: e.target.value })} className="h-7 text-xs w-36" />
+                            <Input type="date" value={editingEventFields.event_date} onChange={(e) => setEditingEventFields({ ...editingEventFields, event_date: e.target.value })} className="h-7 text-xs w-36" />
+                            <Input value={editingEventFields.season_year} onChange={(e) => setEditingEventFields({ ...editingEventFields, season_year: e.target.value })} className="h-7 text-xs w-20" placeholder="Year" type="number" />
+                            <Input value={editingEventFields.location} onChange={(e) => setEditingEventFields({ ...editingEventFields, location: e.target.value })} className="h-7 text-xs w-32" placeholder="Location" />
+                            <Select value={editingEventFields.category} onValueChange={(v) => setEditingEventFields({ ...editingEventFields, category: v })}><SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger><SelectContent>{RACING_CATEGORIES.map((cat) => (<SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ")}</SelectItem>))}</SelectContent></Select>
+                            <Button size="sm" variant="ghost" className="h-7" onClick={handleUpdateEvent}><Check className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingEventId(null)}><X className="h-3.5 w-3.5" /></Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-card-foreground">{pe.event_name}</p>
+                            <span className="text-xs text-muted-foreground">— {pe.series_name} ({pe.season_year})</span>
+                            {pe.location && <span className="text-xs text-muted-foreground flex items-center gap-0.5"><MapPin className="h-3 w-3" />{pe.location}</span>}
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => startEditEvent(pe)}><Pencil className="h-3 w-3" /></Button>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">{pe.pendingCount} pending entries</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleEnrichEvent(pe.id)} disabled={enrichingEventIds.has(pe.id)}>{enrichingEventIds.has(pe.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}</Button>
+                        <Button size="sm" onClick={() => handleApproveEvent(pe.id)} disabled={approvingEntries.has(pe.id)}>{approvingEntries.has(pe.id) ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> Approving…</> : <><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve All</>}</Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild><Button size="sm" variant="destructive" disabled={approvingEntries.has(pe.id)}><XCircle className="h-3.5 w-3.5 mr-1" /> Reject All</Button></AlertDialogTrigger>
+                          <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Reject all entries?</AlertDialogTitle><AlertDialogDescription>This will delete all entries AND the event itself, plus any auto-created driver profiles that have no other entries.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleRejectEvent(pe.id)} className="bg-destructive text-destructive-foreground">Reject & Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                    {renderEntriesTable(pe.entries)}
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Duplicates ── */}
+          <TabsContent value="duplicates">
+            <Tabs defaultValue="driver-dupes">
+              <TabsList>
+                <TabsTrigger value="driver-dupes">Driver Duplicates {duplicateCount > 0 && <Badge variant="secondary" className="ml-1 text-xs">{duplicateCount}</Badge>}</TabsTrigger>
+                <TabsTrigger value="team-dupes">Team Duplicates {teamDuplicateCount > 0 && <Badge variant="secondary" className="ml-1 text-xs">{teamDuplicateCount}</Badge>}</TabsTrigger>
+                <TabsTrigger value="circuit-dupes">Circuit Duplicates {circuitDuplicateCount > 0 && <Badge variant="secondary" className="ml-1 text-xs">{circuitDuplicateCount}</Badge>}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="driver-dupes"><DuplicatesTab drivers={drivers} onRefresh={fetchDrivers} onGroupCountChange={setDuplicateCount} /></TabsContent>
+              <TabsContent value="team-dupes"><TeamDuplicatesTab onRefresh={fetchTeams} onGroupCountChange={setTeamDuplicateCount} /></TabsContent>
+              <TabsContent value="circuit-dupes"><CircuitDuplicatesTab onRefresh={fetchCircuits} onGroupCountChange={setCircuitDuplicateCount} /></TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* ── Claims ── */}
+          <TabsContent value="claims">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-card-foreground">Profile Claim Requests</h2>
+              {pendingClaims.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
+                  <CheckCircle2 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">No pending claims.</p>
+                </div>
+              ) : (
+                pendingClaims.map((c) => (
+                  <div key={c.id} className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-card-foreground">Claim for: {c.driver_name}</p>
+                      <p className="text-xs text-muted-foreground">By user: {c.user_id}</p>
+                      {c.message && <p className="text-xs text-muted-foreground mt-1">Message: {c.message}</p>}
+                      {c.document_url && <a href={c.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline mt-1 inline-block">View Document</a>}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => handleClaimAction(c.id, "approved", c.driver_profile_id, c.user_id)}><Check className="h-3.5 w-3.5 mr-1" /> Approve</Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleClaimAction(c.id, "rejected", c.driver_profile_id, c.user_id)}><X className="h-3.5 w-3.5 mr-1" /> Reject</Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Flags ── */}
+          <TabsContent value="flags">
+            <FlagsTab onNavigateToEvent={(eventId) => { setActiveTab("all-races"); toggleExpandEvent(eventId); }} onFlagCountChange={setFlagCount} />
+          </TabsContent>
+
+          {/* ── Reports ── */}
+          <TabsContent value="reports">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-card-foreground">User Reports</h2>
+              {reports.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><p className="text-muted-foreground">No reports yet.</p></div>
+              ) : (
+                reports.map((r: any) => (
+                  <div key={r.id} className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <Badge variant={r.status === "pending" ? "destructive" : r.status === "resolved" ? "default" : "secondary"}>{r.status}</Badge>
+                        <span className="text-xs text-muted-foreground ml-2">{r.report_type} — {new Date(r.created_at).toLocaleDateString()}</span>
+                      </div>
+                      {r.status === "pending" && (
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => handleUpdateReport(r.id, "resolved")}>Resolve</Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleUpdateReport(r.id, "dismissed")}>Dismiss</Button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-card-foreground">{r.message}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Target: {r.target_id}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Import Sources ── */}
+          <TabsContent value="import-sources">
+            <div className="space-y-6">
+              <div className="rounded-xl border border-border bg-card p-6">
+                <h2 className="font-display text-xl font-bold text-card-foreground mb-4">Add Import Source</h2>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-card-foreground">Source Name</Label><Input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder="e.g. IMSA Official" /></div>
+                    <div><Label className="text-card-foreground">URL</Label><Input value={newSourceUrl} onChange={(e) => setNewSourceUrl(e.target.value)} placeholder="https://..." /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-card-foreground">Series Hint</Label><Input value={newSourceSeries} onChange={(e) => setNewSourceSeries(e.target.value)} placeholder="e.g. IMSA" /></div>
+                    <div>
+                      <Label className="text-card-foreground">Frequency</Label>
+                      <Select value={newSourceFrequency} onValueChange={setNewSourceFrequency}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Daily</SelectItem><SelectItem value="weekly">Weekly</SelectItem><SelectItem value="monthly">Monthly</SelectItem></SelectContent></Select>
+                    </div>
+                  </div>
+                  <Button onClick={handleAddImportSource} disabled={addingSource} className="w-full">{addingSource ? "Adding…" : "Add Source"}</Button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h2 className="font-display text-xl font-bold text-card-foreground">Active Sources ({importSources.length})</h2>
+                {importSources.map((src: any) => (
+                  <div key={src.id} className="rounded-xl border border-border bg-card p-4 flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-card-foreground">{src.name}</p>
+                        <Badge variant={src.is_active ? "default" : "secondary"}>{src.is_active ? "Active" : "Paused"}</Badge>
+                        <Badge variant="outline" className="text-xs">{src.frequency}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{src.url}</p>
+                      {src.series_hint && <p className="text-xs text-muted-foreground">Series: {src.series_hint}</p>}
+                      {src.last_run_at && <p className="text-xs text-muted-foreground">Last run: {new Date(src.last_run_at).toLocaleString()} — {src.last_status}</p>}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Switch checked={src.is_active} onCheckedChange={() => handleToggleSourceActive(src.id, src.is_active)} />
+                      <Button variant="ghost" size="sm" onClick={() => handleRunSource(src.id)} disabled={runningSourceId === src.id}>{runningSourceId === src.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}</Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
+                        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete source?</AlertDialogTitle><AlertDialogDescription>Remove "{src.name}"?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteImportSource(src.id)} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── Community ── */}
+          <TabsContent value="community">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-card-foreground">Community Submissions</h2>
+              {communitySubmissions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><p className="text-muted-foreground">No community submissions yet.</p></div>
+              ) : (
+                communitySubmissions.map((sub: any) => (
+                  <div key={sub.id} className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground">{sub.event_name} — {sub.series_name} ({sub.season_year})</p>
+                        <p className="text-xs text-muted-foreground">Submitted: {new Date(sub.created_at).toLocaleDateString()} | By: {sub.submitted_by.slice(0, 8)}…</p>
+                      </div>
+                      <Badge variant={sub.status === "pending" ? "destructive" : sub.status === "approved" ? "default" : "secondary"}>{sub.status}</Badge>
+                    </div>
+                    <pre className="text-xs bg-muted/50 rounded p-2 max-h-32 overflow-y-auto whitespace-pre-wrap text-muted-foreground">{sub.raw_data.slice(0, 500)}{sub.raw_data.length > 500 ? "…" : ""}</pre>
+                    {sub.status === "pending" && (
+                      <div className="flex gap-2 mt-3">
+                        <Button size="sm" onClick={() => handleApproveSubmission(sub)} disabled={approvingSubmission === sub.id}>{approvingSubmission === sub.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Approve & Import</Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleRejectSubmission(sub.id, "")}><X className="h-3.5 w-3.5 mr-1" /> Reject</Button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Edit Queue ── */}
+          <TabsContent value="edit-queue">
+            <div className="space-y-4">
+              <h2 className="font-display text-xl font-bold text-card-foreground">Edit Queue</h2>
+              {editQueueLoading ? (
+                <p className="text-muted-foreground text-sm">Loading…</p>
+              ) : editQueue.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><p className="text-muted-foreground">No edits in queue.</p></div>
+              ) : (
+                editQueue.map((item: any) => (
+                  <div key={item.id} className="rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-medium text-card-foreground capitalize">{item.edit_type.replace(/_/g, " ")}</p>
+                        <p className="text-xs text-muted-foreground">Table: {item.target_table} | Submitted: {new Date(item.created_at).toLocaleDateString()} | By: {item.submitted_by.slice(0, 8)}…</p>
+                      </div>
+                      <Badge variant={item.status === "pending" ? "destructive" : item.status === "approved" ? "default" : "secondary"}>{item.status}</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      {item.previous_data && (
+                        <div>
+                          <p className="font-medium text-muted-foreground mb-1">Previous:</p>
+                          <pre className="bg-muted/50 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(item.previous_data, null, 2)}</pre>
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-muted-foreground mb-1">Proposed:</p>
+                        <pre className="bg-muted/50 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap">{JSON.stringify(item.proposed_data, null, 2)}</pre>
+                      </div>
+                    </div>
+                    {item.status === "pending" && (
+                      <div className="flex gap-2 mt-3">
+                        <Button size="sm" onClick={() => handleApproveQueueItem(item)} disabled={approvingQueueId === item.id}>{approvingQueueId === item.id ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />} Approve</Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleRejectQueueItem(item.id, "")}><X className="h-3.5 w-3.5 mr-1" /> Reject</Button>
+                      </div>
+                    )}
+                    {item.status === "approved" && item.previous_data && (
+                      <Button size="sm" variant="outline" className="mt-2" onClick={() => handleUndoQueueItem(item)}><Undo2 className="h-3.5 w-3.5 mr-1" /> Undo</Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </TabsContent>
 
           {/* ── Manage Roles ── */}
           <TabsContent value="roles">
