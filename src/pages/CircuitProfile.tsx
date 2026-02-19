@@ -8,6 +8,23 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { Tables } from "@/integrations/supabase/types";
 
+const CircuitMapImage = ({ url, name }: { url: string; name: string }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Map</h3>
+      <img
+        src={url}
+        alt={`${name} layout`}
+        className="w-full rounded"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+      />
+    </div>
+  );
+};
+
 type Circuit = Tables<"circuits">;
 
 const categoryLabels: Record<string, string> = {
@@ -88,10 +105,7 @@ const CircuitProfile = () => {
             )}
 
             {circuit.image_url && (
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Map</h3>
-                <img src={circuit.image_url} alt={`${circuit.name} layout`} className="w-full rounded" referrerPolicy="no-referrer" />
-              </div>
+              <CircuitMapImage url={circuit.image_url} name={circuit.name} />
             )}
 
             {/* Contribute CTA */}

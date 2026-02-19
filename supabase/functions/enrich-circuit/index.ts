@@ -94,7 +94,7 @@ Fields:
 - "length_km": number or null (track length in kilometers)
 - "turns": number or null (number of corners/turns)
 - "website": string or null (official circuit website URL)
-- "image_url": string or null (URL to a circuit map/layout image if you know one — prefer SVG or PNG from Wikipedia or official sources)
+- "image_url": string or null (URL to a circuit map/layout image. IMPORTANT: Use Wikimedia Commons thumbnail URLs in the format "https://upload.wikimedia.org/wikipedia/commons/thumb/{path}/{filename}/800px-{filename}.png". Do NOT use direct file URLs without /thumb/ as they often 404. For SVG files, append ".png" to render them. Example: for file at commons/a/ab/Track.svg, use "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Track.svg/800px-Track.svg.png")
 
 IMPORTANT RULES:
 - Try your hardest to find information. Most racing circuits are well-documented.
