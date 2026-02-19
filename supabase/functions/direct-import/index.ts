@@ -106,7 +106,13 @@ serve(async (req) => {
     // Check for existing event
     const eventNameVal = extracted.event_name;
     const seriesNameVal = extracted.series_name;
-    const seasonYearVal = extracted.season_year || new Date().getFullYear();
+    // Derive season_year from event_date if provided
+    let seasonYearVal = extracted.season_year || new Date().getFullYear();
+    const eventDateVal = extracted.event_date || null;
+    if (eventDateVal && !extracted.season_year) {
+      const parsed = parseInt(eventDateVal.split("-")[0]);
+      if (parsed) seasonYearVal = parsed;
+    }
 
     const { data: existingEvent } = await adminClient
       .from("race_events")
@@ -129,6 +135,7 @@ serve(async (req) => {
           season_year: seasonYearVal,
           category: extracted.category || "other",
           location: extracted.location || null,
+          event_date: eventDateVal,
         })
         .select("id")
         .single();
