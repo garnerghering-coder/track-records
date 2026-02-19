@@ -23,3 +23,9 @@ verify_jwt = false
 
 [functions.direct-import]
 verify_jwt = false
+
+[functions.enrich-circuit]
+verify_jwt = false
+
+[functions.enrich-race-event]
+verify_jwt = false
