@@ -1544,6 +1544,7 @@ export type Database = {
       }
       v2_sessions: {
         Row: {
+          column_order: Json | null
           created_at: string
           date: string | null
           event_id: string
@@ -1555,6 +1556,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          column_order?: Json | null
           created_at?: string
           date?: string | null
           event_id: string
@@ -1566,6 +1568,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          column_order?: Json | null
           created_at?: string
           date?: string | null
           event_id?: string

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileDown } from "lucide-react";
 import { exportSessionPdf } from "@/lib/pdf-export";
+import FlagImage from "@/components/FlagImage";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -117,7 +118,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from(table as any)
-        .select("*, v2_drivers(full_name, short_name), v2_teams(full_name, short_name), v2_cars(model_name, manufacturer)")
+        .select("*, v2_drivers(full_name, nationality), v2_teams(full_name, short_name), v2_cars(model_name, manufacturer)")
         .eq("session_id", session.id)
         .order("position");
       if (error) throw error;
@@ -135,14 +136,15 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     enabled: isRace,
   });
 
-  // Extract custom columns from extra_data
+  // Extract custom columns from extra_data (excluding "Int" which is built-in)
   const extraDataKeys: { key: string; name: string }[] = [];
   if (results.length > 0) {
     const seenKeys = new Set<string>();
     for (const r of results) {
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
-        for (const [k, v] of Object.entries(ed)) {
+        for (const [k] of Object.entries(ed)) {
+          if (k === "Int") continue; // built-in, rendered separately
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
             extraDataKeys.push({ key: k, name: k });
@@ -152,18 +154,22 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     }
   }
 
+  // Check if any result has an "Int" value
+  const hasInt = results.some((r: any) => r.extra_data?.Int);
+
   const handleExport = async () => {
     try {
       await exportSessionPdf({
-      eventName: event.name,
-      seriesName: event.v2_seasons?.v2_series?.name || "",
-      circuitName: event.v2_circuits?.name || "",
-      sessionName: session.name,
-      sessionDate: session.date,
-      sessionType: type,
-      results,
-      incidents,
+        eventName: event.name,
+        seriesName: event.v2_seasons?.v2_series?.name || "",
+        circuitName: event.v2_circuits?.name || "",
+        sessionName: session.name,
+        sessionDate: session.date,
+        sessionType: type,
+        results,
+        incidents,
         customColumns: extraDataKeys,
+        hasInt,
       });
     } catch (e: any) {
       console.error("PDF export failed:", e);
@@ -190,11 +196,12 @@ function SessionResults({ session, event }: { session: any; event: any }) {
               <TableHead className="w-12">Pos</TableHead>
               <TableHead className="w-14">No.</TableHead>
               <TableHead>Driver</TableHead>
+              <TableHead className="w-10">Nat</TableHead>
               <TableHead>Team</TableHead>
               <TableHead>Car</TableHead>
-              {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead><TableHead>Laps</TableHead></>}
-              {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead><TableHead>Laps</TableHead></>}
-              {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>FL</TableHead><TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
+              {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
+              {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
+              {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>FL</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
               {extraDataKeys.map(col => (
                 <TableHead key={col.key}>{col.name}</TableHead>
               ))}
@@ -206,11 +213,13 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
                 <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>
                 <TableCell className="font-medium">{r.v2_drivers?.full_name || "—"}</TableCell>
+                <TableCell><FlagImage nationality={r.v2_drivers?.nationality} size={18} /></TableCell>
                 <TableCell className="text-muted-foreground">{r.v2_teams?.short_name || r.v2_teams?.full_name || "—"}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</TableCell>
                 {isPractice && <>
                   <TableCell className="font-mono text-xs">{r.best_lap_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{r.gap_to_p1 || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>
+                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
                 </>}
                 {isQual && <>
@@ -218,13 +227,15 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                   <TableCell className="font-mono text-xs">{r.q2_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.q3_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs font-semibold">{r.best_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{r.gap_to_pole || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>
+                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
                 </>}
                 {isRace && <>
                   <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.total_time || r.gap_to_leader || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.fastest_lap_time || "—"}</TableCell>
+                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>
                   <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>
                   <TableCell>

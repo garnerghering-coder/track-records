@@ -15,7 +15,7 @@ export default function ManageDrivers() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Driver | null>(null);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ full_name: "", short_name: "", nationality: "", date_of_birth: "" });
+  const [form, setForm] = useState({ full_name: "", nationality: "", date_of_birth: "" });
   const [search, setSearch] = useState("");
 
   const { data: drivers = [], isLoading } = useQuery({
@@ -28,14 +28,13 @@ export default function ManageDrivers() {
     const q = search.toLowerCase();
     return drivers.filter(d =>
       d.full_name.toLowerCase().includes(q) ||
-      (d.short_name || "").toLowerCase().includes(q) ||
       (d.nationality || "").toLowerCase().includes(q)
     );
   }, [drivers, search]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const payload = { full_name: form.full_name, short_name: form.short_name || null, nationality: form.nationality || null, date_of_birth: form.date_of_birth || null };
+      const payload = { full_name: form.full_name, nationality: form.nationality || null, date_of_birth: form.date_of_birth || null };
       if (editing) { const { error } = await supabase.from("v2_drivers").update(payload).eq("id", editing.id); if (error) throw error; }
       else { const { error } = await supabase.from("v2_drivers").insert(payload); if (error) throw error; }
     },
@@ -49,8 +48,8 @@ export default function ManageDrivers() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const openNew = () => { setEditing(null); setForm({ full_name: "", short_name: "", nationality: "", date_of_birth: "" }); setOpen(true); };
-  const openEdit = (d: Driver) => { setEditing(d); setForm({ full_name: d.full_name, short_name: d.short_name || "", nationality: d.nationality || "", date_of_birth: d.date_of_birth || "" }); setOpen(true); };
+  const openNew = () => { setEditing(null); setForm({ full_name: "", nationality: "", date_of_birth: "" }); setOpen(true); };
+  const openEdit = (d: Driver) => { setEditing(d); setForm({ full_name: d.full_name, nationality: d.nationality || "", date_of_birth: d.date_of_birth || "" }); setOpen(true); };
 
   return (
     <div className="p-6 space-y-4">
@@ -64,12 +63,11 @@ export default function ManageDrivers() {
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Code</TableHead><TableHead>Nationality</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Nationality</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
           <TableBody>
             {filtered.map(d => (
               <TableRow key={d.id}>
                 <TableCell className="font-medium">{d.full_name}</TableCell>
-                <TableCell>{d.short_name}</TableCell>
                 <TableCell>{d.nationality}</TableCell>
                 <TableCell>{d.date_of_birth}</TableCell>
                 <TableCell className="flex gap-1">
@@ -78,7 +76,7 @@ export default function ManageDrivers() {
                 </TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No drivers found.</TableCell></TableRow>}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No drivers found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}
@@ -87,8 +85,7 @@ export default function ManageDrivers() {
           <DialogHeader><DialogTitle>{editing ? "Edit" : "New"} Driver</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Full Name *</Label><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></div>
-            <div><Label>Short Name (3-letter code)</Label><Input value={form.short_name} maxLength={3} onChange={e => setForm(f => ({ ...f, short_name: e.target.value.toUpperCase() }))} /></div>
-            <div><Label>Nationality</Label><Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} /></div>
+            <div><Label>Nationality</Label><Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder="e.g. United States" /></div>
             <div><Label>Date of Birth</Label><Input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.full_name.trim()}>Save</Button></DialogFooter>

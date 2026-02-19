@@ -14,7 +14,7 @@ interface Props {
   entityType: EntityType;
   initialName?: string;
   filterSeriesId?: string;
-  onCreated: (record: { id: string; label: string }) => void;
+  onCreated: (record: { id: string; label: string; extra?: Record<string, any> }) => void;
 }
 
 export default function QuickCreateModal({ open, onClose, entityType, initialName = "", filterSeriesId, onCreated }: Props) {
@@ -28,9 +28,13 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
     setSaving(true);
     try {
       if (entityType === "driver") {
-        const { data, error } = await supabase.from("v2_drivers").insert({ full_name: name.trim() }).select("id, full_name").single();
+        const { data, error } = await supabase.from("v2_drivers").insert({
+          full_name: name.trim(),
+          nationality: extra.trim() || null,
+          date_of_birth: extra2.trim() || null,
+        }).select("id, full_name, nationality").single();
         if (error) throw error;
-        onCreated({ id: data.id, label: data.full_name });
+        onCreated({ id: data.id, label: data.full_name, extra: { nationality: data.nationality } });
       } else if (entityType === "team") {
         const { data, error } = await supabase.from("v2_teams").insert({ full_name: name.trim() }).select("id, full_name").single();
         if (error) throw error;
@@ -79,6 +83,12 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
             <Label>{labels[entityType]}</Label>
             <Input value={name} onChange={e => setName(e.target.value)} autoFocus type={entityType === "season" ? "number" : "text"} />
           </div>
+          {entityType === "driver" && (
+            <>
+              <div><Label>Nationality</Label><Input value={extra} onChange={e => setExtra(e.target.value)} placeholder="e.g. United States" /></div>
+              <div><Label>Date of Birth</Label><Input type="date" value={extra2} onChange={e => setExtra2(e.target.value)} /></div>
+            </>
+          )}
           {entityType === "car" && (
             <div><Label>Manufacturer</Label><Input value={extra} onChange={e => setExtra(e.target.value)} /></div>
           )}

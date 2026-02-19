@@ -10,8 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import AutocompleteField from "@/components/manage/AutocompleteField";
+import FlagImage from "@/components/FlagImage";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns, GripVertical } from "lucide-react";
+import { parseTime, formatLapTime, formatGap } from "@/lib/time-calc";
 
 type Ref = { id: string; label: string } | null;
 
@@ -28,6 +30,7 @@ interface ResultRow {
   driver: Ref;
   team: Ref;
   car: Ref;
+  _driverNationality?: string | null;
   [key: string]: any;
 }
 
@@ -36,10 +39,10 @@ const RACE_STATUSES = ["finished", "dnf", "dns", "dsq", "classified"];
 const makeKey = () => Math.random().toString(36).slice(2, 10);
 
 const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): ResultRow => {
-  const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, team: null, car: null };
-  if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.laps_run = ""; base.notes = ""; }
-  else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.laps_run = ""; }
-  else if (type === "race" || type === "sprint_race") { base.laps_completed = ""; base.total_time = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; }
+  const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, team: null, car: null, _driverNationality: null };
+  if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.gap_int = ""; base.laps_run = ""; base.notes = ""; }
+  else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.gap_int = ""; base.laps_run = ""; }
+  else if (type === "race" || type === "sprint_race") { base.laps_completed = ""; base.total_time = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; base.gap_int = ""; }
   else { base.notes = ""; }
   for (const col of customCols) {
     base[`_custom_${col.key}`] = "";
@@ -56,11 +59,51 @@ function fuzzyMatch(needle: string, haystack: { id: string; label: string }[]): 
   return partial || null;
 }
 
+// --- Time auto-calculation helpers ---
+
+function getBestLapField(type: string): string {
+  if (type === "practice" || type === "warmup" || type === "other") return "best_lap_time";
+  if (type === "qualifying" || type === "sprint_qualifying") return "best_time";
+  return "fastest_lap_time";
+}
+
+function getGapField(type: string): string {
+  if (type === "practice" || type === "warmup" || type === "other") return "gap_to_p1";
+  if (type === "qualifying" || type === "sprint_qualifying") return "gap_to_pole";
+  return "total_time"; // for race, gap to leader is stored in total_time or gap_to_leader
+}
+
+function recalcFromBestLap(rows: ResultRow[], type: string): ResultRow[] {
+  const bestField = getBestLapField(type);
+  const gapField = getGapField(type);
+  const p1Time = parseTime(rows[0]?.[bestField] || "");
+
+  return rows.map((row, i) => {
+    const myTime = parseTime(row[bestField] || "");
+    const newRow = { ...row };
+
+    if (i === 0) {
+      newRow[gapField] = "";
+      newRow.gap_int = "";
+    } else {
+      if (myTime !== null && p1Time !== null) {
+        newRow[gapField] = formatGap(myTime - p1Time);
+      }
+      const prevTime = parseTime(rows[i - 1]?.[bestField] || "");
+      if (myTime !== null && prevTime !== null) {
+        newRow.gap_int = formatGap(myTime - prevTime);
+      }
+    }
+    return newRow;
+  });
+}
+
 export default function ManageSessionResults() {
   const { id: eventId, sessionId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const pdfInputRef = useRef<HTMLInputElement>(null);
+  const editingFieldRef = useRef<string | null>(null);
 
   const { data: session } = useQuery({
     queryKey: ["v2_session", sessionId],
@@ -90,27 +133,39 @@ export default function ManageSessionResults() {
 
   // Column order management
   const getDefaultColumns = useCallback(() => {
-    const cols: string[] = ["position", "car_number", "driver", "team", "car"];
-    if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "laps_run", "notes");
-    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "laps_run");
-    else if (type === "race" || type === "sprint_race") cols.push("laps_completed", "total_time", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status");
+    const cols: string[] = ["position", "car_number", "driver", "nat", "team", "car"];
+    if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes");
+    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run");
+    else if (type === "race" || type === "sprint_race") cols.push("laps_completed", "total_time", "fastest_lap_time", "gap_int", "average_lap_time", "pit_stops", "points", "status");
     else cols.push("notes");
     return cols;
   }, [type]);
 
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
+  // Initialize column order from session data or defaults
   useEffect(() => {
-    setColumnOrder(prev => {
+    if (!session) return;
+    const savedOrder = (session as any).column_order as string[] | null;
+    if (savedOrder && Array.isArray(savedOrder) && savedOrder.length > 0) {
+      // Use saved order, but add any new default columns that may have been added
       const defaults = getDefaultColumns();
       const customKeys = customColumns.map(c => `_custom_${c.key}`);
-      // Keep existing order for columns that still exist, append new ones
       const allKeys = [...defaults, ...customKeys];
-      const existing = prev.filter(k => allKeys.includes(k));
+      const existing = savedOrder.filter(k => allKeys.includes(k));
       const newKeys = allKeys.filter(k => !existing.includes(k));
-      return [...existing, ...newKeys];
-    });
-  }, [type, customColumns, getDefaultColumns]);
+      setColumnOrder([...existing, ...newKeys]);
+    } else {
+      setColumnOrder(prev => {
+        const defaults = getDefaultColumns();
+        const customKeys = customColumns.map(c => `_custom_${c.key}`);
+        const allKeys = [...defaults, ...customKeys];
+        const existing = prev.filter(k => allKeys.includes(k));
+        const newKeys = allKeys.filter(k => !existing.includes(k));
+        return existing.length > 0 ? [...existing, ...newKeys] : allKeys;
+      });
+    }
+  }, [session, type, customColumns, getDefaultColumns]);
 
   // Load existing data
   useEffect(() => {
@@ -121,16 +176,17 @@ export default function ManageSessionResults() {
       if (t === "qualifying" || t === "sprint_qualifying") table = "v2_qualifying_results";
       else if (t === "race" || t === "sprint_race") table = "v2_race_results";
 
-      const { data } = await supabase.from(table as any).select("*, v2_drivers(id, full_name), v2_teams(id, full_name), v2_cars(id, model_name, manufacturer)").eq("session_id", sessionId!).order("position");
+      const { data } = await supabase.from(table as any).select("*, v2_drivers(id, full_name, nationality), v2_teams(id, full_name), v2_cars(id, model_name, manufacturer)").eq("session_id", sessionId!).order("position");
 
       if (data && data.length > 0) {
-        // Extract custom columns from extra_data
+        // Extract custom columns from extra_data (excluding "Int" which is built-in)
         const foundCustomCols: CustomColumn[] = [];
         const seenKeys = new Set<string>();
         for (const r of data) {
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
+              if (k === "Int") continue; // built-in
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
                 foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
@@ -148,15 +204,17 @@ export default function ManageSessionResults() {
             driver: r.v2_drivers ? { id: r.v2_drivers.id, label: r.v2_drivers.full_name } : null,
             team: r.v2_teams ? { id: r.v2_teams.id, label: r.v2_teams.full_name } : null,
             car: r.v2_cars ? { id: r.v2_cars.id, label: [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") } : null,
+            _driverNationality: r.v2_drivers?.nationality || null,
           };
-          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; }
-          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; }
-          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; }
+          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else { row.notes = ""; }
           // Load custom column data from extra_data
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
+              if (k === "Int") continue;
               row[`_custom_${k}`] = String(ed[k] ?? "");
             }
           }
@@ -178,7 +236,71 @@ export default function ManageSessionResults() {
 
   const addRow = () => setRows(r => [...r, blankRow(r.length + 1, type, customColumns)]);
   const removeRow = (key: string) => setRows(r => r.filter(row => row._key !== key));
-  const updateRow = (key: string, field: string, value: any) => setRows(r => r.map(row => row._key === key ? { ...row, [field]: value } : row));
+
+  const updateRow = (key: string, field: string, value: any) => {
+    setRows(prevRows => {
+      let newRows = prevRows.map(row => row._key === key ? { ...row, [field]: value } : row);
+
+      // Auto-calculation for time fields
+      const bestField = getBestLapField(type);
+      const gapField = getGapField(type);
+      const isTimeField = field === bestField || field === gapField || field === "gap_int";
+
+      if (isTimeField && editingFieldRef.current !== field) {
+        editingFieldRef.current = field;
+        const rowIdx = newRows.findIndex(r => r._key === key);
+
+        if (field === bestField) {
+          // Recalculate gap and int from best lap times
+          newRows = recalcFromBestLap(newRows, type);
+        } else if (field === gapField && rowIdx > 0) {
+          // Recalculate best lap from gap
+          const p1Time = parseTime(newRows[0]?.[bestField] || "");
+          const gapMs = parseTime(value || "");
+          if (p1Time !== null && gapMs !== null) {
+            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(p1Time + gapMs) };
+            // Recalculate int
+            const prevTime = parseTime(newRows[rowIdx - 1]?.[bestField] || "");
+            const myTime = p1Time + gapMs;
+            if (prevTime !== null) {
+              newRows[rowIdx] = { ...newRows[rowIdx], gap_int: formatGap(myTime - prevTime) };
+            }
+          }
+        } else if (field === "gap_int" && rowIdx > 0) {
+          // Recalculate best lap from interval
+          const prevTime = parseTime(newRows[rowIdx - 1]?.[bestField] || "");
+          const intMs = parseTime(value || "");
+          if (prevTime !== null && intMs !== null) {
+            const myTime = prevTime + intMs;
+            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(myTime) };
+            // Recalculate gap
+            const p1Time = parseTime(newRows[0]?.[bestField] || "");
+            if (p1Time !== null) {
+              newRows[rowIdx] = { ...newRows[rowIdx], [gapField]: formatGap(myTime - p1Time) };
+            }
+          }
+        }
+
+        // Reset editing flag after a tick
+        setTimeout(() => { editingFieldRef.current = null; }, 0);
+      }
+
+      return newRows;
+    });
+  };
+
+  // When driver is selected, also fetch nationality
+  const handleDriverChange = async (key: string, driverRef: Ref) => {
+    updateRow(key, "driver", driverRef);
+    if (driverRef) {
+      const { data } = await supabase.from("v2_drivers").select("nationality").eq("id", driverRef.id).single();
+      if (data) {
+        setRows(prev => prev.map(r => r._key === key ? { ...r, _driverNationality: data.nationality } : r));
+      }
+    } else {
+      setRows(prev => prev.map(r => r._key === key ? { ...r, _driverNationality: null } : r));
+    }
+  };
 
   const addCustomColumn = () => {
     if (!newColName.trim()) return;
@@ -213,7 +335,6 @@ export default function ManageSessionResults() {
       const arr = [...prev];
       const [moved] = arr.splice(dragRowIdx, 1);
       arr.splice(targetIdx, 0, moved);
-      // Re-number positions
       return arr.map((r, i) => ({ ...r, position: String(i + 1) }));
     });
     setDragRowIdx(null);
@@ -258,9 +379,9 @@ export default function ManageSessionResults() {
       const results = data?.results || [];
       if (results.length === 0) { toast.warning("No results found in PDF"); return; }
 
-      const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name");
+      const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name, nationality");
       const { data: existingTeams } = await supabase.from("v2_teams").select("id, full_name");
-      const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name }));
+      const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name, nationality: d.nationality }));
       const teamList = (existingTeams || []).map(t => ({ id: t.id, label: t.full_name }));
 
       const newRows: ResultRow[] = [];
@@ -272,13 +393,15 @@ export default function ManageSessionResults() {
         if (r.driver_name) {
           let match = fuzzyMatch(r.driver_name, driverList);
           if (!match) {
-            const { data: newDriver } = await supabase.from("v2_drivers").insert({ full_name: r.driver_name }).select("id, full_name").single();
+            const { data: newDriver } = await supabase.from("v2_drivers").insert({ full_name: r.driver_name }).select("id, full_name, nationality").single();
             if (newDriver) {
               match = { id: newDriver.id, label: newDriver.full_name };
-              driverList.push(match);
+              driverList.push({ ...match, nationality: newDriver.nationality });
             }
           }
           row.driver = match;
+          const driverData = driverList.find(d => d.id === match?.id);
+          row._driverNationality = driverData?.nationality || null;
         }
 
         if (r.team_name) {
@@ -329,9 +452,13 @@ export default function ManageSessionResults() {
     }
   };
 
-  // Build extra_data from custom columns for a row
+  // Build extra_data from custom columns + gap_int for a row
   const buildExtraData = (row: ResultRow): Record<string, any> => {
     const ed: Record<string, any> = {};
+    // Store Int in extra_data
+    if (row.gap_int) {
+      ed["Int"] = row.gap_int;
+    }
     for (const col of customColumns) {
       const val = row[`_custom_${col.key}`];
       if (val !== undefined && val !== "") {
@@ -368,9 +495,12 @@ export default function ManageSessionResults() {
         if (incInserts.length) { const { error } = await supabase.from("v2_incidents").insert(incInserts); if (error) throw error; }
       }
 
+      // Persist column order and optionally publish
+      const sessionUpdate: any = { column_order: columnOrder };
       if (publish) {
-        await supabase.from("v2_sessions").update({ status: "published" as any }).eq("id", sessionId!);
+        sessionUpdate.status = "published";
       }
+      await supabase.from("v2_sessions").update(sessionUpdate).eq("id", sessionId!);
 
       qc.invalidateQueries({ queryKey: ["v2_sessions"] });
       toast.success(publish ? "Published!" : "Draft saved");
@@ -379,7 +509,7 @@ export default function ManageSessionResults() {
     } finally {
       setSaving(false);
     }
-  }, [session, sessionId, rows, pitStops, incidents, customColumns, qc]);
+  }, [session, sessionId, rows, pitStops, incidents, customColumns, columnOrder, qc]);
 
   if (!session) return <div className="p-6 text-muted-foreground">Loading…</div>;
 
@@ -389,8 +519,8 @@ export default function ManageSessionResults() {
 
   // Column label map
   const colLabels: Record<string, string> = {
-    position: "Pos", car_number: "No.", driver: "Driver", team: "Team", car: "Car",
-    best_lap_time: "Best Lap", gap_to_p1: "Gap", laps_run: "Laps", notes: "Notes",
+    position: "Pos", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
+    best_lap_time: "Best Lap", gap_to_p1: "Gap", gap_int: "Int", laps_run: "Laps", notes: "Notes",
     q1_time: "Q1", q2_time: "Q2", q3_time: "Q3", best_time: "Best", gap_to_pole: "Gap",
     laps_completed: "Laps", total_time: "Time/Gap", fastest_lap_time: "FL", average_lap_time: "Avg",
     pit_stops: "Pits", points: "Pts", status: "Status",
@@ -410,7 +540,8 @@ export default function ManageSessionResults() {
   const renderCell = (row: ResultRow, col: string) => {
     if (col === "position") return <Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" />;
     if (col === "car_number") return <Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" />;
-    if (col === "driver") return <AutocompleteField entityType="driver" value={row.driver} onChange={v => updateRow(row._key, "driver", v)} />;
+    if (col === "driver") return <AutocompleteField entityType="driver" value={row.driver} onChange={v => handleDriverChange(row._key, v)} />;
+    if (col === "nat") return <FlagImage nationality={row._driverNationality} size={18} />;
     if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
     if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
     if (col === "status") return (
@@ -427,7 +558,7 @@ export default function ManageSessionResults() {
       return <Input type={customCol?.type === "number" ? "number" : "text"} value={row[col] || ""} onChange={e => updateRow(row._key, col, e.target.value)} className="h-7 text-xs" />;
     }
     // Generic text/number fields
-    const placeholder = col.includes("time") || col.includes("lap") ? "1:23.456" : "";
+    const placeholder = col.includes("time") || col.includes("lap") || col === "gap_to_p1" || col === "gap_to_pole" || col === "gap_int" ? "1:23.456" : "";
     const isSmall = ["laps_run", "laps_completed", "pit_stops", "points"].includes(col);
     return <Input value={row[col] || ""} onChange={e => updateRow(row._key, col, e.target.value)} className={`h-7 text-xs ${isSmall ? "w-14" : ""}`} placeholder={placeholder} />;
   };
@@ -574,7 +705,7 @@ export default function ManageSessionResults() {
           <div className="space-y-3">
             <div>
               <Label>Column Name *</Label>
-              <Input value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="e.g. Interval, Sector 1" />
+              <Input value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="e.g. Sector 1, Class" />
             </div>
             <div>
               <Label>Type</Label>

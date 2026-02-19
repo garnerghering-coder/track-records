@@ -1,0 +1,1 @@
+ALTER TABLE v2_sessions ADD COLUMN IF NOT EXISTS column_order jsonb DEFAULT NULL;
