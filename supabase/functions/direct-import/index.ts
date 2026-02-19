@@ -93,6 +93,16 @@ serve(async (req) => {
       teamMap.set(t.name.toLowerCase(), t.id);
     }
 
+    // Fetch all car models for matching
+    const { data: allCars } = await adminClient
+      .from("car_models")
+      .select("id, name");
+
+    const carMap = new Map<string, string>();
+    for (const c of allCars || []) {
+      carMap.set(c.name.toLowerCase(), c.id);
+    }
+
     // Check for existing event
     const eventNameVal = extracted.event_name;
     const seriesNameVal = extracted.series_name;
@@ -221,6 +231,25 @@ serve(async (req) => {
         : null;
 
       // Match team_profile_id
+      // Match car_model_id
+      let carModelId: string | null = null;
+      if (entry.car_model_name) {
+        const normalizedCar = entry.car_model_name.trim().toLowerCase();
+        carModelId = carMap.get(normalizedCar) || null;
+        if (!carModelId) {
+          // Auto-create car model
+          const { data: newCar } = await adminClient
+            .from("car_models")
+            .insert({ name: entry.car_model_name.trim() })
+            .select("id")
+            .single();
+          if (newCar) {
+            carModelId = newCar.id;
+            carMap.set(normalizedCar, newCar.id);
+          }
+        }
+      }
+
       let teamProfileId: string | null = null;
       if (entry.team_name) {
         const normalizedTeam = entry.team_name.trim().toLowerCase();
@@ -232,6 +261,7 @@ serve(async (req) => {
         .insert({
           race_event_id: raceEvent.id,
           team_name: entry.team_name || null,
+          car_model_id: carModelId,
           team_profile_id: teamProfileId,
           car_number: entry.car_number || null,
           race_class: entry.race_class || null,

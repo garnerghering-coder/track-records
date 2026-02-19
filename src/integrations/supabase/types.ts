@@ -50,6 +50,45 @@ export type Database = {
         }
         Relationships: []
       }
+      car_models: {
+        Row: {
+          category: Database["public"]["Enums"]["racing_category"] | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          manufacturer: string | null
+          name: string
+          updated_at: string
+          website: string | null
+          year_introduced: number | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          manufacturer?: string | null
+          name: string
+          updated_at?: string
+          website?: string | null
+          year_introduced?: number | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["racing_category"] | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          manufacturer?: string | null
+          name?: string
+          updated_at?: string
+          website?: string | null
+          year_introduced?: number | null
+        }
+        Relationships: []
+      }
       circuits: {
         Row: {
           country: string | null
@@ -57,6 +96,10 @@ export type Database = {
           description: string | null
           id: string
           image_url: string | null
+          lap_record_car_model_id: string | null
+          lap_record_driver_id: string | null
+          lap_record_time: string | null
+          lap_record_year: number | null
           length_km: number | null
           location: string | null
           name: string
@@ -70,6 +113,10 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          lap_record_car_model_id?: string | null
+          lap_record_driver_id?: string | null
+          lap_record_time?: string | null
+          lap_record_year?: number | null
           length_km?: number | null
           location?: string | null
           name: string
@@ -83,6 +130,10 @@ export type Database = {
           description?: string | null
           id?: string
           image_url?: string | null
+          lap_record_car_model_id?: string | null
+          lap_record_driver_id?: string | null
+          lap_record_time?: string | null
+          lap_record_year?: number | null
           length_km?: number | null
           location?: string | null
           name?: string
@@ -90,7 +141,22 @@ export type Database = {
           updated_at?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "circuits_lap_record_car_model_id_fkey"
+            columns: ["lap_record_car_model_id"]
+            isOneToOne: false
+            referencedRelation: "car_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "circuits_lap_record_driver_id_fkey"
+            columns: ["lap_record_driver_id"]
+            isOneToOne: false
+            referencedRelation: "driver_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       community_submissions: {
         Row: {
@@ -498,6 +564,7 @@ export type Database = {
       }
       race_entries: {
         Row: {
+          car_model_id: string | null
           car_number: string | null
           class_position: number | null
           created_at: string
@@ -517,6 +584,7 @@ export type Database = {
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
         Insert: {
+          car_model_id?: string | null
           car_number?: string | null
           class_position?: number | null
           created_at?: string
@@ -536,6 +604,7 @@ export type Database = {
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
         Update: {
+          car_model_id?: string | null
           car_number?: string | null
           class_position?: number | null
           created_at?: string
@@ -555,6 +624,13 @@ export type Database = {
           verification_status?: Database["public"]["Enums"]["verification_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "race_entries_car_model_id_fkey"
+            columns: ["car_model_id"]
+            isOneToOne: false
+            referencedRelation: "car_models"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "race_entries_organization_id_fkey"
             columns: ["organization_id"]
@@ -775,6 +851,27 @@ export type Database = {
         }
         Relationships: []
       }
+      search_aliases: {
+        Row: {
+          alias: string
+          canonical: string
+          entity_type: string
+          id: string
+        }
+        Insert: {
+          alias: string
+          canonical: string
+          entity_type: string
+          id?: string
+        }
+        Update: {
+          alias?: string
+          canonical?: string
+          entity_type?: string
+          id?: string
+        }
+        Relationships: []
+      }
       series: {
         Row: {
           category: Database["public"]["Enums"]["racing_category"] | null
@@ -883,6 +980,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       app_role: "driver" | "team_sponsor" | "admin"

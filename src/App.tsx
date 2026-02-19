@@ -20,6 +20,8 @@ import CircuitProfile from "./pages/CircuitProfile";
 import SeriesProfile from "./pages/SeriesProfile";
 import SeriesListing from "./pages/Series";
 import Calendar from "./pages/Calendar";
+import Cars from "./pages/Cars";
+import CarProfile from "./pages/CarProfile";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +45,8 @@ const App = () => (
           <Route path="/circuit/:id" element={<CircuitProfile />} />
           <Route path="/series" element={<SeriesListing />} />
           <Route path="/series/:id" element={<SeriesProfile />} />
+          <Route path="/cars" element={<Cars />} />
+          <Route path="/car/:id" element={<CarProfile />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />

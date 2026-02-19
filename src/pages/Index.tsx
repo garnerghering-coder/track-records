@@ -12,22 +12,24 @@ import heroImage from "@/assets/hero-racing.jpg";
 const Index = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [stats, setStats] = useState({ drivers: 0, teams: 0, events: 0, series: 0 });
+  const [stats, setStats] = useState({ drivers: 0, teams: 0, events: 0, series: 0, cars: 0 });
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchStats = async () => {
-      const [d, t, e, s] = await Promise.all([
+      const [d, t, e, s, c] = await Promise.all([
         supabase.from("driver_profiles").select("id", { count: "exact", head: true }),
         supabase.from("team_profiles").select("id", { count: "exact", head: true }),
         supabase.from("race_events").select("id", { count: "exact", head: true }),
         supabase.from("series").select("id", { count: "exact", head: true }),
+        supabase.from("car_models").select("id", { count: "exact", head: true }),
       ]);
       setStats({
         drivers: d.count ?? 0,
         teams: t.count ?? 0,
         events: e.count ?? 0,
         series: s.count ?? 0,
+        cars: c.count ?? 0,
       });
     };
 
@@ -109,12 +111,13 @@ const Index = () => {
       {/* Live Stats */}
       <section className="border-y border-border bg-card py-12">
         <div className="container">
-          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-5">
             {[
               { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
               { label: "Teams", value: stats.teams, to: "/teams" },
               { label: "Race Events", value: stats.events, to: "/results" },
               { label: "Series", value: stats.series, to: "/series" },
+              { label: "Cars", value: stats.cars, to: "/cars" },
             ].map((stat) => (
               <Link key={stat.label} to={stat.to}>
                 <motion.div

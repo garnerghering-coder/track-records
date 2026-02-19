@@ -89,7 +89,7 @@ const EventDetailPage = () => {
 
       const { data: rawEntries } = await supabase
         .from("race_entries")
-        .select("*")
+        .select("*, car_models(id, name)")
         .eq("race_event_id", id)
         .order("finishing_position", { ascending: true, nullsFirst: false });
 
@@ -176,7 +176,9 @@ const EventDetailPage = () => {
                 ) : (
                   <span>{event.series_name}</span>
                 )}
-                <span>• {event.season_year}</span>
+                <span>• {event.event_date
+                  ? new Date(event.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+                  : event.season_year}</span>
                 {event.category && (
                   <Badge variant="secondary" className="text-xs">{categoryLabels[event.category] || event.category}</Badge>
                 )}
@@ -192,7 +194,7 @@ const EventDetailPage = () => {
                   )
                 )}
                 {event.event_date && (
-                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(event.event_date).toLocaleDateString()}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(event.event_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
                 )}
                 {event.ticket_url && (
                   <a href={event.ticket_url} target="_blank" rel="noopener" className="text-primary hover:underline text-xs">Tickets</a>
@@ -233,6 +235,7 @@ const EventDetailPage = () => {
                       <TableHead className="w-[60px]">#</TableHead>
                       <TableHead>Team</TableHead>
                       <TableHead>Driver(s)</TableHead>
+                      <TableHead>Car</TableHead>
                       <TableHead className="text-center">Laps</TableHead>
                       <TableHead>Gap</TableHead>
                       <TableHead>Class Gap</TableHead>
@@ -282,6 +285,13 @@ const EventDetailPage = () => {
                               ))
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {(entry as any).car_models ? (
+                            <Link to={`/car/${(entry as any).car_models.id}`} className="text-sm text-primary hover:underline">
+                              {(entry as any).car_models.name}
+                            </Link>
+                          ) : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-center text-muted-foreground">
                           {entry.laps_completed ?? "—"}
