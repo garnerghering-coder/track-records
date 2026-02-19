@@ -90,7 +90,7 @@ const CircuitProfile = () => {
             {circuit.image_url && (
               <div className="rounded-lg border border-border bg-card p-5">
                 <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Map</h3>
-                <img src={circuit.image_url} alt={`${circuit.name} layout`} className="w-full rounded" />
+                <img src={circuit.image_url} alt={`${circuit.name} layout`} className="w-full rounded" referrerPolicy="no-referrer" />
               </div>
             )}
 
