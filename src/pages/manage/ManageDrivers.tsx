@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 
 interface Driver { id: string; full_name: string; short_name: string | null; nationality: string | null; date_of_birth: string | null; }
 
@@ -16,11 +16,22 @@ export default function ManageDrivers() {
   const [editing, setEditing] = useState<Driver | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", short_name: "", nationality: "", date_of_birth: "" });
+  const [search, setSearch] = useState("");
 
   const { data: drivers = [], isLoading } = useQuery({
     queryKey: ["v2_drivers"],
     queryFn: async () => { const { data, error } = await supabase.from("v2_drivers").select("*").order("full_name"); if (error) throw error; return data as Driver[]; },
   });
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return drivers;
+    const q = search.toLowerCase();
+    return drivers.filter(d =>
+      d.full_name.toLowerCase().includes(q) ||
+      (d.short_name || "").toLowerCase().includes(q) ||
+      (d.nationality || "").toLowerCase().includes(q)
+    );
+  }, [drivers, search]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -47,11 +58,15 @@ export default function ManageDrivers() {
         <h1 className="text-2xl font-bold">Drivers</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Driver</Button>
       </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search drivers…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
           <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Code</TableHead><TableHead>Nationality</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
           <TableBody>
-            {drivers.map(d => (
+            {filtered.map(d => (
               <TableRow key={d.id}>
                 <TableCell className="font-medium">{d.full_name}</TableCell>
                 <TableCell>{d.short_name}</TableCell>
@@ -63,6 +78,7 @@ export default function ManageDrivers() {
                 </TableCell>
               </TableRow>
             ))}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No drivers found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}

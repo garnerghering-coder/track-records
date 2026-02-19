@@ -7,11 +7,19 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
+
+interface CustomColumn {
+  key: string;
+  name: string;
+  type: "text" | "number";
+}
 
 interface ResultRow {
   _key: string;
@@ -27,12 +35,16 @@ const RACE_STATUSES = ["finished", "dnf", "dns", "dsq", "classified"];
 
 const makeKey = () => Math.random().toString(36).slice(2, 10);
 
-const blankRow = (pos: number, type: string): ResultRow => {
+const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): ResultRow => {
   const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, team: null, car: null };
   if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.laps_run = ""; base.notes = ""; }
   else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.laps_run = ""; }
   else if (type === "race" || type === "sprint_race") { base.laps_completed = ""; base.total_time = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; }
   else { base.notes = ""; }
+  // Add custom columns with empty defaults
+  for (const col of customCols) {
+    base[`_custom_${col.key}`] = "";
+  }
   return base;
 };
 
@@ -40,10 +52,8 @@ const blankRow = (pos: number, type: string): ResultRow => {
 function fuzzyMatch(needle: string, haystack: { id: string; label: string }[]): { id: string; label: string } | null {
   const n = needle.toLowerCase().trim();
   if (!n) return null;
-  // Exact match first
   const exact = haystack.find(h => h.label.toLowerCase() === n);
   if (exact) return exact;
-  // Partial match
   const partial = haystack.find(h => h.label.toLowerCase().includes(n) || n.includes(h.label.toLowerCase()));
   return partial || null;
 }
@@ -70,6 +80,10 @@ export default function ManageSessionResults() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [qualSegments, setQualSegments] = useState(3);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  const [addColOpen, setAddColOpen] = useState(false);
+  const [newColName, setNewColName] = useState("");
+  const [newColType, setNewColType] = useState<"text" | "number">("text");
 
   // Load existing data
   useEffect(() => {
@@ -112,9 +126,31 @@ export default function ManageSessionResults() {
     load();
   }, [session, sessionId]);
 
-  const addRow = () => setRows(r => [...r, blankRow(r.length + 1, type)]);
+  const addRow = () => setRows(r => [...r, blankRow(r.length + 1, type, customColumns)]);
   const removeRow = (key: string) => setRows(r => r.filter(row => row._key !== key));
   const updateRow = (key: string, field: string, value: any) => setRows(r => r.map(row => row._key === key ? { ...row, [field]: value } : row));
+
+  const addCustomColumn = () => {
+    if (!newColName.trim()) return;
+    const key = makeKey();
+    const col: CustomColumn = { key, name: newColName.trim(), type: newColType };
+    setCustomColumns(prev => [...prev, col]);
+    // Add the column to all existing rows
+    setRows(prev => prev.map(row => ({ ...row, [`_custom_${key}`]: "" })));
+    setNewColName("");
+    setNewColType("text");
+    setAddColOpen(false);
+    toast.success(`Column "${col.name}" added`);
+  };
+
+  const removeCustomColumn = (key: string) => {
+    setCustomColumns(prev => prev.filter(c => c.key !== key));
+    setRows(prev => prev.map(row => {
+      const newRow = { ...row };
+      delete newRow[`_custom_${key}`];
+      return newRow;
+    }));
+  };
 
   const handlePdfImport = async (file: File) => {
     setImporting(true);
@@ -138,7 +174,6 @@ export default function ManageSessionResults() {
       const results = data?.results || [];
       if (results.length === 0) { toast.warning("No results found in PDF"); return; }
 
-      // Fetch existing drivers and teams for matching
       const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name");
       const { data: existingTeams } = await supabase.from("v2_teams").select("id, full_name");
       const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name }));
@@ -146,11 +181,10 @@ export default function ManageSessionResults() {
 
       const newRows: ResultRow[] = [];
       for (const r of results) {
-        const row = blankRow(r.position || newRows.length + 1, type);
+        const row = blankRow(r.position || newRows.length + 1, type, customColumns);
         row.position = String(r.position || "");
         row.car_number = String(r.car_number || "");
 
-        // Match or create driver
         if (r.driver_name) {
           let match = fuzzyMatch(r.driver_name, driverList);
           if (!match) {
@@ -163,7 +197,6 @@ export default function ManageSessionResults() {
           row.driver = match;
         }
 
-        // Match or create team
         if (r.team_name) {
           let match = fuzzyMatch(r.team_name, teamList);
           if (!match) {
@@ -176,7 +209,6 @@ export default function ManageSessionResults() {
           row.team = match;
         }
 
-        // Fill type-specific fields
         if (type === "practice") {
           row.best_lap_time = r.best_lap_time || "";
           row.gap_to_p1 = r.gap || "";
@@ -272,7 +304,6 @@ export default function ManageSessionResults() {
         <div className="flex gap-2 items-center">
           {sourceDoc && (
             <Button variant="ghost" size="sm" className="text-xs" onClick={() => {
-              // Generate a signed URL to view the PDF
               supabase.storage.from("session-documents").createSignedUrl(sourceDoc, 3600).then(({ data }) => {
                 if (data?.signedUrl) window.open(data.signedUrl, "_blank");
               });
@@ -285,6 +316,9 @@ export default function ManageSessionResults() {
             {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
             {importing ? "Importing…" : "Import PDF"}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setAddColOpen(true)}>
+            <Columns className="h-4 w-4 mr-1" />Add Column
+          </Button>
           <Button variant="outline" size="sm" onClick={() => handleSave(false)} disabled={saving}>Save Draft</Button>
           <Button size="sm" onClick={() => handleSave(true)} disabled={saving}>Publish Session</Button>
         </div>
@@ -295,6 +329,18 @@ export default function ManageSessionResults() {
           <span className="text-muted-foreground">Qualifying segments:</span>
           {[1, 2, 3].map(n => (
             <Button key={n} size="sm" variant={qualSegments >= n ? "default" : "outline"} className="h-6 text-xs px-2" onClick={() => setQualSegments(n)}>Q{n}</Button>
+          ))}
+        </div>
+      )}
+
+      {customColumns.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Custom columns:</span>
+          {customColumns.map(col => (
+            <Badge key={col.key} variant="secondary" className="text-xs gap-1">
+              {col.name} ({col.type})
+              <button onClick={() => removeCustomColumn(col.key)} className="ml-1 hover:text-destructive"><X className="h-3 w-3" /></button>
+            </Badge>
           ))}
         </div>
       )}
@@ -312,6 +358,9 @@ export default function ManageSessionResults() {
               {isQual && <><th className="px-2 py-2">Q1</th>{qualSegments >= 2 && <th className="px-2 py-2">Q2</th>}{qualSegments >= 3 && <th className="px-2 py-2">Q3</th>}<th className="px-2 py-2">Best</th><th className="px-2 py-2">Gap</th><th className="px-2 py-2">Laps</th></>}
               {isRace && <><th className="px-2 py-2">Laps</th><th className="px-2 py-2">Time/Gap</th><th className="px-2 py-2">FL</th><th className="px-2 py-2">Avg</th><th className="px-2 py-2">Pits</th><th className="px-2 py-2">Pts</th><th className="px-2 py-2">Status</th></>}
               {type === "other" && <th className="px-2 py-2">Notes</th>}
+              {customColumns.map(col => (
+                <th key={col.key} className="px-2 py-2">{col.name}</th>
+              ))}
               <th className="px-2 py-2 w-8" />
             </tr>
           </thead>
@@ -353,6 +402,16 @@ export default function ManageSessionResults() {
                   </td>
                 </>}
                 {type === "other" && <td className="px-1 py-1"><Input value={row.notes} onChange={e => updateRow(row._key, "notes", e.target.value)} className="h-7 text-xs" /></td>}
+                {customColumns.map(col => (
+                  <td key={col.key} className="px-1 py-1">
+                    <Input
+                      type={col.type === "number" ? "number" : "text"}
+                      value={row[`_custom_${col.key}`] || ""}
+                      onChange={e => updateRow(row._key, `_custom_${col.key}`, e.target.value)}
+                      className="h-7 text-xs"
+                    />
+                  </td>
+                ))}
                 <td className="px-1 py-1"><Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeRow(row._key)}><X className="h-3 w-3" /></Button></td>
               </tr>
             ))}
@@ -396,6 +455,33 @@ export default function ManageSessionResults() {
           </Collapsible>
         </div>
       )}
+
+      {/* Add Column Dialog */}
+      <Dialog open={addColOpen} onOpenChange={setAddColOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Add Custom Column</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Column Name *</Label>
+              <Input value={newColName} onChange={e => setNewColName(e.target.value)} placeholder="e.g. Interval, Sector 1" />
+            </div>
+            <div>
+              <Label>Type</Label>
+              <Select value={newColType} onValueChange={v => setNewColType(v as "text" | "number")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="number">Number</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddColOpen(false)}>Cancel</Button>
+            <Button onClick={addCustomColumn} disabled={!newColName.trim()}>Add Column</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
