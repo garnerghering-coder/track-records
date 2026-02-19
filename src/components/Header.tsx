@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Shield, LogOut, Trophy, Car, PenLine, Search, X } from "lucide-react";
+import { Search, X, Menu, LogOut, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import logoFull from "@/assets/logo-full.png";
 
@@ -13,6 +13,7 @@ const Header = () => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -40,51 +41,73 @@ const Header = () => {
     if (!searchQuery.trim()) { setSearchResults([]); return; }
     const timer = setTimeout(async () => {
       const lower = `%${searchQuery}%`;
-      const [drivers, teams, events] = await Promise.all([
-        supabase.from("driver_profiles").select("id, first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(5),
-        supabase.from("team_profiles" as any).select("id, name").ilike("name", lower).limit(5) as any,
-        supabase.from("race_events").select("id, event_name, series_name").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(5),
+      const [drivers, teams, events, series, circuits] = await Promise.all([
+        supabase.from("driver_profiles").select("id, first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(4),
+        supabase.from("team_profiles").select("id, name").ilike("name", lower).limit(4),
+        supabase.from("race_events").select("id, event_name, series_name").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(4),
+        supabase.from("series").select("id, name").ilike("name", lower).limit(3),
+        supabase.from("circuits").select("id, name").ilike("name", lower).limit(3),
       ]);
       const results: any[] = [];
       (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: `${d.first_name} ${d.last_name}`, url: `/driver/${d.id}` }));
-      ((teams as any).data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.name, url: `/team/${t.id}` }));
+      (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.name, url: `/team/${t.id}` }));
       (events.data || []).forEach((e: any) => results.push({ type: "event", id: e.id, label: `${e.event_name} — ${e.series_name}`, url: `/event/${e.id}` }));
+      (series.data || []).forEach((s: any) => results.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}` }));
+      (circuits.data || []).forEach((c: any) => results.push({ type: "circuit", id: c.id, label: c.name, url: `/circuit/${c.id}` }));
       setSearchResults(results);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchOpen(false);
+      setSearchQuery("");
+    }
+  };
+
+  const navLinks = [
+    { to: "/search", label: "Drivers" },
+    { to: "/teams", label: "Teams" },
+    { to: "/results", label: "Results" },
+    { to: "/calendar", label: "Calendar" },
+  ];
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-md">
-      <div className="container flex h-16 items-center justify-between bg-secondary">
-        <Link to="/" className="flex items-center bg-secondary">
-          <img src={logoFull} alt="Track Records" className="h-8 w-auto" />
+    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
+      <div className="container flex h-14 items-center justify-between">
+        <Link to="/" className="flex items-center">
+          <img src={logoFull} alt="Track Records" className="h-7 w-auto" />
         </Link>
 
-        <nav className="hidden items-center gap-4 md:flex">
+        <nav className="hidden items-center gap-6 md:flex">
           {/* Search toggle */}
           <div className="relative">
-            <button onClick={() => { setSearchOpen(!searchOpen); setSearchQuery(""); setSearchResults([]); }} className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              <Search className="h-4 w-4" />
+            <button
+              onClick={() => { setSearchOpen(!searchOpen); setSearchQuery(""); setSearchResults([]); }}
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
               Search
             </button>
             {searchOpen && (
-              <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-border bg-card shadow-lg p-2 z-50">
-                <div className="relative">
+              <div className="absolute right-0 top-full mt-2 w-96 rounded-lg border border-border bg-card shadow-xl p-2 z-50">
+                <form onSubmit={handleSearchSubmit} className="relative">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     autoFocus
-                    placeholder="Search drivers, teams, events…"
+                    placeholder="Search everything…"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="pl-8 pr-8 h-8 text-sm"
+                    className="pl-8 pr-8 h-9 text-sm"
                   />
-                  <button onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults([]); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <X className="h-3.5 w-3.5" />
                   </button>
-                </div>
+                </form>
                 {searchResults.length > 0 && (
-                  <div className="mt-2 max-h-64 overflow-y-auto space-y-1">
+                  <div className="mt-2 max-h-72 overflow-y-auto space-y-0.5">
                     {searchResults.map(r => (
                       <Link
                         key={`${r.type}-${r.id}`}
@@ -92,10 +115,18 @@ const Header = () => {
                         onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
                         className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors"
                       >
-                        <span className="text-[10px] uppercase font-semibold text-muted-foreground w-10">{r.type}</span>
+                        <span className="text-[10px] uppercase font-medium text-muted-foreground w-12 shrink-0">{r.type}</span>
                         <span className="text-card-foreground truncate">{r.label}</span>
                       </Link>
                     ))}
+                    {searchQuery.trim() && (
+                      <button
+                        onClick={() => { navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`); setSearchOpen(false); setSearchQuery(""); }}
+                        className="w-full text-left rounded px-2 py-1.5 text-sm text-primary hover:bg-accent transition-colors"
+                      >
+                        View all results for "{searchQuery}"
+                      </button>
+                    )}
                   </div>
                 )}
                 {searchQuery.trim() && searchResults.length === 0 && (
@@ -105,59 +136,70 @@ const Header = () => {
             )}
           </div>
 
-          <Link to="/search" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            <User className="h-4 w-4" />
-            Drivers
-          </Link>
-          <Link to="/teams" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            <Car className="h-4 w-4" />
-            Teams
-          </Link>
-          <Link to="/results" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            <Trophy className="h-4 w-4" />
-            Results
-          </Link>
+          {navLinks.map(link => (
+            <Link key={link.to} to={link.to} className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              {link.label}
+            </Link>
+          ))}
           {session && (
-            <Link to="/contribute" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              <PenLine className="h-4 w-4" />
+            <Link to="/contribute" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Contribute
             </Link>
           )}
           {isAdmin && (
-            <Link to="/admin" className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              <Shield className="h-4 w-4" />
+            <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              <Shield className="h-3.5 w-3.5 inline mr-1" />Admin
+            </Link>
+          )}
+          {session ? (
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
+              Log Out
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link to="/auth"><Button variant="ghost" size="sm">Log In</Button></Link>
+              <Link to="/auth?signup=true"><Button size="sm">Sign Up</Button></Link>
+            </div>
+          )}
+        </nav>
+
+        {/* Mobile */}
+        <div className="flex items-center gap-2 md:hidden">
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-foreground">
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
+          {navLinks.map(link => (
+            <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              {link.label}
+            </Link>
+          ))}
+          {session && (
+            <Link to="/contribute" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Contribute
+            </Link>
+          )}
+          {isAdmin && (
+            <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Admin
             </Link>
           )}
           {session ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-1.5">
-              <LogOut className="h-4 w-4" />
+            <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Log Out
-            </Button>
+            </button>
           ) : (
-            <>
-              <Link to="/auth">
-                <Button variant="outline" size="sm">Log In</Button>
-              </Link>
-              <Link to="/auth?signup=true">
-                <Button size="sm">Sign Up</Button>
-              </Link>
-            </>
-          )}
-        </nav>
-
-        <div className="flex items-center gap-2 md:hidden">
-          {session ? (
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Link to="/auth">
-              <Button size="sm">Sign Up</Button>
+            <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-primary">
+              Sign Up / Log In
             </Link>
           )}
         </div>
-      </div>
+      )}
     </header>
   );
 };

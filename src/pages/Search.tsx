@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search as SearchIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
-import type { Tables } from "@/integrations/supabase/types";
-
-type DriverProfile = Tables<"driver_profiles">;
 
 const categoryOptions = [
   { value: "all", label: "All Categories" },
@@ -27,127 +25,187 @@ const categoryOptions = [
 
 const categoryLabels: Record<string, string> = Object.fromEntries(categoryOptions.filter(c => c.value !== "all").map(c => [c.value, c.label]));
 
+type ResultItem = {
+  type: "driver" | "team" | "event" | "series" | "circuit";
+  id: string;
+  label: string;
+  url: string;
+  subtitle?: string;
+  nationality?: string | null;
+  category?: string | null;
+};
+
+const typeFilter = [
+  { value: "all", label: "All Types" },
+  { value: "driver", label: "Drivers" },
+  { value: "team", label: "Teams" },
+  { value: "event", label: "Events" },
+  { value: "series", label: "Series" },
+  { value: "circuit", label: "Circuits" },
+];
+
 const SearchPage = () => {
-  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
-  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [typeFilterVal, setTypeFilterVal] = useState("all");
   const [category, setCategory] = useState("all");
-  const [nationality, setNationality] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [results, setResults] = useState<ResultItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchDrivers = async () => {
-      setLoading(true);
+    const q = searchParams.get("q");
+    if (q && q !== search) setSearch(q);
+  }, [searchParams]);
 
-      let query = supabase.from("driver_profiles").select("*");
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return; }
+    setLoading(true);
 
-      if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
+    const timer = setTimeout(async () => {
+      const lower = `%${search}%`;
+      const items: ResultItem[] = [];
+
+      const shouldSearch = (type: string) => typeFilterVal === "all" || typeFilterVal === type;
+
+      const promises: Promise<void>[] = [];
+
+      if (shouldSearch("driver")) {
+        promises.push((async () => {
+          let q = supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category")
+            .or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(20);
+          if (category !== "all") q = q.eq("primary_category", category as any);
+          const { data } = await q;
+          (data || []).forEach((d: any) => items.push({
+            type: "driver", id: d.id, label: `${d.first_name} ${d.last_name}`,
+            url: `/driver/${d.id}`, nationality: d.nationality, category: d.primary_category,
+          }));
+        })());
       }
-      if (category !== "all") {
-        query = query.eq("primary_category", category as any);
+      if (shouldSearch("team")) {
+        promises.push((async () => {
+          let q = supabase.from("team_profiles").select("id, name, nationality, primary_category")
+            .ilike("name", lower).limit(20);
+          if (category !== "all") q = q.eq("primary_category", category as any);
+          const { data } = await q;
+          (data || []).forEach((t: any) => items.push({
+            type: "team", id: t.id, label: t.name,
+            url: `/team/${t.id}`, nationality: t.nationality, category: t.primary_category,
+          }));
+        })());
       }
-      if (nationality) {
-        query = query.ilike("nationality", `%${nationality}%`);
+      if (shouldSearch("event")) {
+        promises.push((async () => {
+          let q = supabase.from("race_events").select("id, event_name, series_name, season_year, category, location")
+            .or(`event_name.ilike.${lower},series_name.ilike.${lower},location.ilike.${lower}`).limit(30);
+          if (category !== "all") q = q.eq("category", category as any);
+          const { data } = await q;
+          (data || []).forEach((e: any) => items.push({
+            type: "event", id: e.id, label: e.event_name,
+            url: `/event/${e.id}`, subtitle: `${e.series_name} · ${e.season_year}`,
+            category: e.category,
+          }));
+        })());
+      }
+      if (shouldSearch("series")) {
+        promises.push((async () => {
+          let q = supabase.from("series").select("id, name, category").ilike("name", lower).limit(20);
+          if (category !== "all") q = q.eq("category", category as any);
+          const { data } = await q;
+          (data || []).forEach((s: any) => items.push({
+            type: "series", id: s.id, label: s.name,
+            url: `/series/${s.id}`, category: s.category,
+          }));
+        })());
+      }
+      if (shouldSearch("circuit")) {
+        promises.push((async () => {
+          const { data } = await supabase.from("circuits").select("id, name, country, location")
+            .or(`name.ilike.${lower},country.ilike.${lower},location.ilike.${lower}`).limit(20);
+          (data || []).forEach((c: any) => items.push({
+            type: "circuit", id: c.id, label: c.name,
+            url: `/circuit/${c.id}`, subtitle: [c.location, c.country].filter(Boolean).join(", "),
+          }));
+        })());
       }
 
-      query = query.order("updated_at", { ascending: false });
-
-      const { data } = await query;
-      setDrivers(data ?? []);
+      await Promise.all(promises);
+      setResults(items);
       setLoading(false);
-    };
+    }, 300);
 
-    const debounce = setTimeout(fetchDrivers, 300);
-    return () => clearTimeout(debounce);
-  }, [search, category, nationality]);
+    return () => clearTimeout(timer);
+  }, [search, typeFilterVal, category]);
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
-      <section
-        className="pt-24 pb-10"
-        style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}
-      >
+      <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">
-          <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
-            Find Drivers
-          </h1>
-          <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-            Search and filter motorsport talent by name, category, and nationality.
+          <h1 className="font-display text-3xl font-bold text-foreground">Search</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Search across drivers, teams, events, series, and circuits.
           </p>
         </div>
       </section>
 
       <div className="container py-8">
-        {/* Filters */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-8">
           <div className="relative flex-1">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by name…"
+              placeholder="Search everything…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setSearchParams(e.target.value ? { q: e.target.value } : {}); }}
               className="pl-10"
             />
           </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
+          <Select value={typeFilterVal} onValueChange={setTypeFilterVal}>
+            <SelectTrigger className="w-full sm:w-[160px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {categoryOptions.map(c => (
-                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
-              ))}
+              {typeFilter.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Input
-            placeholder="Nationality…"
-            value={nationality}
-            onChange={(e) => setNationality(e.target.value)}
-            className="w-full sm:w-[160px]"
-          />
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Results */}
-        {loading ? (
-          <p className="text-center text-muted-foreground py-12">Loading drivers…</p>
-        ) : drivers.length === 0 ? (
+        {!search.trim() ? (
+          <p className="text-center text-muted-foreground py-12">Type something to search.</p>
+        ) : loading ? (
+          <p className="text-center text-muted-foreground py-12">Searching…</p>
+        ) : results.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-muted-foreground">No drivers found matching your criteria.</p>
+            <p className="text-muted-foreground">No results found for "{search}".</p>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {drivers.map(driver => (
+          <div className="space-y-2">
+            {results.map(r => (
               <Link
-                key={driver.id}
-                to={`/driver/${driver.id}`}
-                className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30"
+                key={`${r.type}-${r.id}`}
+                to={r.url}
+                className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg overflow-hidden bg-primary/10">
-                    <span className="text-primary font-display text-lg font-bold">{driver.first_name[0]}{driver.last_name[0]}</span>
+                <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    {r.nationality && <FlagImage nationality={r.nationality} size={14} />}
+                    <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
-                        {driver.first_name} {driver.last_name}
-                      </h3>
-                    </div>
-                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      {driver.nationality && (
-                        <span className="inline-flex items-center gap-1"><FlagImage nationality={driver.nationality} size={16} /> {driver.nationality}</span>
-                      )}
-                      {driver.primary_category && <span>{categoryLabels[driver.primary_category] || driver.primary_category}</span>}
-                    </div>
-                  </div>
+                  {r.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{r.subtitle}</p>}
                 </div>
+                {r.category && (
+                  <span className="text-xs text-muted-foreground shrink-0">{categoryLabels[r.category] || r.category}</span>
+                )}
               </Link>
             ))}
           </div>
         )}
       </div>
-
       <Footer />
     </div>
   );

@@ -16,6 +16,9 @@ import NotFound from "./pages/NotFound";
 import Teams from "./pages/Teams";
 import TeamProfile from "./pages/TeamProfile";
 import Contribute from "./pages/Contribute";
+import CircuitProfile from "./pages/CircuitProfile";
+import SeriesProfile from "./pages/SeriesProfile";
+import Calendar from "./pages/Calendar";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +39,9 @@ const App = () => (
           <Route path="/submit" element={<Submit />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/team/:id" element={<TeamProfile />} />
+          <Route path="/circuit/:id" element={<CircuitProfile />} />
+          <Route path="/series/:id" element={<SeriesProfile />} />
+          <Route path="/calendar" element={<Calendar />} />
           <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

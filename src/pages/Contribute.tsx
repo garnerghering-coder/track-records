@@ -152,6 +152,10 @@ const ContributePage = () => {
   const [driverNationality, setDriverNationality] = useState("");
   const [driverCategory, setDriverCategory] = useState("other");
   const [driverBio, setDriverBio] = useState("");
+  const [driverSocialWebsite, setDriverSocialWebsite] = useState("");
+  const [driverSocialInstagram, setDriverSocialInstagram] = useState("");
+  const [driverSocialTwitter, setDriverSocialTwitter] = useState("");
+  const [driverSocialLinkedin, setDriverSocialLinkedin] = useState("");
   const [submittingDriver, setSubmittingDriver] = useState(false);
 
   // Add Team
@@ -160,6 +164,8 @@ const ContributePage = () => {
   const [teamCategory, setTeamCategory] = useState("other");
   const [teamWebsite, setTeamWebsite] = useState("");
   const [teamBio, setTeamBio] = useState("");
+  const [teamSocialInstagram, setTeamSocialInstagram] = useState("");
+  const [teamSocialTwitter, setTeamSocialTwitter] = useState("");
   const [submittingTeam, setSubmittingTeam] = useState(false);
 
   // Edit Existing
@@ -292,11 +298,16 @@ const ContributePage = () => {
         nationality: driverNationality || null,
         primary_category: driverCategory,
         bio: driverBio || null,
+        social_website: driverSocialWebsite || null,
+        social_instagram: driverSocialInstagram || null,
+        social_twitter: driverSocialTwitter || null,
+        social_linkedin: driverSocialLinkedin || null,
       },
     });
     setSubmittingDriver(false);
     toast({ title: "Driver submitted", description: "Pending admin review." });
     setDriverFirst(""); setDriverLast(""); setDriverNationality(""); setDriverBio("");
+    setDriverSocialWebsite(""); setDriverSocialInstagram(""); setDriverSocialTwitter(""); setDriverSocialLinkedin("");
   };
 
   // Submit Team
@@ -315,11 +326,14 @@ const ContributePage = () => {
         primary_category: teamCategory,
         website: teamWebsite || null,
         bio: teamBio || null,
+        social_instagram: teamSocialInstagram || null,
+        social_twitter: teamSocialTwitter || null,
       },
     });
     setSubmittingTeam(false);
     toast({ title: "Team submitted", description: "Pending admin review." });
     setTeamName(""); setTeamNationality(""); setTeamBio(""); setTeamWebsite("");
+    setTeamSocialInstagram(""); setTeamSocialTwitter("");
   };
 
   // Search for editing
@@ -329,7 +343,7 @@ const ContributePage = () => {
     const lower = `%${editSearch}%`;
 
     const [drivers, teams, events] = await Promise.all([
-      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category, bio").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(10),
+      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category, bio, social_website, social_instagram, social_twitter, social_linkedin").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(10),
       supabase.from("team_profiles" as any).select("id, name, nationality, primary_category, bio, website").ilike("name", lower).limit(10) as any,
       supabase.from("race_events").select("id, event_name, series_name, season_year, category, location").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(10),
     ]);
@@ -352,6 +366,10 @@ const ContributePage = () => {
       fields.nationality = item.nationality || "";
       fields.primary_category = item.primary_category || "other";
       fields.bio = item.bio || "";
+      fields.social_website = item.social_website || "";
+      fields.social_instagram = item.social_instagram || "";
+      fields.social_twitter = item.social_twitter || "";
+      fields.social_linkedin = item.social_linkedin || "";
     } else if (item._type === "team") {
       fields.name = item.name || "";
       fields.nationality = item.nationality || "";
@@ -522,6 +540,13 @@ const ContributePage = () => {
                 </Select>
               </div>
               <div><Label className="text-card-foreground text-xs">Bio</Label><Textarea value={driverBio} onChange={e => setDriverBio(e.target.value)} rows={3} /></div>
+              <div className="space-y-2">
+                <Label className="text-card-foreground text-xs">Social Links</Label>
+                <Input placeholder="Website URL" value={driverSocialWebsite} onChange={e => setDriverSocialWebsite(e.target.value)} />
+                <Input placeholder="Instagram URL" value={driverSocialInstagram} onChange={e => setDriverSocialInstagram(e.target.value)} />
+                <Input placeholder="Twitter / X URL" value={driverSocialTwitter} onChange={e => setDriverSocialTwitter(e.target.value)} />
+                <Input placeholder="LinkedIn URL" value={driverSocialLinkedin} onChange={e => setDriverSocialLinkedin(e.target.value)} />
+              </div>
               <Button onClick={handleSubmitDriver} disabled={submittingDriver || !driverFirst.trim() || !driverLast.trim()}>
                 {submittingDriver ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Driver"}
               </Button>
@@ -543,6 +568,11 @@ const ContributePage = () => {
               </div>
               <div><Label className="text-card-foreground text-xs">Website</Label><Input value={teamWebsite} onChange={e => setTeamWebsite(e.target.value)} placeholder="https://" /></div>
               <div><Label className="text-card-foreground text-xs">Bio</Label><Textarea value={teamBio} onChange={e => setTeamBio(e.target.value)} rows={3} /></div>
+              <div className="space-y-2">
+                <Label className="text-card-foreground text-xs">Social Links</Label>
+                <Input placeholder="Instagram URL" value={teamSocialInstagram} onChange={e => setTeamSocialInstagram(e.target.value)} />
+                <Input placeholder="Twitter / X URL" value={teamSocialTwitter} onChange={e => setTeamSocialTwitter(e.target.value)} />
+              </div>
               <Button onClick={handleSubmitTeam} disabled={submittingTeam || !teamName.trim()}>
                 {submittingTeam ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Team"}
               </Button>
