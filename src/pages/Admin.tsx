@@ -1745,7 +1745,27 @@ Here are the results to parse:
                   </div>
                 )}
                 {carSearchTerm.trim() && filteredCars.length === 0 && (
-                  <p className="text-xs text-muted-foreground mt-1 px-1">No matching cars</p>
+                  <button
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent text-primary font-medium"
+                    onClick={async () => {
+                      const { data, error } = await supabase
+                        .from("car_models")
+                        .insert({ name: carSearchTerm.trim() })
+                        .select("id")
+                        .single();
+                      if (error) {
+                        toast({ title: "Error creating car", description: error.message, variant: "destructive" });
+                        return;
+                      }
+                      if (data) {
+                        toast({ title: "Car created", description: `Created "${carSearchTerm.trim()}"` });
+                        await handleSelectCar(data.id);
+                        fetchCars();
+                      }
+                    }}
+                  >
+                    + Create "{carSearchTerm.trim()}"
+                  </button>
                 )}
               </div>
             </div>
