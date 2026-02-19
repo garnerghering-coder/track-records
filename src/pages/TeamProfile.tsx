@@ -226,7 +226,7 @@ const TeamProfilePage = () => {
                         <TableCell className="text-muted-foreground">{entry.race_events?.series_name || "—"}</TableCell>
                         <TableCell className="text-muted-foreground">{entry.race_events?.season_year || "—"}</TableCell>
                         <TableCell className="text-muted-foreground">{entry.race_class || "—"}</TableCell>
-                        <TableCell className="text-center font-display font-bold text-card-foreground">
+                        <TableCell className="text-center font-accent font-bold text-card-foreground text-base">
                           {entry.finishing_position ?? "—"}
                         </TableCell>
                         <TableCell>

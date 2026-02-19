@@ -123,7 +123,7 @@ const Index = () => {
                 viewport={{ once: true }}
                 className="text-center"
               >
-                <div className="font-display text-4xl font-bold text-primary">
+                <div className="font-accent text-4xl font-bold text-primary">
                   {stat.value.toLocaleString()}
                 </div>
                 <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider">

@@ -16,6 +16,7 @@ export default {
       fontFamily: {
         display: ["Rajdhani", "sans-serif"],
         body: ["IBM Plex Sans", "sans-serif"],
+        accent: ["ModernAge", "Rajdhani", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
