@@ -216,7 +216,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
               <TableHead>Car</TableHead>
               {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
               {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
-              {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>Best Lap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
+              {isRace && <><TableHead>Laps</TableHead><TableHead>Time</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Best Lap</TableHead><TableHead>Avg Lap</TableHead><TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
               {extraDataKeys.map(col => (
                 <TableHead key={col.key}>{col.name}</TableHead>
               ))}
@@ -248,9 +248,11 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                 </>}
                 {isRace && <>
                   <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.total_time || r.gap_to_leader || "—"}</TableCell>
-                  <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.total_time || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.gap_to_leader || "—"}</TableCell>
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
+                  <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{r.average_lap_time || "—"}</TableCell>
                   <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>
                   <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>
                   <TableCell>
