@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2 } from "lucide-react";
+import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical } from "lucide-react";
 
 const SESSION_TYPES = [
   { value: "practice", label: "Practice" },
@@ -28,6 +28,7 @@ export default function ManageEventDetail() {
   const qc = useQueryClient();
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "" });
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["v2_event", id],
@@ -41,7 +42,7 @@ export default function ManageEventDetail() {
   const { data: sessions = [] } = useQuery({
     queryKey: ["v2_sessions", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_sessions").select("*").eq("event_id", id!).order("date", { ascending: true });
+      const { data, error } = await supabase.from("v2_sessions").select("*").eq("event_id", id!).order("sort_order", { ascending: true }).order("date", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -49,11 +50,13 @@ export default function ManageEventDetail() {
 
   const addSession = useMutation({
     mutationFn: async () => {
+      const maxOrder = sessions.reduce((max: number, s: any) => Math.max(max, s.sort_order || 0), 0);
       const { error } = await supabase.from("v2_sessions").insert({
         event_id: id!,
         name: sessionForm.name,
         session_type: sessionForm.session_type as any,
         date: sessionForm.date || null,
+        sort_order: maxOrder + 1,
       });
       if (error) throw error;
     },
@@ -63,7 +66,6 @@ export default function ManageEventDetail() {
 
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      // Delete results first, then session
       for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
         const { error } = await supabase.from(table).delete().eq("session_id", sessionId);
         if (error) throw error;
@@ -77,10 +79,9 @@ export default function ManageEventDetail() {
 
   const deleteEvent = useMutation({
     mutationFn: async () => {
-      // Delete all session data, sessions, then event
       for (const s of sessions) {
         for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
-          await supabase.from(table).delete().eq("session_id", s.id);
+          await supabase.from(table).delete().eq("session_id", (s as any).id);
         }
       }
       await supabase.from("v2_sessions").delete().eq("event_id", id!);
@@ -96,7 +97,6 @@ export default function ManageEventDetail() {
       const newStatus = event?.status === "published" ? "draft" : "published";
       const { error } = await supabase.from("v2_events").update({ status: newStatus as any }).eq("id", id!);
       if (error) throw error;
-      // Also update all sessions to match
       const { error: sessErr } = await supabase.from("v2_sessions").update({ status: newStatus as any }).eq("event_id", id!);
       if (sessErr) throw sessErr;
     },
@@ -107,6 +107,28 @@ export default function ManageEventDetail() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const handleSessionDrop = async (targetIdx: number) => {
+    if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
+    const arr = [...sessions];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(targetIdx, 0, moved);
+    setDragIdx(null);
+
+    // Optimistically update cache
+    qc.setQueryData(["v2_sessions", id], arr);
+
+    // Persist new sort_order
+    try {
+      for (let i = 0; i < arr.length; i++) {
+        await supabase.from("v2_sessions").update({ sort_order: i } as any).eq("id", (arr[i] as any).id);
+      }
+      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+    } catch (e: any) {
+      toast.error("Failed to save order");
+      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+    }
+  };
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
   if (!event) return <div className="p-6 text-muted-foreground">Event not found</div>;
@@ -167,10 +189,21 @@ export default function ManageEventDetail() {
         {sessions.length === 0 && <p className="text-sm text-muted-foreground">No sessions yet. Add one to get started.</p>}
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {sessions.map((s: any) => (
-            <div key={s.id} className="rounded-lg border border-border bg-card p-4 space-y-2">
+          {sessions.map((s: any, idx: number) => (
+            <div
+              key={s.id}
+              draggable
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+              onDrop={() => handleSessionDrop(idx)}
+              onDragEnd={() => setDragIdx(null)}
+              className={`rounded-lg border border-border bg-card p-4 space-y-2 cursor-grab active:cursor-grabbing transition-opacity ${dragIdx === idx ? "opacity-50" : ""}`}
+            >
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm">{s.name}</span>
+                <div className="flex items-center gap-1.5">
+                  <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="font-medium text-sm">{s.name}</span>
+                </div>
                 <Badge variant="outline" className="text-[10px]">{s.session_type.replace("_", " ")}</Badge>
               </div>
               {s.date && <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleString()}</p>}

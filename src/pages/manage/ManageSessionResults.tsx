@@ -216,7 +216,7 @@ export default function ManageSessionResults() {
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int") continue; // built-in
+              if (k === "Int" || k === "avg_kmh") continue; // built-in
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
                 foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
@@ -236,15 +236,15 @@ export default function ManageSessionResults() {
             car: r.v2_cars ? { id: r.v2_cars.id, label: [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") } : null,
             _driverNationality: r.v2_drivers?.nationality || null,
           };
-          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
-          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
-          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
+          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
+          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
           else { row.notes = ""; }
           // Load custom column data from extra_data
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int") continue;
+              if (k === "Int" || k === "avg_kmh") continue;
               row[`_custom_${k}`] = String(ed[k] ?? "");
             }
           }
@@ -662,6 +662,10 @@ export default function ManageSessionResults() {
     // Store Int in extra_data
     if (row.gap_int) {
       ed["Int"] = row.gap_int;
+    }
+    // Store avg_kmh in extra_data
+    if (row.avg_kmh) {
+      ed["avg_kmh"] = row.avg_kmh;
     }
     for (const col of customColumns) {
       const val = row[`_custom_${col.key}`];
