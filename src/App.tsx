@@ -9,7 +9,7 @@ import Search from "./pages/Search";
 import Results from "./pages/Results";
 import EventDetail from "./pages/EventDetail";
 import DriverProfile from "./pages/DriverProfile";
-import Admin from "./pages/Admin";
+
 import Submit from "./pages/Submit";
 import Privacy from "./pages/Privacy";
 import NotFound from "./pages/NotFound";
@@ -48,7 +48,7 @@ const App = () => (
           <Route path="/results" element={<Results />} />
           <Route path="/event/:id" element={<EventDetail />} />
           <Route path="/driver/:id" element={<DriverProfile />} />
-          <Route path="/admin" element={<Admin />} />
+          
           <Route path="/submit" element={<Submit />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/team/:id" element={<TeamProfile />} />

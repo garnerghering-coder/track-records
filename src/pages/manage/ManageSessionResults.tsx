@@ -532,95 +532,20 @@ export default function ManageSessionResults() {
     setDragColIdx(null);
   };
 
-  const handlePdfImport = async (file: File) => {
+  const handleDocUpload = async (file: File) => {
     setImporting(true);
     try {
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-      }
-      const base64 = btoa(binary);
+      const storagePath = `${sessionId}/${file.name}`;
+      const { error: uploadErr } = await supabase.storage.from("session-documents").upload(storagePath, file, { contentType: file.type, upsert: true });
+      if (uploadErr) throw uploadErr;
 
-      const { data, error } = await supabase.functions.invoke("parse-session-pdf", {
-        body: { session_id: sessionId, session_type: type, pdf_base64: base64, file_name: file.name },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const results = data?.results || [];
-      if (results.length === 0) { toast.warning("No results found in PDF"); return; }
-
-      const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name, nationality");
-      const { data: existingTeams } = await supabase.from("v2_teams").select("id, full_name");
-      const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name, nationality: d.nationality }));
-      const teamList = (existingTeams || []).map(t => ({ id: t.id, label: t.full_name }));
-
-      const newRows: ResultRow[] = [];
-      for (const r of results) {
-        const row = blankRow(r.position || newRows.length + 1, type, customColumns);
-        row.position = String(r.position || "");
-        row.car_number = String(r.car_number || "");
-
-        if (r.driver_name) {
-          let match = fuzzyMatch(r.driver_name, driverList);
-          if (!match) {
-            const { data: newDriver } = await supabase.from("v2_drivers").insert({ full_name: r.driver_name }).select("id, full_name, nationality").single();
-            if (newDriver) {
-              match = { id: newDriver.id, label: newDriver.full_name };
-              driverList.push({ ...match, nationality: newDriver.nationality });
-            }
-          }
-          row.driver = match;
-          const driverData = driverList.find(d => d.id === match?.id);
-          row._driverNationality = driverData?.nationality || null;
-        }
-
-        if (r.team_name) {
-          let match = fuzzyMatch(r.team_name, teamList);
-          if (!match) {
-            const { data: newTeam } = await supabase.from("v2_teams").insert({ full_name: r.team_name }).select("id, full_name").single();
-            if (newTeam) {
-              match = { id: newTeam.id, label: newTeam.full_name };
-              teamList.push(match);
-            }
-          }
-          row.team = match;
-        }
-
-        if (type === "practice") {
-          row.best_lap_time = r.best_lap_time || "";
-          row.gap_to_p1 = r.gap || "";
-          row.laps_run = r.laps != null ? String(r.laps) : "";
-        } else if (type === "qualifying" || type === "sprint_qualifying") {
-          row.q1_time = r.q1_time || "";
-          row.q2_time = r.q2_time || "";
-          row.q3_time = r.q3_time || "";
-          row.best_time = r.best_time || "";
-          row.gap_to_pole = r.gap || "";
-          row.laps_run = r.laps != null ? String(r.laps) : "";
-        } else if (type === "race" || type === "sprint_race") {
-          row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : "";
-          row.total_time = r.total_time || "";
-          row.fastest_lap_time = r.fastest_lap_time || "";
-          row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : "";
-          row.points = r.points != null ? String(r.points) : "";
-          row.status = r.status || "finished";
-          row.dnf_reason = r.dnf_reason || "";
-        }
-
-        newRows.push(row);
-      }
-
-      setRows(newRows);
+      // Update session with document URL
+      await supabase.from("v2_sessions").update({ source_document_url: storagePath } as any).eq("id", sessionId!);
       qc.invalidateQueries({ queryKey: ["v2_session", sessionId] });
-      toast.success(`Imported ${newRows.length} results from PDF`);
+      toast.success("Document uploaded successfully");
     } catch (e: any) {
-      console.error("PDF import error:", e);
-      toast.error(e.message || "PDF import failed");
+      console.error("Upload error:", e);
+      toast.error(e.message || "Upload failed");
     } finally {
       setImporting(false);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
@@ -771,13 +696,13 @@ export default function ManageSessionResults() {
                 if (data?.signedUrl) window.open(data.signedUrl, "_blank");
               });
             }}>
-              <FileText className="h-4 w-4 mr-1" />View PDF
+              <FileText className="h-4 w-4 mr-1" />View Document
             </Button>
           )}
-          <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden" onChange={e => { if (e.target.files?.[0]) handlePdfImport(e.target.files[0]); }} />
+          <input ref={pdfInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff" className="hidden" onChange={e => { if (e.target.files?.[0]) handleDocUpload(e.target.files[0]); }} />
           <Button variant="outline" size="sm" onClick={() => pdfInputRef.current?.click()} disabled={importing}>
             {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-            {importing ? "Importing…" : "Import PDF"}
+            {importing ? "Uploading…" : "Upload Document"}
            </Button>
           <Button variant="outline" size="sm" onClick={handleOpenJsonDialog}>
             <Braces className="h-4 w-4 mr-1" />JSON
