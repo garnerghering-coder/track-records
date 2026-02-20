@@ -810,10 +810,17 @@ export default function ManageSessionResults() {
 
       {isQual && (
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Qualifying segments:</span>
-          {[1, 2, 3].map(n => (
-            <Button key={n} size="sm" variant={qualSegments >= n ? "default" : "outline"} className="h-6 text-xs px-2" onClick={() => setQualSegments(n)}>Q{n}</Button>
-          ))}
+          <span className="text-muted-foreground">Qualifying format:</span>
+          <Select value={String(qualSegments)} onValueChange={v => setQualSegments(Number(v))}>
+            <SelectTrigger className="h-7 w-[180px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3">F1 Style (Q1 / Q2 / Q3)</SelectItem>
+              <SelectItem value="2">Two Segments (Q1 / Q2)</SelectItem>
+              <SelectItem value="1">Single Session / Hyperpole</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
