@@ -307,16 +307,22 @@ export default function ManageSessionResults() {
     const example: Record<string, any> = { position: 1, car_number: "44", driver_name: "Driver Name", team_name: "Team Name", car_name: "Car Model" };
     if (type === "practice" || type === "warmup" || type === "other") {
       example.best_lap_time = "1:23.456";
+      example.gap_to_p1 = "+0.123";
+      example.gap_int = "+0.123";
       example.laps_run = 15;
     } else if (type === "qualifying" || type === "sprint_qualifying") {
       example.q1_time = "1:24.000";
       example.q2_time = "1:23.500";
       if (qualSegments >= 3) example.q3_time = "1:23.000";
       example.best_time = "1:23.000";
+      example.gap_to_pole = "+0.123";
+      example.gap_int = "+0.123";
       example.laps_run = 12;
     } else if (type === "race" || type === "sprint_race") {
       example.laps_completed = 50;
       example.total_time = "1:32:45.123";
+      example.gap_to_leader = "+0.914";
+      example.gap_int = "+0.914";
       example.fastest_lap_time = "1:23.456";
       example.pit_stops = 2;
       example.points = 25;
@@ -362,7 +368,7 @@ export default function ManageSessionResults() {
       const knownKeys = new Set(["position", "car_number", "driver_name", "team_name", "car_name",
         "best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes",
         "q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole",
-        "laps_completed", "total_time", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status", "dnf_reason"]);
+        "laps_completed", "total_time", "gap_to_leader", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status", "dnf_reason"]);
       const existingCustomNames = new Set(customColumns.map(c => c.name));
       const newCustomCols: CustomColumn[] = [];
       for (const entry of parsed) {
@@ -423,6 +429,7 @@ export default function ManageSessionResults() {
         if (type === "practice" || type === "warmup" || type === "other") {
           row.best_lap_time = entry.best_lap_time ?? "";
           row.gap_to_p1 = entry.gap_to_p1 ?? "";
+          row.gap_int = entry.gap_int ?? "";
           row.laps_run = entry.laps_run != null ? String(entry.laps_run) : "";
         } else if (type === "qualifying" || type === "sprint_qualifying") {
           row.q1_time = entry.q1_time ?? "";
@@ -430,10 +437,13 @@ export default function ManageSessionResults() {
           row.q3_time = entry.q3_time ?? "";
           row.best_time = entry.best_time ?? "";
           row.gap_to_pole = entry.gap_to_pole ?? "";
+          row.gap_int = entry.gap_int ?? "";
           row.laps_run = entry.laps_run != null ? String(entry.laps_run) : "";
         } else if (type === "race" || type === "sprint_race") {
           row.laps_completed = entry.laps_completed != null ? String(entry.laps_completed) : "";
           row.total_time = entry.total_time ?? "";
+          row.gap_to_leader = entry.gap_to_leader ?? "";
+          row.gap_int = entry.gap_int ?? "";
           row.fastest_lap_time = entry.fastest_lap_time ?? "";
           row.average_lap_time = entry.average_lap_time ?? "";
           row.pit_stops = entry.pit_stops != null ? String(entry.pit_stops) : "";
