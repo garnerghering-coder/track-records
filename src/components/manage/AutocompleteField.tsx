@@ -59,8 +59,14 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
         const res = await supabase.from("v2_teams").select("id, full_name").ilike("full_name", q).limit(8);
         data = (res.data || []).map(d => ({ id: d.id, label: d.full_name }));
       } else if (entityType === "car") {
-        const res = await supabase.from("v2_cars").select("id, model_name, manufacturer").ilike("model_name", q).limit(8);
-        data = (res.data || []).map(d => ({ id: d.id, label: [d.manufacturer, d.model_name].filter(Boolean).join(" ") }));
+        // Search by model_name OR manufacturer
+        const res1 = await supabase.from("v2_cars").select("id, model_name, manufacturer").ilike("model_name", q).limit(8);
+        const res2 = await supabase.from("v2_cars").select("id, model_name, manufacturer").ilike("manufacturer", q).limit(8);
+        const merged = new Map<string, any>();
+        for (const d of [...(res1.data || []), ...(res2.data || [])]) {
+          if (!merged.has(d.id)) merged.set(d.id, d);
+        }
+        data = Array.from(merged.values()).slice(0, 10).map(d => ({ id: d.id, label: [d.manufacturer, d.model_name].filter(Boolean).join(" ") }));
       } else if (entityType === "series") {
         const res = await supabase.from("v2_series").select("id, name").ilike("name", q).order("name").limit(10);
         data = (res.data || []).map(s => ({ id: s.id, label: s.name }));

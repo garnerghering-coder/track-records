@@ -37,9 +37,9 @@ export default function EventPage() {
       const { data, error } = await supabase
         .from("v2_sessions")
         .select("*")
-        .eq("event_id", slug!)
-        .eq("status", "published" as any)
-        .order("date", { ascending: true });
+      .eq("event_id", slug!)
+      .eq("status", "published" as any)
+      .order("sort_order", { ascending: true });
       if (error) throw error;
       if (data.length > 0 && !activeTab) setActiveTab(data[0].id);
       return data;
