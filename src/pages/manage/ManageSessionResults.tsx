@@ -74,41 +74,9 @@ function getGapField(type: string): string {
   return "gap_to_leader";
 }
 
-function recalcFromBestLap(rows: ResultRow[], type: string): ResultRow[] {
-  const bestField = getBestLapField(type);
-  const gapField = getGapField(type);
-  const isRaceType = type === "race" || type === "sprint_race";
-  const p1Time = parseTime(rows[0]?.[bestField] || "");
-
-  return rows.map((row, i) => {
-    const myTime = parseTime(row[bestField] || "");
-    const newRow = { ...row };
-
-    if (i === 0) {
-      newRow[gapField] = "";
-      newRow.gap_int = "";
-    } else {
-      if (myTime !== null && p1Time !== null) {
-        newRow[gapField] = formatGap(myTime - p1Time);
-      }
-      if (isRaceType) {
-        // For races, Int = difference between this row's gap and previous row's gap
-        const myGap = parseTime(newRow[gapField] || "");
-        const prevGap = parseTime(rows[i - 1]?.[gapField] || "");
-        if (myGap !== null && (i === 1 || prevGap !== null)) {
-          const prev = i === 1 ? 0 : prevGap!;
-          const diff = myGap - prev;
-          newRow.gap_int = diff > 0 ? formatGap(diff) : "";
-        }
-      } else {
-        const prevTime = parseTime(rows[i - 1]?.[bestField] || "");
-        if (myTime !== null && prevTime !== null) {
-          newRow.gap_int = formatGap(myTime - prevTime);
-        }
-      }
-    }
-    return newRow;
-  });
+function recalcFromBestLap(rows: ResultRow[], _type: string): ResultRow[] {
+  // No auto-calculation — Gap and Int are manually filled
+  return rows;
 }
 
 
