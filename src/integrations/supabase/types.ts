@@ -1554,6 +1554,7 @@ export type Database = {
           id: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
+          sort_order: number
           source_document_url: string | null
           status: Database["public"]["Enums"]["event_status_enum"]
           updated_at: string
@@ -1566,6 +1567,7 @@ export type Database = {
           id?: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
+          sort_order?: number
           source_document_url?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
@@ -1578,6 +1580,7 @@ export type Database = {
           id?: string
           name?: string
           session_type?: Database["public"]["Enums"]["session_type_enum"]
+          sort_order?: number
           source_document_url?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string

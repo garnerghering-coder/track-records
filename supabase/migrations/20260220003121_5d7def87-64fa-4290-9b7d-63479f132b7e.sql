@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_sessions ADD COLUMN sort_order integer NOT NULL DEFAULT 0;
