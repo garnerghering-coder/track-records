@@ -998,6 +998,7 @@ export type Database = {
           created_at: string
           id: string
           layout_image_url: string | null
+          length_km: number | null
           location: string | null
           name: string
           updated_at: string
@@ -1007,6 +1008,7 @@ export type Database = {
           created_at?: string
           id?: string
           layout_image_url?: string | null
+          length_km?: number | null
           location?: string | null
           name: string
           updated_at?: string
@@ -1016,6 +1018,7 @@ export type Database = {
           created_at?: string
           id?: string
           layout_image_url?: string | null
+          length_km?: number | null
           location?: string | null
           name?: string
           updated_at?: string
