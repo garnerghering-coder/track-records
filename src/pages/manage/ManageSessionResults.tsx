@@ -74,7 +74,7 @@ function getGapField(type: string): string {
   return "total_time"; // for race, gap to leader is stored in total_time or gap_to_leader
 }
 
-function recalcFromBestLap(rows: ResultRow[], type: string, circuitLengthKm?: number | null): ResultRow[] {
+function recalcFromBestLap(rows: ResultRow[], type: string): ResultRow[] {
   const bestField = getBestLapField(type);
   const gapField = getGapField(type);
   const p1Time = parseTime(rows[0]?.[bestField] || "");
@@ -95,22 +95,10 @@ function recalcFromBestLap(rows: ResultRow[], type: string, circuitLengthKm?: nu
         newRow.gap_int = formatGap(myTime - prevTime);
       }
     }
-    // Auto-calculate avg km/h
-    newRow.avg_kmh = calcAvgKmh(myTime, circuitLengthKm ?? null);
     return newRow;
   });
 }
 
-/**
- * Calculate average speed in km/h from lap time (ms) and circuit length (km).
- * Returns formatted string like "123.456" or "" if not calculable.
- */
-function calcAvgKmh(lapTimeMs: number | null, lengthKm: number | null): string {
-  if (lapTimeMs === null || !lengthKm || lapTimeMs <= 0) return "";
-  const hours = lapTimeMs / 3600000;
-  const kmh = lengthKm / hours;
-  return kmh.toFixed(3);
-}
 
 export default function ManageSessionResults() {
   const { id: eventId, sessionId } = useParams();
@@ -128,17 +116,6 @@ export default function ManageSessionResults() {
     },
   });
 
-  // Fetch circuit length for avg km/h calculation
-  const circuitId = (session?.v2_events as any)?.circuit_id;
-  const { data: circuit } = useQuery({
-    queryKey: ["v2_circuit_length", circuitId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("v2_circuits").select("length_km").eq("id", circuitId!).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!circuitId,
-  });
 
   const type = session?.session_type || "other";
   const [rows, setRows] = useState<ResultRow[]>([]);
@@ -164,9 +141,9 @@ export default function ManageSessionResults() {
   // Column order management
   const getDefaultColumns = useCallback(() => {
     const cols: string[] = ["position", "car_number", "driver", "nat", "team", "car"];
-    if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "avg_kmh", "laps_run", "notes");
-    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "avg_kmh", "laps_run");
-    else if (type === "race" || type === "sprint_race") cols.push("laps_completed", "total_time", "fastest_lap_time", "gap_int", "avg_kmh", "average_lap_time", "pit_stops", "points", "status");
+    if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes");
+    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run");
+    else if (type === "race" || type === "sprint_race") cols.push("laps_completed", "total_time", "fastest_lap_time", "gap_int", "average_lap_time", "pit_stops", "points", "status");
     else cols.push("notes");
     return cols;
   }, [type]);
@@ -216,7 +193,7 @@ export default function ManageSessionResults() {
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int" || k === "avg_kmh") continue; // built-in
+              if (k === "Int") continue; // built-in
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
                 foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
@@ -236,15 +213,15 @@ export default function ManageSessionResults() {
             car: r.v2_cars ? { id: r.v2_cars.id, label: [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") } : null,
             _driverNationality: r.v2_drivers?.nationality || null,
           };
-          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
-          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
-          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.avg_kmh = (r.extra_data as any)?.avg_kmh || ""; }
+          if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "race" || t === "sprint_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else { row.notes = ""; }
           // Load custom column data from extra_data
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int" || k === "avg_kmh") continue;
+              if (k === "Int") continue;
               row[`_custom_${k}`] = String(ed[k] ?? "");
             }
           }
@@ -264,17 +241,6 @@ export default function ManageSessionResults() {
     load();
   }, [session, sessionId]);
 
-  // Recalculate avg_kmh when circuit length becomes available
-  useEffect(() => {
-    if (!circuit?.length_km || rows.length === 0) return;
-    const bestField = getBestLapField(type);
-    const hasAnyTime = rows.some(r => parseTime(r[bestField] || "") !== null);
-    if (!hasAnyTime) return;
-    setRows(prev => prev.map(row => {
-      const ms = parseTime(row[bestField] || "");
-      return { ...row, avg_kmh: calcAvgKmh(ms, circuit.length_km) };
-    }));
-  }, [circuit?.length_km]);
 
   const addRow = () => setRows(r => [...r, blankRow(r.length + 1, type, customColumns)]);
   const removeRow = (key: string) => setRows(r => r.filter(row => row._key !== key));
@@ -294,14 +260,14 @@ export default function ManageSessionResults() {
 
         if (field === bestField) {
           // Recalculate gap and int from best lap times
-          newRows = recalcFromBestLap(newRows, type, circuit?.length_km);
+          newRows = recalcFromBestLap(newRows, type);
         } else if (field === gapField && rowIdx > 0) {
           // Recalculate best lap from gap
           const p1Time = parseTime(newRows[0]?.[bestField] || "");
           const gapMs = parseTime(value || "");
           if (p1Time !== null && gapMs !== null) {
             const myTime = p1Time + gapMs;
-            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(myTime), avg_kmh: calcAvgKmh(myTime, circuit?.length_km ?? null) };
+            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(myTime) };
             // Recalculate int
             const prevTime = parseTime(newRows[rowIdx - 1]?.[bestField] || "");
             if (prevTime !== null) {
@@ -314,7 +280,7 @@ export default function ManageSessionResults() {
           const intMs = parseTime(value || "");
           if (prevTime !== null && intMs !== null) {
             const myTime = prevTime + intMs;
-            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(myTime), avg_kmh: calcAvgKmh(myTime, circuit?.length_km ?? null) };
+            newRows[rowIdx] = { ...newRows[rowIdx], [bestField]: formatLapTime(myTime) };
             // Recalculate gap
             const p1Time = parseTime(newRows[0]?.[bestField] || "");
             if (p1Time !== null) {
@@ -414,7 +380,7 @@ export default function ManageSessionResults() {
 
       // Detect any new custom columns from the JSON keys
       const knownKeys = new Set(["position", "car_number", "driver_name", "team_name", "car_name",
-        "best_lap_time", "gap_to_p1", "gap_int", "avg_kmh", "laps_run", "notes",
+        "best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes",
         "q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole",
         "laps_completed", "total_time", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status", "dnf_reason"]);
       const existingCustomNames = new Set(customColumns.map(c => c.name));
@@ -507,7 +473,7 @@ export default function ManageSessionResults() {
       }
 
       // Auto-calculate Gap, Int
-      const recalced = recalcFromBestLap(newRows, type, circuit?.length_km);
+      const recalced = recalcFromBestLap(newRows, type);
       setRows(recalced);
       setJsonDialogOpen(false);
       toast.success(`Applied ${recalced.length} rows from JSON`);
@@ -663,10 +629,6 @@ export default function ManageSessionResults() {
     if (row.gap_int) {
       ed["Int"] = row.gap_int;
     }
-    // Store avg_kmh in extra_data
-    if (row.avg_kmh) {
-      ed["avg_kmh"] = row.avg_kmh;
-    }
     for (const col of customColumns) {
       const val = row[`_custom_${col.key}`];
       if (val !== undefined && val !== "") {
@@ -728,9 +690,9 @@ export default function ManageSessionResults() {
   // Column label map
   const colLabels: Record<string, string> = {
     position: "Pos", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
-    best_lap_time: "Best Lap", gap_to_p1: "Gap", gap_int: "Int", avg_kmh: "Avg KM/H", laps_run: "Laps", notes: "Notes",
+    best_lap_time: "Best Lap", gap_to_p1: "Gap", gap_int: "Int", laps_run: "Laps", notes: "Notes",
     q1_time: "Q1", q2_time: "Q2", q3_time: "Q3", best_time: "Best", gap_to_pole: "Gap",
-    laps_completed: "Laps", total_time: "Time/Gap", fastest_lap_time: "FL", average_lap_time: "Avg",
+    laps_completed: "Laps", total_time: "Time/Gap", fastest_lap_time: "Best Lap", average_lap_time: "Avg",
     pit_stops: "Pits", points: "Pts", status: "Status",
   };
   for (const col of customColumns) {
@@ -752,7 +714,6 @@ export default function ManageSessionResults() {
     if (col === "nat") return <FlagImage nationality={row._driverNationality} size={18} />;
     if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
     if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
-    if (col === "avg_kmh") return <span className="text-xs text-muted-foreground tabular-nums px-1">{row.avg_kmh || "—"}</span>;
     if (col === "status") return (
       <div>
         <Select value={row.status} onValueChange={v => updateRow(row._key, "status", v)}>

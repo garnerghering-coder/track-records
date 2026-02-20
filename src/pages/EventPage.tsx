@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileDown } from "lucide-react";
 import { exportSessionPdf } from "@/lib/pdf-export";
 import FlagImage from "@/components/FlagImage";
+import { parseTime } from "@/lib/time-calc";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -144,11 +145,10 @@ function SessionResults({ session, event }: { session: any; event: any }) {
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
         for (const [k] of Object.entries(ed)) {
-          if (k === "Int") continue; // built-in, rendered separately
+          if (k === "Int" || k === "avg_kmh") continue; // built-in or removed
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
-            const displayName = k === "avg_kmh" ? "Avg KM/H" : k;
-            extraDataKeys.push({ key: k, name: displayName });
+            extraDataKeys.push({ key: k, name: k });
           }
         }
       }
@@ -157,6 +157,20 @@ function SessionResults({ session, event }: { session: any; event: any }) {
 
   // Check if any result has an "Int" value
   const hasInt = results.some((r: any) => r.extra_data?.Int);
+
+  // Find the fastest lap time across all results for purple highlighting
+  const bestLapField = isPractice ? "best_lap_time" : isQual ? "best_time" : "fastest_lap_time";
+  let fastestLapMs: number | null = null;
+  let fastestLapStr: string | null = null;
+  for (const r of results) {
+    const timeStr = (r as any)[bestLapField];
+    if (!timeStr) continue;
+    const ms = parseTime(timeStr);
+    if (ms !== null && (fastestLapMs === null || ms < fastestLapMs)) {
+      fastestLapMs = ms;
+      fastestLapStr = timeStr;
+    }
+  }
 
   const handleExport = async () => {
     try {
@@ -202,7 +216,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
               <TableHead>Car</TableHead>
               {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
               {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
-              {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>FL</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
+              {isRace && <><TableHead>Laps</TableHead><TableHead>Time/Gap</TableHead><TableHead>Best Lap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
               {extraDataKeys.map(col => (
                 <TableHead key={col.key}>{col.name}</TableHead>
               ))}
@@ -218,7 +232,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                 <TableCell className="text-muted-foreground">{r.v2_teams?.short_name || r.v2_teams?.full_name || "—"}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</TableCell>
                 {isPractice && <>
-                  <TableCell className="font-mono text-xs">{r.best_lap_time || "—"}</TableCell>
+                  <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
@@ -227,7 +241,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                   <TableCell className="font-mono text-xs">{r.q1_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.q2_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.q3_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs font-semibold">{r.best_time || "—"}</TableCell>
+                  <TableCell className={`font-mono text-xs font-semibold ${r.best_time && r.best_time === fastestLapStr ? "text-purple-400" : ""}`}>{r.best_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
@@ -235,7 +249,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
                 {isRace && <>
                   <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.total_time || r.gap_to_leader || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.fastest_lap_time || "—"}</TableCell>
+                  <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>
                   <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>
