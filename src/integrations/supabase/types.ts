@@ -968,6 +968,73 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_annotation_items: {
+        Row: {
+          color: string
+          created_at: string
+          description: string
+          id: string
+          section_id: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string
+          id?: string
+          section_id: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string
+          id?: string
+          section_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_annotation_items_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "v2_annotation_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_annotation_sections: {
+        Row: {
+          created_at: string
+          id: string
+          session_id: string
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          session_id: string
+          sort_order?: number
+          title?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          session_id?: string
+          sort_order?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_annotation_sections_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_cars: {
         Row: {
           created_at: string
@@ -1591,6 +1658,45 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "v2_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_team_season_names: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          season_id: string
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          season_id: string
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          season_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_team_season_names_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "v2_seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_team_season_names_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v2_teams"
             referencedColumns: ["id"]
           },
         ]
