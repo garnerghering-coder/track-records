@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_circuits ADD COLUMN length_km numeric NULL;
