@@ -71,7 +71,7 @@ function getBestLapField(type: string): string {
 function getGapField(type: string): string {
   if (type === "practice" || type === "warmup" || type === "other") return "gap_to_p1";
   if (type === "qualifying" || type === "sprint_qualifying") return "gap_to_pole";
-  return "total_time"; // for race, gap to leader is stored in total_time or gap_to_leader
+  return "gap_to_leader";
 }
 
 function recalcFromBestLap(rows: ResultRow[], type: string): ResultRow[] {
