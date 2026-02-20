@@ -147,7 +147,8 @@ function SessionResults({ session, event }: { session: any; event: any }) {
           if (k === "Int") continue; // built-in, rendered separately
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
-            extraDataKeys.push({ key: k, name: k });
+            const displayName = k === "avg_kmh" ? "Avg KM/H" : k;
+            extraDataKeys.push({ key: k, name: displayName });
           }
         }
       }
