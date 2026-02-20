@@ -12,7 +12,8 @@ import { Label } from "@/components/ui/label";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import FlagImage from "@/components/FlagImage";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns, GripVertical } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Plus, X, ChevronDown, Upload, FileText, Loader2, Columns, GripVertical, Braces, Copy, Check } from "lucide-react";
 import { parseTime, formatLapTime, formatGap } from "@/lib/time-calc";
 
 type Ref = { id: string; label: string } | null;
@@ -125,6 +126,10 @@ export default function ManageSessionResults() {
   const [addColOpen, setAddColOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
   const [newColType, setNewColType] = useState<"text" | "number">("text");
+  const [jsonDialogOpen, setJsonDialogOpen] = useState(false);
+  const [jsonText, setJsonText] = useState("");
+  const [jsonApplying, setJsonApplying] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
 
   // Drag state for rows
   const [dragRowIdx, setDragRowIdx] = useState<number | null>(null);
@@ -312,6 +317,168 @@ export default function ManageSessionResults() {
     setNewColType("text");
     setAddColOpen(false);
     toast.success(`Column "${col.name}" added`);
+  };
+
+  // --- JSON Template Import ---
+  const generateTemplate = () => {
+    const example: Record<string, any> = { position: 1, car_number: "44", driver_name: "Driver Name", team_name: "Team Name", car_name: "Car Model" };
+    if (type === "practice" || type === "warmup" || type === "other") {
+      example.best_lap_time = "1:23.456";
+      example.laps_run = 15;
+    } else if (type === "qualifying" || type === "sprint_qualifying") {
+      example.q1_time = "1:24.000";
+      example.q2_time = "1:23.500";
+      if (qualSegments >= 3) example.q3_time = "1:23.000";
+      example.best_time = "1:23.000";
+      example.laps_run = 12;
+    } else if (type === "race" || type === "sprint_race") {
+      example.laps_completed = 50;
+      example.total_time = "1:32:45.123";
+      example.fastest_lap_time = "1:23.456";
+      example.pit_stops = 2;
+      example.points = 25;
+      example.status = "finished";
+    }
+    for (const col of customColumns) {
+      example[col.name] = col.type === "number" ? 0 : "";
+    }
+    return JSON.stringify([example], null, 2);
+  };
+
+  const handleOpenJsonDialog = () => {
+    setJsonText(generateTemplate());
+    setJsonCopied(false);
+    setJsonDialogOpen(true);
+  };
+
+  const handleCopyTemplate = async () => {
+    try {
+      await navigator.clipboard.writeText(generateTemplate());
+      setJsonCopied(true);
+      toast.success("Template copied to clipboard");
+      setTimeout(() => setJsonCopied(false), 2000);
+    } catch { toast.error("Failed to copy"); }
+  };
+
+  const handleApplyJson = async () => {
+    setJsonApplying(true);
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed)) throw new Error("JSON must be an array of objects");
+      if (parsed.length === 0) throw new Error("Array is empty");
+      if (typeof parsed[0] !== "object" || parsed[0] === null) throw new Error("Each entry must be an object");
+
+      const { data: existingDrivers } = await supabase.from("v2_drivers").select("id, full_name, nationality");
+      const { data: existingTeams } = await supabase.from("v2_teams").select("id, full_name");
+      const { data: existingCars } = await supabase.from("v2_cars").select("id, model_name, manufacturer");
+      const driverList = (existingDrivers || []).map(d => ({ id: d.id, label: d.full_name, nationality: d.nationality }));
+      const teamList = (existingTeams || []).map(t => ({ id: t.id, label: t.full_name }));
+      const carList = (existingCars || []).map(c => ({ id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" ") }));
+
+      // Detect any new custom columns from the JSON keys
+      const knownKeys = new Set(["position", "car_number", "driver_name", "team_name", "car_name",
+        "best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes",
+        "q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole",
+        "laps_completed", "total_time", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status", "dnf_reason"]);
+      const existingCustomNames = new Set(customColumns.map(c => c.name));
+      const newCustomCols: CustomColumn[] = [];
+      for (const entry of parsed) {
+        for (const k of Object.keys(entry)) {
+          if (!knownKeys.has(k) && !existingCustomNames.has(k) && !newCustomCols.find(c => c.name === k)) {
+            newCustomCols.push({ key: makeKey(), name: k, type: typeof entry[k] === "number" ? "number" : "text" });
+          }
+        }
+      }
+      const allCustom = [...customColumns, ...newCustomCols];
+      if (newCustomCols.length > 0) setCustomColumns(allCustom);
+
+      const newRows: ResultRow[] = [];
+      for (const entry of parsed) {
+        const row = blankRow(entry.position || newRows.length + 1, type, allCustom);
+        row.position = String(entry.position ?? newRows.length + 1);
+        row.car_number = String(entry.car_number ?? "");
+
+        if (entry.driver_name) {
+          let match = fuzzyMatch(entry.driver_name, driverList);
+          if (!match) {
+            const { data: newDriver } = await supabase.from("v2_drivers").insert({ full_name: entry.driver_name }).select("id, full_name, nationality").single();
+            if (newDriver) {
+              match = { id: newDriver.id, label: newDriver.full_name };
+              driverList.push({ ...match, nationality: newDriver.nationality });
+            }
+          }
+          row.driver = match;
+          const driverData = driverList.find(d => d.id === match?.id);
+          row._driverNationality = driverData?.nationality || null;
+        }
+
+        if (entry.team_name) {
+          let match = fuzzyMatch(entry.team_name, teamList);
+          if (!match) {
+            const { data: newTeam } = await supabase.from("v2_teams").insert({ full_name: entry.team_name }).select("id, full_name").single();
+            if (newTeam) {
+              match = { id: newTeam.id, label: newTeam.full_name };
+              teamList.push(match);
+            }
+          }
+          row.team = match;
+        }
+
+        if (entry.car_name) {
+          let match = fuzzyMatch(entry.car_name, carList);
+          if (!match) {
+            const { data: newCar } = await supabase.from("v2_cars").insert({ model_name: entry.car_name }).select("id, model_name, manufacturer").single();
+            if (newCar) {
+              match = { id: newCar.id, label: [newCar.manufacturer, newCar.model_name].filter(Boolean).join(" ") };
+              carList.push(match);
+            }
+          }
+          row.car = match;
+        }
+
+        // Map type-specific fields
+        if (type === "practice" || type === "warmup" || type === "other") {
+          row.best_lap_time = entry.best_lap_time ?? "";
+          row.gap_to_p1 = entry.gap_to_p1 ?? "";
+          row.laps_run = entry.laps_run != null ? String(entry.laps_run) : "";
+        } else if (type === "qualifying" || type === "sprint_qualifying") {
+          row.q1_time = entry.q1_time ?? "";
+          row.q2_time = entry.q2_time ?? "";
+          row.q3_time = entry.q3_time ?? "";
+          row.best_time = entry.best_time ?? "";
+          row.gap_to_pole = entry.gap_to_pole ?? "";
+          row.laps_run = entry.laps_run != null ? String(entry.laps_run) : "";
+        } else if (type === "race" || type === "sprint_race") {
+          row.laps_completed = entry.laps_completed != null ? String(entry.laps_completed) : "";
+          row.total_time = entry.total_time ?? "";
+          row.fastest_lap_time = entry.fastest_lap_time ?? "";
+          row.average_lap_time = entry.average_lap_time ?? "";
+          row.pit_stops = entry.pit_stops != null ? String(entry.pit_stops) : "";
+          row.points = entry.points != null ? String(entry.points) : "";
+          row.status = entry.status ?? "finished";
+          row.dnf_reason = entry.dnf_reason ?? "";
+        }
+
+        // Map custom columns
+        for (const col of allCustom) {
+          if (entry[col.name] !== undefined) {
+            row[`_custom_${col.key}`] = String(entry[col.name]);
+          }
+        }
+
+        newRows.push(row);
+      }
+
+      // Auto-calculate Gap, Int
+      const recalced = recalcFromBestLap(newRows, type);
+      setRows(recalced);
+      setJsonDialogOpen(false);
+      toast.success(`Applied ${recalced.length} rows from JSON`);
+    } catch (e: any) {
+      toast.error(e.message || "Invalid JSON");
+    } finally {
+      setJsonApplying(false);
+    }
   };
 
   const removeCustomColumn = (key: string) => {
@@ -587,6 +754,9 @@ export default function ManageSessionResults() {
           <Button variant="outline" size="sm" onClick={() => pdfInputRef.current?.click()} disabled={importing}>
             {importing ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
             {importing ? "Importing…" : "Import PDF"}
+           </Button>
+          <Button variant="outline" size="sm" onClick={handleOpenJsonDialog}>
+            <Braces className="h-4 w-4 mr-1" />JSON
           </Button>
           <Button variant="outline" size="sm" onClick={() => setAddColOpen(true)}>
             <Columns className="h-4 w-4 mr-1" />Add Column
@@ -721,6 +891,37 @@ export default function ManageSessionResults() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddColOpen(false)}>Cancel</Button>
             <Button onClick={addCustomColumn} disabled={!newColName.trim()}>Add Column</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* JSON Import Dialog */}
+      <Dialog open={jsonDialogOpen} onOpenChange={setJsonDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>JSON Import</DialogTitle>
+            <p className="text-xs text-muted-foreground">Paste a JSON array of result objects. Unknown keys become custom columns automatically.</p>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 space-y-3">
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopyTemplate}>
+                {jsonCopied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                {jsonCopied ? "Copied!" : "Copy Template"}
+              </Button>
+            </div>
+            <Textarea
+              value={jsonText}
+              onChange={e => setJsonText(e.target.value)}
+              className="font-mono text-xs min-h-[350px] flex-1"
+              placeholder='[{"position": 1, "driver_name": "...", ...}]'
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJsonDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleApplyJson} disabled={jsonApplying || !jsonText.trim()}>
+              {jsonApplying ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
+              {jsonApplying ? "Applying…" : "Apply"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
