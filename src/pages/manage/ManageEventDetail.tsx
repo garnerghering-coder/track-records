@@ -66,7 +66,7 @@ export default function ManageEventDetail() {
 
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {
-      for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
+      for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops", "v2_annotation_sections"] as const) {
         const { error } = await supabase.from(table).delete().eq("session_id", sessionId);
         if (error) throw error;
       }
@@ -80,7 +80,7 @@ export default function ManageEventDetail() {
   const deleteEvent = useMutation({
     mutationFn: async () => {
       for (const s of sessions) {
-        for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops"] as const) {
+        for (const table of ["v2_race_results", "v2_qualifying_results", "v2_practice_results", "v2_incidents", "v2_fastest_laps", "v2_pit_stops", "v2_annotation_sections"] as const) {
           await supabase.from(table).delete().eq("session_id", (s as any).id);
         }
       }

@@ -101,6 +101,7 @@ export default function ManageSessionResults() {
   const [rows, setRows] = useState<ResultRow[]>([]);
   const [pitStops, setPitStops] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
+  const [annotations, setAnnotations] = useState<{ _key: string; title: string; items: { _key: string; description: string; color: string }[] }[]>([]);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [qualSegments, setQualSegments] = useState(3);
@@ -216,6 +217,20 @@ export default function ManageSessionResults() {
         setPitStops((ps || []).map((p: any) => ({ _key: p.id, driver: p.v2_drivers ? { id: p.v2_drivers.id, label: p.v2_drivers.full_name } : null, lap_number: String(p.lap_number || ""), stop_duration: p.stop_duration || "", total_pit_time: p.total_pit_time || "" })));
         const { data: inc } = await supabase.from("v2_incidents").select("*").eq("session_id", sessionId!).order("lap_number");
         setIncidents((inc || []).map((i: any) => ({ _key: i.id, lap_number: String(i.lap_number || ""), description: i.description || "", penalty_type: i.penalty_type || "", outcome: i.outcome || "" })));
+      }
+
+      // Load annotation sections for ALL session types
+      const { data: sections } = await supabase.from("v2_annotation_sections" as any).select("*, v2_annotation_items(*)").eq("session_id", sessionId!).order("sort_order");
+      if (sections && (sections as any[]).length > 0) {
+        setAnnotations((sections as any[]).map((s: any) => ({
+          _key: s.id,
+          title: s.title,
+          items: (s.v2_annotation_items || []).sort((a: any, b: any) => a.sort_order - b.sort_order).map((item: any) => ({
+            _key: item.id,
+            description: item.description || "",
+            color: item.color || "#ef4444",
+          })),
+        })));
       }
     };
     load();
@@ -655,6 +670,22 @@ export default function ManageSessionResults() {
         if (incInserts.length) { const { error } = await supabase.from("v2_incidents").insert(incInserts); if (error) throw error; }
       }
 
+      // Save annotation sections for ALL session types
+      // Delete existing sections (cascade deletes items)
+      await supabase.from("v2_annotation_sections" as any).delete().eq("session_id", sessionId!);
+      for (let si = 0; si < annotations.length; si++) {
+        const section = annotations[si];
+        const { data: newSection, error: secErr } = await supabase.from("v2_annotation_sections" as any).insert({ session_id: sessionId!, title: section.title, sort_order: si }).select("id").single();
+        if (secErr) throw secErr;
+        if (newSection && section.items.length > 0) {
+          const itemInserts = section.items.filter(it => it.description).map((it, ii) => ({ section_id: (newSection as any).id, description: it.description, color: it.color, sort_order: ii }));
+          if (itemInserts.length) {
+            const { error: itemErr } = await supabase.from("v2_annotation_items" as any).insert(itemInserts);
+            if (itemErr) throw itemErr;
+          }
+        }
+      }
+
       // Persist column order and optionally publish
       const sessionUpdate: any = { column_order: columnOrder };
       if (publish) {
@@ -669,7 +700,7 @@ export default function ManageSessionResults() {
     } finally {
       setSaving(false);
     }
-  }, [session, sessionId, rows, pitStops, incidents, customColumns, columnOrder, qc]);
+  }, [session, sessionId, rows, pitStops, incidents, annotations, customColumns, columnOrder, qc]);
 
   if (!session) return <div className="p-6 text-muted-foreground">Loading…</div>;
 
@@ -868,7 +899,52 @@ export default function ManageSessionResults() {
         </div>
       )}
 
-      {/* Add Column Dialog */}
+      {/* Custom Annotation Sections — available for ALL session types */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Custom Sections</h3>
+        {annotations.map((section, si) => (
+          <Collapsible key={section._key} defaultOpen>
+            <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium">
+              <ChevronDown className="h-4 w-4" />{section.title || "Untitled Section"}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              <div className="flex items-center gap-2 mb-2">
+                <Input
+                  value={section.title}
+                  onChange={e => setAnnotations(prev => prev.map((s, i) => i === si ? { ...s, title: e.target.value } : s))}
+                  className="h-7 w-48 text-xs"
+                  placeholder="Section title"
+                />
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setAnnotations(prev => prev.filter((_, i) => i !== si))}><X className="h-3 w-3" /></Button>
+              </div>
+              {section.items.map((item, ii) => (
+                <div key={item._key} className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={item.color}
+                    onChange={e => setAnnotations(prev => prev.map((s, i) => i === si ? { ...s, items: s.items.map((it, j) => j === ii ? { ...it, color: e.target.value } : it) } : s))}
+                    className="h-7 w-8 rounded border border-input cursor-pointer"
+                  />
+                  <Input
+                    value={item.description}
+                    onChange={e => setAnnotations(prev => prev.map((s, i) => i === si ? { ...s, items: s.items.map((it, j) => j === ii ? { ...it, description: e.target.value } : it) } : s))}
+                    className="h-7 flex-1 text-xs"
+                    placeholder="Description"
+                  />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setAnnotations(prev => prev.map((s, i) => i === si ? { ...s, items: s.items.filter((_, j) => j !== ii) } : s))}><X className="h-3 w-3" /></Button>
+                </div>
+              ))}
+              <Button variant="outline" size="sm" onClick={() => setAnnotations(prev => prev.map((s, i) => i === si ? { ...s, items: [...s.items, { _key: makeKey(), description: "", color: "#ef4444" }] } : s))}>
+                <Plus className="h-3 w-3 mr-1" />Add Item
+              </Button>
+            </CollapsibleContent>
+          </Collapsible>
+        ))}
+        <Button variant="outline" size="sm" onClick={() => setAnnotations(prev => [...prev, { _key: makeKey(), title: "", items: [] }])}>
+          <Plus className="h-3 w-3 mr-1" />Add Section
+        </Button>
+      </div>
+
       <Dialog open={addColOpen} onOpenChange={setAddColOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader><DialogTitle>Add Custom Column</DialogTitle></DialogHeader>

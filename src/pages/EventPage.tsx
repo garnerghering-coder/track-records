@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileDown } from "lucide-react";
+import { FileDown, TriangleIcon } from "lucide-react";
 import { exportSessionPdf } from "@/lib/pdf-export";
 import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
@@ -22,7 +22,7 @@ export default function EventPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v2_events")
-        .select("*, v2_seasons(year, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url)")
+        .select("*, v2_seasons(id, year, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url)")
         .eq("id", slug!)
         .eq("status", "published" as any)
         .single();
@@ -46,6 +46,23 @@ export default function EventPage() {
     },
     enabled: !!event,
   });
+
+  // Fetch team season display names for this event's season
+  const seasonId = (event as any)?.v2_seasons?.id;
+  const { data: teamSeasonNames = [] } = useQuery({
+    queryKey: ["team_season_names", seasonId],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_team_season_names" as any).select("*").eq("season_id", seasonId);
+      return (data || []) as any[];
+    },
+    enabled: !!seasonId,
+  });
+
+  // Build a lookup map: team_id -> display_name
+  const teamNameMap: Record<string, string> = {};
+  for (const tsn of teamSeasonNames) {
+    teamNameMap[tsn.team_id] = tsn.display_name;
+  }
 
   if (isLoading) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Loading…</div></div>;
   if (!event) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Event not found or not published.</div><Footer /></div>;
@@ -94,7 +111,7 @@ export default function EventPage() {
               </TabsList>
               {sessions.map((s: any) => (
                 <TabsContent key={s.id} value={s.id}>
-                  <SessionResults session={s} event={event} />
+                  <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} />
                 </TabsContent>
               ))}
             </Tabs>
@@ -106,7 +123,28 @@ export default function EventPage() {
   );
 }
 
-function SessionResults({ session, event }: { session: any; event: any }) {
+// Position change indicator component
+function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: number | null }) {
+  if (racePos === null || qualPos === null) return null;
+  const delta = qualPos - racePos; // positive = gained positions
+  if (delta === 0) return <span className="text-xs text-muted-foreground">—</span>;
+  if (delta > 0) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs font-semibold" style={{ color: "#22c55e" }}>
+        <TriangleIcon className="h-3 w-3 fill-current" />
+        {delta}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 text-xs font-semibold" style={{ color: "#ef4444" }}>
+      <TriangleIcon className="h-3 w-3 fill-current rotate-180" />
+      {Math.abs(delta)}
+    </span>
+  );
+}
+
+function SessionResults({ session, event, teamNameMap, allSessions }: { session: any; event: any; teamNameMap: Record<string, string>; allSessions: any[] }) {
   const type = session.session_type;
   const isRace = type === "race" || type === "sprint_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
@@ -119,7 +157,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from(table as any)
-        .select("*, v2_drivers(full_name, nationality), v2_teams(full_name, short_name), v2_cars(model_name, manufacturer)")
+        .select("*, v2_drivers(full_name, nationality), v2_teams(id, full_name, short_name), v2_cars(model_name, manufacturer)")
         .eq("session_id", session.id)
         .order("position");
       if (error) throw error;
@@ -137,6 +175,33 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     enabled: isRace,
   });
 
+  // Fetch annotation sections
+  const { data: annotationSections = [] } = useQuery({
+    queryKey: ["public_annotations", session.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_annotation_sections" as any).select("*, v2_annotation_items(*)").eq("session_id", session.id).order("sort_order");
+      return (data || []) as any[];
+    },
+  });
+
+  // For race sessions, fetch qualifying results to compute position delta
+  const qualSession = isRace ? allSessions.find((s: any) => s.session_type === "qualifying" || s.session_type === "sprint_qualifying") : null;
+  const { data: qualResults = [] } = useQuery({
+    queryKey: ["public_qual_for_race", qualSession?.id],
+    queryFn: async () => {
+      if (!qualSession) return [];
+      const { data } = await supabase.from("v2_qualifying_results" as any).select("driver_id, position").eq("session_id", qualSession.id).order("position");
+      return (data || []) as any[];
+    },
+    enabled: isRace && !!qualSession,
+  });
+
+  // Build qualifying position lookup: driver_id -> qualifying position
+  const qualPosMap: Record<string, number> = {};
+  for (const qr of qualResults) {
+    if (qr.driver_id && qr.position) qualPosMap[qr.driver_id] = qr.position;
+  }
+
   // Extract custom columns from extra_data (excluding "Int" which is built-in)
   const extraDataKeys: { key: string; name: string }[] = [];
   if (results.length > 0) {
@@ -145,7 +210,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
         for (const [k] of Object.entries(ed)) {
-          if (k === "Int" || k === "avg_kmh") continue; // built-in or removed
+          if (k === "Int" || k === "avg_kmh") continue;
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
             extraDataKeys.push({ key: k, name: k });
@@ -155,10 +220,8 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     }
   }
 
-  // Check if any result has an "Int" value
   const hasInt = results.some((r: any) => r.extra_data?.Int);
 
-  // Find the fastest lap time across all results for purple highlighting
   const bestLapField = isPractice ? "best_lap_time" : isQual ? "best_time" : "fastest_lap_time";
   let fastestLapMs: number | null = null;
   let fastestLapStr: string | null = null;
@@ -191,6 +254,13 @@ function SessionResults({ session, event }: { session: any; event: any }) {
     }
   };
 
+  // Helper to get team display name (season alias or fallback)
+  const getTeamName = (r: any) => {
+    const teamId = r.v2_teams?.id;
+    if (teamId && teamNameMap[teamId]) return teamNameMap[teamId];
+    return r.v2_teams?.short_name || r.v2_teams?.full_name || "—";
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -209,6 +279,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="w-12">Pos</TableHead>
+              {isRace && <TableHead className="w-12">+/-</TableHead>}
               <TableHead className="w-14">No.</TableHead>
               <TableHead>Driver</TableHead>
               <TableHead className="w-10">Nat</TableHead>
@@ -226,10 +297,15 @@ function SessionResults({ session, event }: { session: any; event: any }) {
             {results.map((r: any, i: number) => (
               <TableRow key={r.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
+                {isRace && (
+                  <TableCell className="text-center">
+                    <PositionDelta racePos={r.position} qualPos={r.driver_id ? qualPosMap[r.driver_id] ?? null : null} />
+                  </TableCell>
+                )}
                 <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>
                 <TableCell className="font-medium">{r.v2_drivers?.full_name || "—"}</TableCell>
                 <TableCell><FlagImage nationality={r.v2_drivers?.nationality} size={18} /></TableCell>
-                <TableCell className="text-muted-foreground">{r.v2_teams?.short_name || r.v2_teams?.full_name || "—"}</TableCell>
+                <TableCell className="text-muted-foreground">{getTeamName(r)}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</TableCell>
                 {isPractice && <>
                   <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>
@@ -271,6 +347,7 @@ function SessionResults({ session, event }: { session: any; event: any }) {
         </Table>
       </div>
 
+      {/* Built-in incidents for race sessions */}
       {isRace && incidents.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">Incidents</h4>
@@ -286,6 +363,24 @@ function SessionResults({ session, event }: { session: any; event: any }) {
           </div>
         </div>
       )}
+
+      {/* Custom annotation sections */}
+      {annotationSections.map((section: any) => {
+        const items = (section.v2_annotation_items || []).sort((a: any, b: any) => a.sort_order - b.sort_order);
+        if (items.length === 0) return null;
+        return (
+          <div key={section.id} className="space-y-2">
+            <h4 className="text-sm font-semibold">{section.title}</h4>
+            <div className="space-y-1">
+              {items.map((item: any) => (
+                <div key={item.id} className="text-xs text-muted-foreground border-l-2 pl-3 py-1" style={{ borderColor: item.color }}>
+                  {item.description}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
