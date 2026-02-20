@@ -99,16 +99,18 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
       id={`ac-dropdown-${entityType}`}
       className="fixed z-[9999] rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto"
       style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+      onPointerDown={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
     >
       {results.map(r => (
-        <button key={r.id} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors" onClick={() => { onChange(r); setQuery(r.label); setOpen(false); }}>
+        <button key={r.id} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent transition-colors" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onChange(r); setQuery(r.label); setOpen(false); }}>
           {r.label}
         </button>
       ))}
       {results.length === 0 && query.trim() && (
         <p className="px-3 py-1.5 text-xs text-muted-foreground">No matches</p>
       )}
-      <button className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-accent transition-colors border-t border-border" onClick={() => { setCreating(true); setOpen(false); }}>
+      <button className="w-full text-left px-3 py-1.5 text-xs text-primary hover:bg-accent transition-colors border-t border-border" onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setCreating(true); setOpen(false); }}>
         + Create new {entityLabel}
       </button>
     </div>,
