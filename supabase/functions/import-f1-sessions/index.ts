@@ -94,9 +94,9 @@ function parsePosition(raw: string): { position: number | null; status: string |
 
 /** Detect session type from a results page URL or title */
 function detectSessionType(url: string, title: string): { type: string; name: string } {
-  if (/practice\/1/i.test(url)) return { type: "practice", name: "Practice 1" };
-  if (/practice\/2/i.test(url)) return { type: "practice", name: "Practice 2" };
-  if (/practice\/3/i.test(url)) return { type: "practice", name: "Practice 3" };
+  if (/practice[-/]1/i.test(url)) return { type: "practice", name: "Practice 1" };
+  if (/practice[-/]2/i.test(url)) return { type: "practice", name: "Practice 2" };
+  if (/practice[-/]3/i.test(url)) return { type: "practice", name: "Practice 3" };
   if (/sprint-shootout|sprint-qualifying/i.test(url)) return { type: "sprint_qualifying", name: "Sprint Qualifying" };
   if (/sprint-race|sprint-result/i.test(url)) return { type: "sprint_race", name: "Sprint Race" };
   if (/qualifying/i.test(url)) return { type: "qualifying", name: "Qualifying" };
@@ -405,7 +405,7 @@ serve(async (req) => {
 
     // Extract result page URLs from the hub page
     // Pattern: [Results](https://www.formula1.com/en/results/2025/races/1257/bahrain/practice/1)
-    const resultUrlRegex = /\[Results\]\((https:\/\/www\.formula1\.com\/en\/results\/\d+\/races\/\d+\/[^)]+)\)/gi;
+    const resultUrlRegex = /\[Results\]\((https:\/\/www\.formula1\.com\/en\/results(?:\.html)?\/\d+\/races\/\d+\/[^)]+)\)/gi;
     const resultUrls: string[] = [];
     let match: RegExpExecArray | null;
     while ((match = resultUrlRegex.exec(hubMarkdown)) !== null) {
@@ -415,7 +415,7 @@ serve(async (req) => {
     if (resultUrls.length === 0) {
       // Fallback: Try to extract from the results page nav if user pasted a results URL directly
       // Extract base URL pattern and try common session paths
-      const baseMatch = url.match(/(https:\/\/www\.formula1\.com\/en\/results\/\d+\/races\/\d+\/[^/]+)/);
+      const baseMatch = url.match(/(https:\/\/www\.formula1\.com\/en\/results(?:\.html)?\/\d+\/races\/\d+\/[^/]+)/);
       if (baseMatch) {
         const base = baseMatch[1];
         for (const path of ["/practice/1", "/practice/2", "/practice/3", "/qualifying", "/race-result"]) {
@@ -424,7 +424,7 @@ serve(async (req) => {
       }
 
       // Also try extracting from the results page sidebar navigation
-      const navRegex = /\[(?:Practice \d|Qualifying|Race Result)(?:Active)?\]\((https:\/\/www\.formula1\.com\/en\/results\/[^)]+)\)/gi;
+      const navRegex = /\[(?:Practice \d|Qualifying|Race Result)(?:Active)?\]\((https:\/\/www\.formula1\.com\/en\/results(?:\.html)?\/[^)]+)\)/gi;
       while ((match = navRegex.exec(hubMarkdown)) !== null) {
         if (!resultUrls.includes(match[1])) {
           resultUrls.push(match[1]);
@@ -434,7 +434,7 @@ serve(async (req) => {
 
     // Deduplicate and filter to only practice, qualifying, race
     const uniqueUrls = [...new Set(resultUrls)].filter(
-      (u) => /practice\/\d|qualifying|race-result|sprint/i.test(u)
+      (u) => /practice[-/]\d|qualifying|race-result|sprint/i.test(u)
     );
 
     if (uniqueUrls.length === 0) {
