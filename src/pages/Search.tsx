@@ -9,22 +9,6 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
 
-const categoryOptions = [
-  { value: "all", label: "All Categories" },
-  { value: "karting", label: "Karting" },
-  { value: "single_seater", label: "Single Seater" },
-  { value: "gt", label: "GT" },
-  { value: "touring_car", label: "Touring Car" },
-  { value: "sports_car", label: "Sports Car" },
-  { value: "rally", label: "Rally" },
-  { value: "endurance", label: "Endurance" },
-  { value: "formula", label: "Formula" },
-  { value: "stock_car", label: "Stock Car" },
-  { value: "other", label: "Other" },
-];
-
-const categoryLabels: Record<string, string> = Object.fromEntries(categoryOptions.filter(c => c.value !== "all").map(c => [c.value, c.label]));
-
 type ResultItem = {
   type: "driver" | "team" | "event" | "series" | "circuit" | "car";
   id: string;
@@ -32,7 +16,6 @@ type ResultItem = {
   url: string;
   subtitle?: string;
   nationality?: string | null;
-  category?: string | null;
 };
 
 const typeFilter = [
@@ -50,21 +33,20 @@ const SearchPage = () => {
   const initialTab = searchParams.get("tab");
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [typeFilterVal, setTypeFilterVal] = useState(initialTab === "drivers" ? "driver" : "all");
-  const [category, setCategory] = useState("all");
   const [results, setResults] = useState<ResultItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [allDrivers, setAllDrivers] = useState<ResultItem[]>([]);
   const [driversLoading, setDriversLoading] = useState(false);
 
-  // If arriving at /search?tab=drivers with no query, load all drivers
+  // Load all drivers when tab=drivers with no query
   useEffect(() => {
     if (initialTab === "drivers" && !search.trim()) {
       setDriversLoading(true);
-      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category")
-        .order("last_name").limit(500).then(({ data }) => {
+      supabase.from("v2_drivers").select("id, full_name, nationality")
+        .order("full_name").limit(500).then(({ data }) => {
           setAllDrivers((data || []).map((d: any) => ({
-            type: "driver" as const, id: d.id, label: `${d.first_name} ${d.last_name}`,
-            url: `/driver/${d.id}`, nationality: d.nationality, category: d.primary_category,
+            type: "driver" as const, id: d.id, label: d.full_name,
+            url: `/driver/${d.id}`, nationality: d.nationality,
           })));
           setDriversLoading(false);
         });
@@ -84,39 +66,24 @@ const SearchPage = () => {
       const items: ResultItem[] = [];
       const shouldSearch = (type: string) => typeFilterVal === "all" || typeFilterVal === type;
 
-      // 1. Resolve aliases first
+      // Resolve aliases
       const { data: aliases } = await supabase
-        .from("search_aliases")
-        .select("alias, canonical, entity_type")
+        .from("search_aliases").select("alias, canonical, entity_type")
         .ilike("alias", `%${search}%`);
-
-      // Build expanded search terms - original + all canonical expansions
       const searchTerms = [search];
-      const aliasCanonicals = new Set<string>();
-      if (aliases && aliases.length > 0) {
-        for (const a of aliases) {
-          searchTerms.push(a.canonical);
-          aliasCanonicals.add(a.canonical.toLowerCase());
-        }
-      }
+      if (aliases) for (const a of aliases) searchTerms.push(a.canonical);
 
       const promises: Promise<void>[] = [];
 
       if (shouldSearch("driver")) {
         promises.push((async () => {
+          const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            let q = supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category")
-              .or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(20);
-            if (category !== "all") q = q.eq("primary_category", category as any);
-            const { data } = await q;
-            const existing = new Set(items.filter(i => i.type === "driver").map(i => i.id));
+            const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality")
+              .ilike("full_name", `%${term}%`).limit(20);
             (data || []).forEach((d: any) => {
               if (!existing.has(d.id)) {
-                items.push({
-                  type: "driver", id: d.id, label: `${d.first_name} ${d.last_name}`,
-                  url: `/driver/${d.id}`, nationality: d.nationality, category: d.primary_category,
-                });
+                items.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}`, nationality: d.nationality });
                 existing.add(d.id);
               }
             });
@@ -128,14 +95,11 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            let q = supabase.from("team_profiles").select("id, name, nationality, primary_category")
-              .ilike("name", lower).limit(20);
-            if (category !== "all") q = q.eq("primary_category", category as any);
-            const { data } = await q;
+            const { data } = await supabase.from("v2_teams").select("id, full_name, nationality")
+              .ilike("full_name", `%${term}%`).limit(20);
             (data || []).forEach((t: any) => {
               if (!existing.has(t.id)) {
-                items.push({ type: "team", id: t.id, label: t.name, url: `/team/${t.id}`, nationality: t.nationality, category: t.primary_category });
+                items.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}`, nationality: t.nationality });
                 existing.add(t.id);
               }
             });
@@ -147,18 +111,16 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            let q = supabase.from("race_events").select("id, event_name, series_name, season_year, category, location, event_date")
-              .or(`event_name.ilike.${lower},series_name.ilike.${lower},location.ilike.${lower}`).limit(30);
-            if (category !== "all") q = q.eq("category", category as any);
-            const { data } = await q;
+            const { data } = await supabase.from("v2_events")
+              .select("id, name, start_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+              .ilike("name", `%${term}%`)
+              .eq("status", "published" as any).limit(30);
             (data || []).forEach((e: any) => {
               if (!existing.has(e.id)) {
-                const dateStr = e.event_date ? new Date(e.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+                const dateStr = e.start_date ? new Date(e.start_date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
                 items.push({
-                  type: "event", id: e.id, label: e.event_name,
-                  url: `/event/${e.id}`, subtitle: `${e.series_name} · ${dateStr || e.season_year}`,
-                  category: e.category,
+                  type: "event", id: e.id, label: e.name,
+                  url: `/events/${e.id}`, subtitle: `${e.v2_seasons?.v2_series?.name || ""} · ${dateStr || e.v2_seasons?.year || ""}`,
                 });
                 existing.add(e.id);
               }
@@ -171,13 +133,11 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            let q = supabase.from("series").select("id, name, category, description").ilike("name", lower).limit(20);
-            if (category !== "all") q = q.eq("category", category as any);
-            const { data } = await q;
+            const { data } = await supabase.from("v2_series").select("id, name, short_name")
+              .ilike("name", `%${term}%`).limit(20);
             (data || []).forEach((s: any) => {
               if (!existing.has(s.id)) {
-                items.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}`, category: s.category, subtitle: s.description?.substring(0, 80) });
+                items.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}`, subtitle: s.short_name });
                 existing.add(s.id);
               }
             });
@@ -189,9 +149,8 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            const { data } = await supabase.from("circuits").select("id, name, country, location")
-              .or(`name.ilike.${lower},country.ilike.${lower},location.ilike.${lower}`).limit(20);
+            const { data } = await supabase.from("v2_circuits").select("id, name, country, location")
+              .or(`name.ilike.%${term}%,country.ilike.%${term}%,location.ilike.%${term}%`).limit(20);
             (data || []).forEach((c: any) => {
               if (!existing.has(c.id)) {
                 items.push({ type: "circuit", id: c.id, label: c.name, url: `/circuit/${c.id}`, subtitle: [c.location, c.country].filter(Boolean).join(", ") });
@@ -206,12 +165,11 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const lower = `%${term}%`;
-            const { data } = await supabase.from("car_models").select("id, name, manufacturer, category")
-              .or(`name.ilike.${lower},manufacturer.ilike.${lower}`).limit(20);
+            const { data } = await supabase.from("v2_cars").select("id, model_name, manufacturer")
+              .or(`model_name.ilike.%${term}%,manufacturer.ilike.%${term}%`).limit(20);
             (data || []).forEach((c: any) => {
               if (!existing.has(c.id)) {
-                items.push({ type: "car", id: c.id, label: c.name, url: `/car/${c.id}`, subtitle: c.manufacturer, category: c.category });
+                items.push({ type: "car", id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" "), url: `/car/${c.id}`, subtitle: c.manufacturer });
                 existing.add(c.id);
               }
             });
@@ -225,7 +183,7 @@ const SearchPage = () => {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [search, typeFilterVal, category]);
+  }, [search, typeFilterVal]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -245,7 +203,7 @@ const SearchPage = () => {
           <div className="relative flex-1">
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search everything… (try F1, WEC, Le Mans)"
+              placeholder="Search everything…"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setSearchParams(e.target.value ? { q: e.target.value } : {}); }}
               className="pl-10"
@@ -257,18 +215,12 @@ const SearchPage = () => {
               {typeFilter.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
         </div>
 
         {!search.trim() && typeFilterVal === "driver" && allDrivers.length > 0 ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground mb-4">{allDrivers.length} drivers</p>
-            {allDrivers.filter(d => category === "all" || d.category === category).map(r => (
+            {allDrivers.map(r => (
               <Link key={`${r.type}-${r.id}`} to={r.url} className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
                 <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
                 <div className="min-w-0 flex-1">
@@ -277,7 +229,6 @@ const SearchPage = () => {
                     <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
                   </div>
                 </div>
-                {r.category && <span className="text-xs text-muted-foreground shrink-0">{categoryLabels[r.category] || r.category}</span>}
               </Link>
             ))}
           </div>
@@ -303,7 +254,6 @@ const SearchPage = () => {
                   </div>
                   {r.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{r.subtitle}</p>}
                 </div>
-                {r.category && <span className="text-xs text-muted-foreground shrink-0">{categoryLabels[r.category] || r.category}</span>}
               </Link>
             ))}
           </div>
