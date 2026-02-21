@@ -82,8 +82,8 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality")
-              .ilike("full_name", `%${term}%`).limit(20);
+            const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality, short_name")
+              .or(`full_name.ilike.%${term}%,nationality.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
             (data || []).forEach((d: any) => {
               if (!existing.has(d.id)) {
                 items.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}`, nationality: d.nationality });
@@ -98,8 +98,8 @@ const SearchPage = () => {
         promises.push((async () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
-            const { data } = await supabase.from("v2_teams").select("id, full_name, nationality")
-              .ilike("full_name", `%${term}%`).limit(20);
+            const { data } = await supabase.from("v2_teams").select("id, full_name, nationality, short_name")
+              .or(`full_name.ilike.%${term}%,nationality.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
             (data || []).forEach((t: any) => {
               if (!existing.has(t.id)) {
                 items.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}`, nationality: t.nationality });
@@ -116,18 +116,23 @@ const SearchPage = () => {
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_events")
               .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
-              .ilike("name", `%${term}%`)
+              .or(`name.ilike.%${term}%`)
               .eq("status", "published" as any).limit(30);
-            (data || []).forEach((e: any) => {
+            // Also search by circuit name/country
+            const { data: data2 } = await supabase.from("v2_events")
+              .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits!inner(name, country)")
+              .or(`name.ilike.%${term}%,country.ilike.%${term}%`, { referencedTable: "v2_circuits" })
+              .eq("status", "published" as any).limit(20);
+            for (const e of [...(data || []), ...(data2 || [])]) {
               if (!existing.has(e.id)) {
                 const dateStr = e.start_date ? formatDateRange(e.start_date, e.end_date) : "";
                 items.push({
                   type: "event", id: e.id, label: e.name,
-                  url: `/events/${e.id}`, subtitle: `${e.v2_seasons?.v2_series?.name || ""} · ${dateStr || e.v2_seasons?.year || ""}`,
+                  url: `/events/${e.id}`, subtitle: `${(e as any).v2_seasons?.v2_series?.name || ""} · ${dateStr || (e as any).v2_seasons?.year || ""}`,
                 });
                 existing.add(e.id);
               }
-            });
+            }
           }
         })());
       }
@@ -137,7 +142,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_series").select("id, name, short_name")
-              .ilike("name", `%${term}%`).limit(20);
+              .or(`name.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
             (data || []).forEach((s: any) => {
               if (!existing.has(s.id)) {
                 items.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}`, subtitle: s.short_name });
