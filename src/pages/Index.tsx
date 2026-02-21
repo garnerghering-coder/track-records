@@ -7,6 +7,7 @@ import { Search, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import WelcomeLightbox from "@/components/WelcomeLightbox";
 import heroImage from "@/assets/hero-racing.jpg";
 
 const Index = () => {
@@ -56,6 +57,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <WelcomeLightbox />
       <Header />
 
       {/* Hero */}
