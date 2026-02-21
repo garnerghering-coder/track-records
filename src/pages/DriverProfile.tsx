@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -17,7 +19,37 @@ const DriverProfilePage = () => {
   const [allSessionResults, setAllSessionResults] = useState<any[]>([]);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [teamAliasMap, setTeamAliasMap] = useState<Record<string, string>>({});
+  const [selectedSeason, setSelectedSeason] = useState("all");
   const [loading, setLoading] = useState(true);
+
+  // Derive season years and compute averages
+  const qualifyingResults = useMemo(() => allSessionResults.filter(r => r._source === "qualifying"), [allSessionResults]);
+
+  const seasonYears = useMemo(() => {
+    const years = new Set<number>();
+    for (const r of [...raceHistory, ...qualifyingResults]) {
+      const y = r.event?.v2_seasons?.year;
+      if (y) years.add(y);
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [raceHistory, qualifyingResults]);
+
+  const stats = useMemo(() => {
+    const filterBySeason = (rows: any[]) =>
+      selectedSeason === "all" ? rows : rows.filter(r => String(r.event?.v2_seasons?.year) === selectedSeason);
+
+    const raceRows = filterBySeason(raceHistory).filter(r => r.position != null && (!r.status || r.status === "finished" || r.status === "classified"));
+    const qualRows = filterBySeason(qualifyingResults).filter(r => r.position != null);
+
+    const avg = (arr: any[]) => arr.length === 0 ? null : arr.reduce((s, r) => s + r.position, 0) / arr.length;
+
+    return {
+      avgRace: avg(raceRows),
+      raceCount: raceRows.length,
+      avgQual: avg(qualRows),
+      qualCount: qualRows.length,
+    };
+  }, [raceHistory, qualifyingResults, selectedSeason]);
 
   useEffect(() => {
     if (!id) return;
@@ -129,6 +161,48 @@ const DriverProfilePage = () => {
       </section>
 
       <div className="container py-10">
+        {/* Statistics Section */}
+        {(stats.avgQual !== null || stats.avgRace !== null) && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-xl font-semibold text-foreground">Statistics</h2>
+              {seasonYears.length > 1 && (
+                <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+                  <SelectTrigger className="w-[140px] h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Seasons</SelectItem>
+                    {seasonYears.map(y => (
+                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground mb-1">Avg. Qualifying Position</p>
+                  <p className="text-3xl font-display font-bold text-foreground">
+                    {stats.avgQual !== null ? stats.avgQual.toFixed(1) : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">across {stats.qualCount} result{stats.qualCount !== 1 ? "s" : ""}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground mb-1">Avg. Race Finish</p>
+                  <p className="text-3xl font-display font-bold text-foreground">
+                    {stats.avgRace !== null ? stats.avgRace.toFixed(1) : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">across {stats.raceCount} result{stats.raceCount !== 1 ? "s" : ""}</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display text-xl font-semibold text-foreground">
             {showAllSessions ? "All Session Results" : "Race Results"}
