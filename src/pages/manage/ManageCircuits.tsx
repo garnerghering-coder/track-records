@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from "lucide-react";
-import { computeTrackMetrics, trackTypeLabel, trackTypeColor } from "@/lib/track-calculations";
+import { computeTrackMetrics, categoryColor } from "@/lib/track-calculations";
 
 export default function ManageCircuits() {
   const qc = useQueryClient();
@@ -17,10 +17,9 @@ export default function ManageCircuits() {
   const [form, setForm] = useState({ name: "", location: "", country: "", layout_image_url: "", length_km: "", latitude: "", longitude: "" });
   const [search, setSearch] = useState("");
 
-  // Layout state
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [editingLayout, setEditingLayout] = useState<any>(null);
-  const [layoutForm, setLayoutForm] = useState({ name: "", length_km: "", layout_image_url: "", turns: "", significant_straights: "" });
+  const [layoutForm, setLayoutForm] = useState({ name: "", length_km: "", layout_image_url: "", turns: "", total_straight_length_km: "" });
   const [expandedCircuit, setExpandedCircuit] = useState<string | null>(null);
 
   const { data: circuits = [], isLoading } = useQuery({
@@ -88,7 +87,7 @@ export default function ManageCircuits() {
         length_km: layoutForm.length_km ? parseFloat(layoutForm.length_km) : null,
         layout_image_url: layoutForm.layout_image_url || null,
         turns: layoutForm.turns ? parseInt(layoutForm.turns) : null,
-        significant_straights: layoutForm.significant_straights ? parseInt(layoutForm.significant_straights) : null,
+        total_straight_length_km: layoutForm.total_straight_length_km ? parseFloat(layoutForm.total_straight_length_km) : null,
       };
       if (editingLayout) {
         const { error } = await supabase.from("v2_circuit_layouts").update(payload as any).eq("id", editingLayout.id);
@@ -112,21 +111,13 @@ export default function ManageCircuits() {
   const openNew = () => { setEditing(null); setForm({ name: "", location: "", country: "", layout_image_url: "", length_km: "", latitude: "", longitude: "" }); setOpen(true); };
   const openEdit = (c: any) => {
     setEditing(c);
-    setForm({
-      name: c.name,
-      location: c.location || "",
-      country: c.country || "",
-      layout_image_url: c.layout_image_url || "",
-      length_km: c.length_km != null ? String(c.length_km) : "",
-      latitude: c.latitude != null ? String(c.latitude) : "",
-      longitude: c.longitude != null ? String(c.longitude) : "",
-    });
+    setForm({ name: c.name, location: c.location || "", country: c.country || "", layout_image_url: c.layout_image_url || "", length_km: c.length_km != null ? String(c.length_km) : "", latitude: c.latitude != null ? String(c.latitude) : "", longitude: c.longitude != null ? String(c.longitude) : "" });
     setOpen(true);
   };
 
   const openNewLayout = (circuitId: string) => {
     setEditingLayout(null);
-    setLayoutForm({ name: "", length_km: "", layout_image_url: "", turns: "", significant_straights: "" });
+    setLayoutForm({ name: "", length_km: "", layout_image_url: "", turns: "", total_straight_length_km: "" });
     setExpandedCircuit(circuitId);
     setLayoutOpen(true);
   };
@@ -138,7 +129,7 @@ export default function ManageCircuits() {
       length_km: layout.length_km != null ? String(layout.length_km) : "",
       layout_image_url: layout.layout_image_url || "",
       turns: layout.turns != null ? String(layout.turns) : "",
-      significant_straights: layout.significant_straights != null ? String(layout.significant_straights) : "",
+      total_straight_length_km: layout.total_straight_length_km != null ? String(layout.total_straight_length_km) : "",
     });
     setLayoutOpen(true);
   };
@@ -195,27 +186,31 @@ export default function ManageCircuits() {
                           ) : (
                             <div className="space-y-1">
                               {circuitLayouts.map((l: any) => {
-                                const metrics = computeTrackMetrics(l.length_km ? Number(l.length_km) : null, l.turns, l.significant_straights);
+                                const metrics = computeTrackMetrics(
+                                  l.length_km ? Number(l.length_km) : null,
+                                  l.turns,
+                                  l.total_straight_length_km ? Number(l.total_straight_length_km) : null
+                                );
                                 return (
-                                <div key={l.id} className="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-sm">
-                                  <div className="flex items-center gap-3 flex-wrap">
-                                    <span className="font-medium">{l.name}</span>
-                                    {l.length_km && <span className="text-xs text-muted-foreground">{l.length_km} km</span>}
-                                    {l.turns != null && <span className="text-xs text-muted-foreground">{l.turns} turns</span>}
-                                    {metrics.trackType && (
-                                      <span className={`text-xs font-medium ${trackTypeColor(metrics.trackType)}`}>
-                                        {trackTypeLabel(metrics.trackType)}
-                                      </span>
-                                    )}
-                                    {metrics.technicalityScore != null && (
-                                      <span className="text-xs text-muted-foreground">Tech: {metrics.technicalityScore}/10</span>
-                                    )}
+                                  <div key={l.id} className="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-sm">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                      <span className="font-medium">{l.name}</span>
+                                      {l.length_km && <span className="text-xs text-muted-foreground">{l.length_km} km</span>}
+                                      {l.turns != null && <span className="text-xs text-muted-foreground">{l.turns} turns</span>}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      {metrics.tcs100 != null && metrics.category && (
+                                        <div className="flex items-center gap-2 text-xs">
+                                          <span className="text-muted-foreground">TCS: {metrics.tcs100}</span>
+                                          <span className={`font-semibold ${categoryColor(metrics.category)}`}>{metrics.category}</span>
+                                        </div>
+                                      )}
+                                      <div className="flex gap-1">
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditLayout(l)}><Pencil className="h-3 w-3" /></Button>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => delLayout.mutate(l.id)}><Trash2 className="h-3 w-3" /></Button>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="flex gap-1">
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditLayout(l)}><Pencil className="h-3 w-3" /></Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => delLayout.mutate(l.id)}><Trash2 className="h-3 w-3" /></Button>
-                                  </div>
-                                </div>
                                 );
                               })}
                             </div>
@@ -258,10 +253,8 @@ export default function ManageCircuits() {
           <div className="space-y-3">
             <div><Label>Layout Name *</Label><Input value={layoutForm.name} onChange={e => setLayoutForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. GP Circuit, National, Sprint" /></div>
             <div><Label>Length (km)</Label><Input type="number" step="0.001" value={layoutForm.length_km} onChange={e => setLayoutForm(f => ({ ...f, length_km: e.target.value }))} placeholder="e.g. 3.621" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Turns</Label><Input type="number" value={layoutForm.turns} onChange={e => setLayoutForm(f => ({ ...f, turns: e.target.value }))} placeholder="e.g. 14" /></div>
-              <div><Label>Significant Straights (≥500m)</Label><Input type="number" value={layoutForm.significant_straights} onChange={e => setLayoutForm(f => ({ ...f, significant_straights: e.target.value }))} placeholder="e.g. 2" /></div>
-            </div>
+            <div><Label>Turns</Label><Input type="number" value={layoutForm.turns} onChange={e => setLayoutForm(f => ({ ...f, turns: e.target.value }))} placeholder="e.g. 14" /></div>
+            <div><Label>Total Straight Length in km (&gt;200m)</Label><Input type="number" step="0.001" value={layoutForm.total_straight_length_km} onChange={e => setLayoutForm(f => ({ ...f, total_straight_length_km: e.target.value }))} placeholder="e.g. 1.85" /></div>
             <div><Label>Layout Image URL</Label><Input value={layoutForm.layout_image_url} onChange={e => setLayoutForm(f => ({ ...f, layout_image_url: e.target.value }))} /></div>
           </div>
           <DialogFooter>
