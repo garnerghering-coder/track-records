@@ -7,6 +7,7 @@ import { ArrowLeft, Car } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
+import ReportDialog from "@/components/ReportDialog";
 import { formatDateRange } from "@/lib/date-utils";
 
 const TeamProfilePage = () => {
@@ -132,7 +133,7 @@ const TeamProfilePage = () => {
         <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
           <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
           <p className="text-xs text-muted-foreground mb-3">Help us improve this team profile.</p>
-          <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
+          <ReportDialog reportType="team" targetId={id!} targetName={team.full_name} />
         </div>
       </div>
       <Footer />

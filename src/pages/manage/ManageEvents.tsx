@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Search } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
 
@@ -21,6 +21,7 @@ export default function ManageEvents() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [series, setSeries] = useState<Ref>(null);
   const [season, setSeason] = useState<Ref>(null);
   const [circuit, setCircuit] = useState<Ref>(null);
@@ -73,17 +74,27 @@ export default function ManageEvents() {
     setOpen(true);
   };
 
+  const filtered = events.filter((e: any) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return e.name?.toLowerCase().includes(s) || e.v2_circuits?.name?.toLowerCase().includes(s) || e.v2_seasons?.v2_series?.name?.toLowerCase().includes(s);
+  });
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Events</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Event</Button>
       </div>
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder="Search events…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
           <TableHeader><TableRow><TableHead>Rd</TableHead><TableHead>Event</TableHead><TableHead>Circuit</TableHead><TableHead>Series</TableHead><TableHead>Dates</TableHead><TableHead>Status</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
           <TableBody>
-            {events.map((e: any) => (
+            {filtered.map((e: any) => (
               <TableRow key={e.id} className="cursor-pointer hover:bg-accent/50" onClick={() => navigate(`/manage/events/${e.id}`)}>
                 <TableCell>{e.round_number}</TableCell>
                 <TableCell className="font-medium">{e.name}</TableCell>

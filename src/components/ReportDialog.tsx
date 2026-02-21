@@ -7,7 +7,7 @@ import { Flag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ReportDialogProps {
-  reportType: "driver" | "event";
+  reportType: string;
   targetId: string;
   targetName: string;
 }
