@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_search_aliases_alias_entity_type ON public.search_aliases (alias, entity_type);
