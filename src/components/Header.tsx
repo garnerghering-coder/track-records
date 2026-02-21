@@ -145,11 +145,6 @@ const Header = () => {
               {link.label}
             </Link>
           )}
-          {session && (
-            <Link to="/contribute" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              Contribute
-            </Link>
-          )}
           {isAdmin &&
           <>
             <Link to="/manage" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
