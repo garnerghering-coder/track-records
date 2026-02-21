@@ -19,6 +19,7 @@ export default function ManageTeams() {
   const [aliasOpen, setAliasOpen] = useState(false);
   const [aliasTeam, setAliasTeam] = useState<any>(null);
   const [aliasForm, setAliasForm] = useState({ season_id: "", display_name: "" });
+  const [carForm, setCarForm] = useState({ season_id: "", car_id: "" });
 
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ["v2_teams"],
@@ -34,11 +35,30 @@ export default function ManageTeams() {
     },
   });
 
+  const { data: cars = [] } = useQuery({
+    queryKey: ["v2_cars_for_season_cars"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("v2_cars").select("id, model_name, manufacturer").order("model_name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: teamAliases = [] } = useQuery({
     queryKey: ["v2_team_season_names", aliasTeam?.id],
     queryFn: async () => {
       if (!aliasTeam) return [];
       const { data } = await supabase.from("v2_team_season_names" as any).select("*, v2_seasons(year, v2_series(name))").eq("team_id", aliasTeam.id).order("created_at", { ascending: false });
+      return (data || []) as any[];
+    },
+    enabled: !!aliasTeam,
+  });
+
+  const { data: teamSeasonCars = [] } = useQuery({
+    queryKey: ["v2_team_season_cars", aliasTeam?.id],
+    queryFn: async () => {
+      if (!aliasTeam) return [];
+      const { data } = await supabase.from("v2_team_season_cars" as any).select("*, v2_seasons(year, v2_series(name)), v2_cars(model_name, manufacturer)").eq("team_id", aliasTeam.id).order("created_at", { ascending: false });
       return (data || []) as any[];
     },
     enabled: !!aliasTeam,
@@ -99,9 +119,38 @@ export default function ManageTeams() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const saveSeasonCar = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("v2_team_season_cars" as any).upsert({
+        team_id: aliasTeam.id,
+        season_id: carForm.season_id,
+        car_id: carForm.car_id,
+      } as any, { onConflict: "team_id,season_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["v2_team_season_cars", aliasTeam?.id] });
+      setCarForm({ season_id: "", car_id: "" });
+      toast.success("Season car saved");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteSeasonCar = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("v2_team_season_cars" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["v2_team_season_cars", aliasTeam?.id] });
+      toast.success("Season car removed");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const openNew = () => { setEditing(null); setForm({ full_name: "", short_name: "", nationality: "" }); setOpen(true); };
   const openEdit = (t: any) => { setEditing(t); setForm({ full_name: t.full_name, short_name: t.short_name || "", nationality: t.nationality || "" }); setOpen(true); };
-  const openAliases = (t: any) => { setAliasTeam(t); setAliasForm({ season_id: "", display_name: "" }); setAliasOpen(true); };
+  const openAliases = (t: any) => { setAliasTeam(t); setAliasForm({ season_id: "", display_name: "" }); setCarForm({ season_id: "", car_id: "" }); setAliasOpen(true); };
 
   return (
     <div className="p-6 space-y-4">
@@ -123,7 +172,7 @@ export default function ManageTeams() {
                 <TableCell>{t.short_name}</TableCell>
                 <TableCell>{t.nationality}</TableCell>
                 <TableCell className="flex gap-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAliases(t)} title="Season aliases"><Tags className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAliases(t)} title="Season aliases & cars"><Tags className="h-3 w-3" /></Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(t)}><Pencil className="h-3 w-3" /></Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => del.mutate(t.id)}><Trash2 className="h-3 w-3" /></Button>
                 </TableCell>
@@ -147,28 +196,31 @@ export default function ManageTeams() {
         </DialogContent>
       </Dialog>
 
-      {/* Season Aliases Dialog */}
+      {/* Season Aliases & Cars Dialog */}
       <Dialog open={aliasOpen} onOpenChange={setAliasOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Season Names — {aliasTeam?.full_name}</DialogTitle>
-            <p className="text-xs text-muted-foreground">Set different display names for this team in specific seasons.</p>
+            <DialogTitle>Season Config — {aliasTeam?.full_name}</DialogTitle>
+            <p className="text-xs text-muted-foreground">Manage display names and car assignments per season.</p>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             {/* Existing aliases */}
-            {teamAliases.length > 0 && (
-              <div className="space-y-2">
-                {teamAliases.map((alias: any) => (
-                  <div key={alias.id} className="flex items-center justify-between gap-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">{alias.v2_seasons?.v2_series?.name} {alias.v2_seasons?.year}</Badge>
-                      <span>{alias.display_name}</span>
+            <div>
+              <Label className="text-xs font-semibold">Season Names</Label>
+              {teamAliases.length > 0 ? (
+                <div className="space-y-2 mt-1">
+                  {teamAliases.map((alias: any) => (
+                    <div key={alias.id} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">{alias.v2_seasons?.v2_series?.name} {alias.v2_seasons?.year}</Badge>
+                        <span>{alias.display_name}</span>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAlias.mutate(alias.id)}><Trash2 className="h-3 w-3" /></Button>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAlias.mutate(alias.id)}><Trash2 className="h-3 w-3" /></Button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              ) : <p className="text-xs text-muted-foreground mt-1">No aliases set.</p>}
+            </div>
             {/* Add new alias */}
             <div className="border-t border-border pt-3 space-y-2">
               <Label className="text-xs">Add Season Name</Label>
@@ -187,12 +239,63 @@ export default function ManageTeams() {
                   value={aliasForm.display_name}
                   onChange={e => setAliasForm(f => ({ ...f, display_name: e.target.value }))}
                   className="flex-1"
-                  placeholder="Display name for this season"
+                  placeholder="Display name"
                 />
                 <Button
                   size="sm"
                   onClick={() => saveAlias.mutate()}
                   disabled={!aliasForm.season_id || !aliasForm.display_name.trim()}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            {/* Season Cars */}
+            <div className="border-t border-border pt-3">
+              <Label className="text-xs font-semibold">Season Cars</Label>
+              {teamSeasonCars.length > 0 ? (
+                <div className="space-y-2 mt-1">
+                  {teamSeasonCars.map((sc: any) => (
+                    <div key={sc.id} className="flex items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">{sc.v2_seasons?.v2_series?.name} {sc.v2_seasons?.year}</Badge>
+                        <span>{sc.v2_cars?.manufacturer ? `${sc.v2_cars.manufacturer} ` : ""}{sc.v2_cars?.model_name}</span>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteSeasonCar.mutate(sc.id)}><Trash2 className="h-3 w-3" /></Button>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-xs text-muted-foreground mt-1">No season cars set. Imports won't auto-assign cars.</p>}
+            </div>
+            {/* Add season car */}
+            <div className="space-y-2">
+              <Label className="text-xs">Add Season Car</Label>
+              <div className="flex gap-2">
+                <select
+                  value={carForm.season_id}
+                  onChange={e => setCarForm(f => ({ ...f, season_id: e.target.value }))}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm flex-1"
+                >
+                  <option value="">Select season…</option>
+                  {seasons.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.v2_series?.name} {s.year}</option>
+                  ))}
+                </select>
+                <select
+                  value={carForm.car_id}
+                  onChange={e => setCarForm(f => ({ ...f, car_id: e.target.value }))}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm flex-1"
+                >
+                  <option value="">Select car…</option>
+                  {cars.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.manufacturer ? `${c.manufacturer} ` : ""}{c.model_name}</option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  onClick={() => saveSeasonCar.mutate()}
+                  disabled={!carForm.season_id || !carForm.car_id}
                 >
                   Add
                 </Button>

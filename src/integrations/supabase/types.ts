@@ -1793,6 +1793,52 @@ export type Database = {
           },
         ]
       }
+      v2_team_season_cars: {
+        Row: {
+          car_id: string
+          created_at: string
+          id: string
+          season_id: string
+          team_id: string
+        }
+        Insert: {
+          car_id: string
+          created_at?: string
+          id?: string
+          season_id: string
+          team_id: string
+        }
+        Update: {
+          car_id?: string
+          created_at?: string
+          id?: string
+          season_id?: string
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_team_season_cars_car_id_fkey"
+            columns: ["car_id"]
+            isOneToOne: false
+            referencedRelation: "v2_cars"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_team_season_cars_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "v2_seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_team_season_cars_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "v2_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_team_season_names: {
         Row: {
           created_at: string
