@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.fetch-session-weather]
 verify_jwt = false
+
+[functions.import-f1-sessions]
+verify_jwt = false
