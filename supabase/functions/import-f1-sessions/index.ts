@@ -112,39 +112,13 @@ function detectSessionType(url: string, title: string): { type: string; name: st
   return { type: "other", name: "Unknown Session" };
 }
 
-/** Extract timezone offset (in minutes) between "MY TIME" and "TRACK TIME" from hub markdown.
- *  The hub contains a line like: "MY TIME11:17TRACK TIME19:17"
- *  Returns offset in minutes (e.g., +480 for +8h). Returns 0 if not found.
- */
-function extractTrackTimeOffsetMinutes(hubMarkdown: string): number {
-  const m = hubMarkdown.match(/MY\s*TIME\s*(\d{1,2}):(\d{2})\s*TRACK\s*TIME\s*(\d{1,2}):(\d{2})/i);
-  if (!m) return 0;
-  const myMinutes = parseInt(m[1]) * 60 + parseInt(m[2]);
-  const trackMinutes = parseInt(m[3]) * 60 + parseInt(m[4]);
-  let offset = trackMinutes - myMinutes;
-  // Handle day wraparound: if offset is very negative, add 24h
-  if (offset < -720) offset += 1440;
-  if (offset > 720) offset -= 1440;
-  return offset;
-}
-
-/** Apply a minute offset to an "HH:MM" time string, handling day wraparound. */
-function applyTimeOffset(time: string, offsetMinutes: number): string {
-  const [h, m] = time.split(":").map(Number);
-  let total = h * 60 + m + offsetMinutes;
-  // Wrap into 0-1439 range
-  total = ((total % 1440) + 1440) % 1440;
-  const newH = Math.floor(total / 60);
-  const newM = total % 60;
-  return `${newH.toString().padStart(2, "0")}:${newM.toString().padStart(2, "0")}`;
-}
-
 /** Parse session schedule from the F1 hub page markdown.
+ *  The hub page is scraped AFTER clicking "Track time" toggle,
+ *  so all times are already in track-local time. No offset needed.
  *  Lines look like: "- 11AprChequered FlagPractice 107:30\- 08:30"
  *  or "- 13AprChequered FlagRace11:00"
- *  offsetMinutes: timezone offset to convert from scraper time to track time.
  */
-function parseScheduleFromHub(hubMarkdown: string, year: number, offsetMinutes: number = 0): Map<string, { date: string; start_time: string; end_time: string | null }> {
+function parseScheduleFromHub(hubMarkdown: string, year: number): Map<string, { date: string; start_time: string; end_time: string | null }> {
   const schedule = new Map<string, { date: string; start_time: string; end_time: string | null }>();
   const months: Record<string, string> = {
     Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
@@ -168,8 +142,8 @@ function parseScheduleFromHub(hubMarkdown: string, year: number, offsetMinutes: 
     else if (/^Sprint Race|^Sprint$/i.test(sessionName)) sessionName = "Sprint Race";
 
     const date = `${year}-${month}-${day}`;
-    const startTime = applyTimeOffset(m[4], offsetMinutes);
-    const endTime = m[5] ? applyTimeOffset(m[5], offsetMinutes) : null;
+    const startTime = m[4];
+    const endTime = m[5] || null;
 
     schedule.set(sessionName, { date, start_time: startTime, end_time: endTime });
   }
@@ -399,11 +373,22 @@ serve(async (req) => {
     }
 
     // ── Step 1: Scrape hub page to find result URLs ──
+    // Use Firecrawl actions to click "Track time" toggle first,
+    // so schedule times are in track-local time instead of scraper's timezone.
     console.log("Scraping hub page:", url);
     const hubResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: false }),
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: false,
+        actions: [
+          { type: "wait", milliseconds: 2000 },
+          { type: "click", selector: "menu li:nth-child(2) button" },
+          { type: "wait", milliseconds: 1000 },
+        ],
+      }),
     });
 
     if (!hubResponse.ok) {
@@ -461,11 +446,9 @@ serve(async (req) => {
 
     console.log("Found result URLs:", uniqueUrls);
 
-    // Extract timezone offset and parse session schedule (dates, times) from the hub page
+    // Parse session schedule (dates, times) from the hub page — already in track time
     const seasonYear = (event as any).v2_seasons?.year || new Date().getFullYear();
-    const trackTimeOffset = extractTrackTimeOffsetMinutes(hubMarkdown);
-    console.log("Track time offset (minutes):", trackTimeOffset);
-    const sessionSchedule = parseScheduleFromHub(hubMarkdown, seasonYear, trackTimeOffset);
+    const sessionSchedule = parseScheduleFromHub(hubMarkdown, seasonYear);
     console.log("Parsed schedule:", JSON.stringify(Object.fromEntries(sessionSchedule)));
 
     // Load existing data for matching (including aliases and season cars)
