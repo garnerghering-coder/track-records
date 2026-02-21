@@ -2,25 +2,30 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { formatDateRange } from "@/lib/date-utils";
+import { computeTrackMetrics, categoryColor } from "@/lib/track-calculations";
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [circuit, setCircuit] = useState<any>(null);
+  const [layouts, setLayouts] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!id) return;
     const fetchData = async () => {
-      const { data: c } = await supabase.from("v2_circuits").select("*").eq("id", id).single();
+      const [{ data: c }, { data: layoutData }] = await Promise.all([
+        supabase.from("v2_circuits").select("*").eq("id", id).single(),
+        supabase.from("v2_circuit_layouts").select("*").eq("circuit_id", id).order("sort_order"),
+      ]);
       setCircuit(c);
+      setLayouts(layoutData ?? []);
 
       if (c) {
-        // Find events at this circuit
         const { data: evData } = await supabase
           .from("v2_events")
           .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
@@ -60,6 +65,51 @@ const CircuitProfile = () => {
           <div className="mb-8 rounded-lg border border-border bg-card p-5">
             <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Layout</h3>
             <img src={circuit.layout_image_url} alt={`${circuit.name} layout`} className="w-full max-h-64 rounded object-contain" />
+          </div>
+        )}
+
+        {/* Track Layouts with Metrics */}
+        {layouts.length > 0 && (
+          <div className="mb-8">
+            <h2 className="font-display text-xl font-semibold text-foreground mb-4">Track Configurations</h2>
+            <div className="space-y-2">
+              {layouts.map((l: any) => {
+                const m = computeTrackMetrics(
+                  l.length_km ? Number(l.length_km) : null,
+                  l.turns,
+                  l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
+                  l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
+                  l.heavy_braking_corners
+                );
+                const tags = [
+                  m.tcsCategory && { label: m.tcsCategory, color: categoryColor(m.tcsCategory) },
+                  m.eiCategory && { label: m.eiCategory, color: categoryColor(m.eiCategory) },
+                  m.csiCategory && { label: m.csiCategory, color: categoryColor(m.csiCategory) },
+                  m.tdiCategory && { label: m.tdiCategory, color: categoryColor(m.tdiCategory) },
+                ].filter(Boolean) as { label: string; color: string }[];
+
+                return (
+                  <div key={l.id} className="rounded-lg border border-border bg-card p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-display text-sm font-semibold text-card-foreground">{l.name}</span>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                          {l.length_km && <span>{l.length_km} km</span>}
+                          {l.turns != null && <span>{l.turns} turns</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {tags.map((t) => (
+                          <span key={t.label} className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
