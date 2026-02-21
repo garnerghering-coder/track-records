@@ -777,6 +777,7 @@ serve(async (req) => {
           // Race: calculate total_time for P2+ and intervals from gaps
           const gapTimesMs: (number | null)[] = [];
           let p1TotalTimeMs: number | null = null;
+          let lastFinisherTotalMs: number | null = null;
 
           for (const e of entries) {
             if (e.resultStatus === "finished" && e.timeRetired) {
@@ -807,8 +808,12 @@ serve(async (req) => {
             let totalTime: string | null = null;
             if (i === 0 && e.resultStatus === "finished" && e.timeRetired && !e.timeRetired.startsWith("+")) {
               totalTime = e.timeRetired.replace(/s$/i, "").trim();
+              const ms = parseRaceTotalTimeMs(totalTime);
+              if (ms !== null) lastFinisherTotalMs = ms;
             } else if (i > 0 && p1TotalTimeMs !== null && myGapMs !== null) {
-              totalTime = fmtRaceTotalTime(p1TotalTimeMs + myGapMs);
+              const absMs = p1TotalTimeMs + myGapMs;
+              totalTime = fmtRaceTotalTime(absMs);
+              if (absMs > (lastFinisherTotalMs || 0)) lastFinisherTotalMs = absMs;
             }
 
             const rawGap = e.timeRetired?.replace(/s$/i, "").trim() || "";
@@ -837,6 +842,22 @@ serve(async (req) => {
               status: e.resultStatus as any,
               extra_data: interval ? { Int: interval } : {},
             });
+          }
+
+          // If race session has a start_time but no end_time, calculate it
+          // from the last finisher's total time, rounded up to next 5-min mark
+          const scheduleInfo = sessionSchedule.get(sessionInfo.name);
+          if (newSession && scheduleInfo?.start_time && !scheduleInfo.end_time && lastFinisherTotalMs !== null) {
+            const [sh, sm] = scheduleInfo.start_time.split(":").map(Number);
+            const startMinutes = sh * 60 + sm;
+            const raceMinutes = lastFinisherTotalMs / 60000;
+            const endMinutesRaw = startMinutes + raceMinutes;
+            const endMinutesRounded = Math.ceil(endMinutesRaw / 5) * 5;
+            const endH = Math.floor(endMinutesRounded / 60);
+            const endM = endMinutesRounded % 60;
+            const computedEndTime = `${endH.toString().padStart(2, "0")}:${endM.toString().padStart(2, "0")}`;
+            await adminClient.from("v2_sessions").update({ end_time: computedEndTime } as any).eq("id", newSession.id);
+            console.log(`Computed race end_time: ${computedEndTime} (start=${scheduleInfo.start_time}, race=${Math.round(raceMinutes)}min)`);
           }
         }
       } catch (pageErr) {
