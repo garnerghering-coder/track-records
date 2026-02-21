@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
+import { formatDateRange } from "@/lib/date-utils";
 
 type ResultItem = {
   type: "driver" | "team" | "event" | "series" | "circuit" | "car";
@@ -112,12 +113,12 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_events")
-              .select("id, name, start_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+              .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
               .ilike("name", `%${term}%`)
               .eq("status", "published" as any).limit(30);
             (data || []).forEach((e: any) => {
               if (!existing.has(e.id)) {
-                const dateStr = e.start_date ? new Date(e.start_date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+                const dateStr = e.start_date ? formatDateRange(e.start_date, e.end_date) : "";
                 items.push({
                   type: "event", id: e.id, label: e.name,
                   url: `/events/${e.id}`, subtitle: `${e.v2_seasons?.v2_series?.name || ""} · ${dateStr || e.v2_seasons?.year || ""}`,

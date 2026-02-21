@@ -8,6 +8,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
+import { formatDateRange } from "@/lib/date-utils";
 
 const DriverProfilePage = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +26,7 @@ const DriverProfilePage = () => {
         // Fetch race results for this driver across all session types
         const { data: raceResults } = await supabase
           .from("v2_race_results" as any)
-          .select("position, status, car_number, total_time, gap_to_leader, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, v2_seasons(year, v2_series(id, name)), v2_circuits(id, name, country)))")
+          .select("position, status, car_number, total_time, gap_to_leader, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(year, v2_series(id, name)), v2_circuits(id, name, country)))")
           .eq("driver_id", id)
           .order("created_at", { ascending: false })
           .limit(200);
@@ -114,7 +115,7 @@ const DriverProfilePage = () => {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {r.event?.start_date ? new Date(r.event.start_date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                        {r.event?.start_date ? formatDateRange(r.event.start_date, r.event.end_date) : "—"}
                       </TableCell>
                       <TableCell>
                         {r.v2_teams ? (
