@@ -23,6 +23,13 @@ interface PodiumEntry {
   position: number;
 }
 
+/** Shorten "Max Verstappen" → "M. Verstappen" */
+function shortenName(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length <= 1) return full;
+  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
+}
+
 const PODIUM_COLORS: Record<number, string> = {
   1: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
   2: "bg-gray-300/15 text-gray-300 border-gray-400/40",
@@ -171,7 +178,7 @@ const SeriesProfile = () => {
                               >
                                 <Trophy className="h-2.5 w-2.5" />
                                 <span className="opacity-60">P{p.position}</span>
-                                <span className="truncate max-w-[80px]">{p.name}</span>
+                                <span className="truncate max-w-[80px]">{shortenName(p.name)}</span>
                               </span>
                             ))}
                           </div>
