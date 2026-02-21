@@ -81,28 +81,29 @@ const CircuitProfile = () => {
                   l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
                   l.heavy_braking_corners
                 );
-                const tags = [
-                  m.tcsCategory && { label: m.tcsCategory, color: categoryColor(m.tcsCategory) },
-                  m.eiCategory && { label: m.eiCategory, color: categoryColor(m.eiCategory) },
-                  m.csiCategory && { label: m.csiCategory, color: categoryColor(m.csiCategory) },
-                  m.tdiCategory && { label: m.tdiCategory, color: categoryColor(m.tdiCategory) },
-                ].filter(Boolean) as { label: string; color: string }[];
+                const metrics = [
+                  m.tcsCategory && { title: "Track Character", label: m.tcsCategory, color: categoryColor(m.tcsCategory) },
+                  m.eiCategory && { title: "Elevation", label: m.eiCategory, color: categoryColor(m.eiCategory) },
+                  m.csiCategory && { title: "Corner Severity", label: m.csiCategory, color: categoryColor(m.csiCategory) },
+                  m.tdiCategory && { title: "Track Demand", label: m.tdiCategory, color: categoryColor(m.tdiCategory) },
+                ].filter(Boolean) as { title: string; label: string; color: string }[];
 
                 return (
                   <div key={l.id} className="rounded-lg border border-border bg-card p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-display text-sm font-semibold text-card-foreground">{l.name}</span>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                          {l.length_km && <span>{l.length_km} km</span>}
-                          {l.turns != null && <span>{l.turns} turns</span>}
-                        </div>
+                    <div>
+                      <span className="font-display text-sm font-semibold text-card-foreground">{l.name}</span>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                        {l.length_km && <span>{l.length_km} km</span>}
+                        {l.turns != null && <span>{l.turns} turns</span>}
                       </div>
                     </div>
-                    {tags.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {tags.map((t) => (
-                          <span key={t.label} className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
+                    {metrics.length > 0 && (
+                      <div className="flex flex-wrap gap-4 mt-3">
+                        {metrics.map((t) => (
+                          <div key={t.title} className="flex flex-col">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{t.title}</span>
+                            <span className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
+                          </div>
                         ))}
                       </div>
                     )}
