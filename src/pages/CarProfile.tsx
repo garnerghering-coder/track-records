@@ -13,6 +13,7 @@ const CarProfilePage = () => {
   const { id } = useParams<{ id: string }>();
   const [car, setCar] = useState<any>(null);
   const [raceHistory, setRaceHistory] = useState<any[]>([]);
+  const [teamAliasMap, setTeamAliasMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ const CarProfilePage = () => {
       if (c) {
         const { data: raceResults } = await supabase
           .from("v2_race_results" as any)
-          .select("position, status, car_number, v2_drivers(id, full_name, nationality), v2_teams(id, full_name), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)))")
+          .select("position, status, car_number, v2_drivers(id, full_name, nationality), v2_teams(id, full_name), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(name)), v2_circuits(name, country)))")
           .eq("car_id", id)
           .order("created_at", { ascending: false })
           .limit(200);
@@ -39,6 +40,24 @@ const CarProfilePage = () => {
           return dateB.localeCompare(dateA);
         });
         setRaceHistory(results);
+
+        // Build team alias map
+        const seasonIds = new Set<string>();
+        for (const r of results) {
+          const sid = r.event?.v2_seasons?.id;
+          if (sid) seasonIds.add(sid);
+        }
+        if (seasonIds.size > 0) {
+          const { data: aliases } = await supabase
+            .from("v2_team_season_names" as any)
+            .select("team_id, season_id, display_name")
+            .in("season_id", Array.from(seasonIds));
+          const map: Record<string, string> = {};
+          for (const a of (aliases || []) as any[]) {
+            map[`${a.team_id}:${a.season_id}`] = a.display_name;
+          }
+          setTeamAliasMap(map);
+        }
       }
       setLoading(false);
     };
@@ -109,7 +128,7 @@ const CarProfilePage = () => {
                         ) : "—"}
                       </TableCell>
                       <TableCell>
-                        {r.v2_teams ? <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">{r.v2_teams.full_name}</Link> : "—"}
+                        {r.v2_teams ? <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">{teamAliasMap[`${r.v2_teams.id}:${r.event?.v2_seasons?.id}`] || r.v2_teams.full_name}</Link> : "—"}
                       </TableCell>
                       <TableCell className="text-center font-accent font-bold text-card-foreground text-base">{r.position ?? "—"}</TableCell>
                       <TableCell>
