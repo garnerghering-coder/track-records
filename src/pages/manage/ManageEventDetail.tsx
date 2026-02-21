@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical } from "lucide-react";
+import AutocompleteField from "@/components/manage/AutocompleteField";
+import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical, Pencil, CloudSun, Loader2 } from "lucide-react";
 
 const SESSION_TYPES = [
   { value: "practice", label: "Practice" },
@@ -27,13 +29,21 @@ export default function ManageEventDetail() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [sessionOpen, setSessionOpen] = useState(false);
-  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "" });
+  const [editingSession, setEditingSession] = useState<any>(null);
+  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+
+  // Event edit state
+  const [editEventOpen, setEditEventOpen] = useState(false);
+  const [eventForm, setEventForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
+  const [editCircuit, setEditCircuit] = useState<{ id: string; label: string } | null>(null);
+
+  const [fetchingWeather, setFetchingWeather] = useState<string | null>(null);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["v2_event", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, v2_series(name)), v2_circuits(name)").eq("id", id!).single();
+      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, v2_series(name)), v2_circuits(id, name)").eq("id", id!).single();
       if (error) throw error;
       return data;
     },
@@ -56,11 +66,29 @@ export default function ManageEventDetail() {
         name: sessionForm.name,
         session_type: sessionForm.session_type as any,
         date: sessionForm.date || null,
+        start_time: sessionForm.start_time || null,
+        end_time: sessionForm.end_time || null,
         sort_order: maxOrder + 1,
-      });
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_sessions", id] }); setSessionOpen(false); toast.success("Session added"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const updateSession = useMutation({
+    mutationFn: async () => {
+      if (!editingSession) return;
+      const { error } = await supabase.from("v2_sessions").update({
+        name: sessionForm.name,
+        session_type: sessionForm.session_type as any,
+        date: sessionForm.date || null,
+        start_time: sessionForm.start_time || null,
+        end_time: sessionForm.end_time || null,
+      } as any).eq("id", editingSession.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_sessions", id] }); setSessionOpen(false); setEditingSession(null); toast.success("Session updated"); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -99,6 +127,15 @@ export default function ManageEventDetail() {
       if (error) throw error;
       const { error: sessErr } = await supabase.from("v2_sessions").update({ status: newStatus as any }).eq("event_id", id!);
       if (sessErr) throw sessErr;
+
+      // If publishing, fetch weather for all sessions
+      if (newStatus === "published") {
+        for (const s of sessions) {
+          try {
+            await supabase.functions.invoke("fetch-session-weather", { body: { session_id: (s as any).id } });
+          } catch { /* weather fetch is best-effort */ }
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["v2_event", id] });
@@ -108,25 +145,79 @@ export default function ManageEventDetail() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const updateEvent = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("v2_events").update({
+        name: eventForm.name,
+        round_number: eventForm.round_number ? parseInt(eventForm.round_number) : null,
+        start_date: eventForm.start_date || null,
+        end_date: eventForm.end_date || null,
+        description: eventForm.description || null,
+        circuit_id: editCircuit?.id || null,
+      }).eq("id", id!);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_event", id] }); setEditEventOpen(false); toast.success("Event updated"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const handleSessionDrop = async (targetIdx: number) => {
     if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
     const arr = [...sessions];
     const [moved] = arr.splice(dragIdx, 1);
     arr.splice(targetIdx, 0, moved);
     setDragIdx(null);
-
-    // Optimistically update cache
     qc.setQueryData(["v2_sessions", id], arr);
-
-    // Persist new sort_order
     try {
       for (let i = 0; i < arr.length; i++) {
         await supabase.from("v2_sessions").update({ sort_order: i } as any).eq("id", (arr[i] as any).id);
       }
       qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+    } catch { toast.error("Failed to save order"); qc.invalidateQueries({ queryKey: ["v2_sessions", id] }); }
+  };
+
+  const openEditSession = (s: any) => {
+    setEditingSession(s);
+    setSessionForm({
+      name: s.name,
+      session_type: s.session_type,
+      date: s.date ? s.date.split("T")[0] : "",
+      start_time: s.start_time || "",
+      end_time: s.end_time || "",
+    });
+    setSessionOpen(true);
+  };
+
+  const openNewSession = () => {
+    setEditingSession(null);
+    setSessionForm({ name: "", session_type: "practice", date: "", start_time: "", end_time: "" });
+    setSessionOpen(true);
+  };
+
+  const openEditEvent = () => {
+    if (!event) return;
+    setEventForm({
+      name: event.name,
+      round_number: event.round_number ? String(event.round_number) : "",
+      start_date: event.start_date || "",
+      end_date: event.end_date || "",
+      description: event.description || "",
+    });
+    setEditCircuit(event.v2_circuits ? { id: event.v2_circuits.id, label: event.v2_circuits.name } : null);
+    setEditEventOpen(true);
+  };
+
+  const fetchWeatherForSession = async (sessionId: string) => {
+    setFetchingWeather(sessionId);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-session-weather", { body: { session_id: sessionId } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Weather data fetched!");
     } catch (e: any) {
-      toast.error("Failed to save order");
-      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+      toast.error(e.message || "Failed to fetch weather");
+    } finally {
+      setFetchingWeather(null);
     }
   };
 
@@ -140,9 +231,12 @@ export default function ManageEventDetail() {
       <Button variant="ghost" size="sm" onClick={() => navigate("/manage")}><ArrowLeft className="h-4 w-4 mr-1" />Back to Events</Button>
 
       <div className="space-y-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-2xl font-bold">{event.name}</h1>
           <Badge variant={isPublished ? "default" : "secondary"}>{event.status}</Badge>
+          <Button size="sm" variant="outline" onClick={openEditEvent}>
+            <Pencil className="h-4 w-4 mr-1" />Edit Event
+          </Button>
           <Button
             size="sm"
             variant={isPublished ? "outline" : "default"}
@@ -160,7 +254,7 @@ export default function ManageEventDetail() {
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete Event</AlertDialogTitle>
-                <AlertDialogDescription>This will permanently delete "{event.name}" and all its sessions and results. This action cannot be undone.</AlertDialogDescription>
+                <AlertDialogDescription>This will permanently delete "{event.name}" and all its sessions and results.</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -181,7 +275,7 @@ export default function ManageEventDetail() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Sessions</h2>
-          <Button size="sm" onClick={() => { setSessionForm({ name: "", session_type: "practice", date: "" }); setSessionOpen(true); }}>
+          <Button size="sm" onClick={openNewSession}>
             <Plus className="h-4 w-4 mr-1" />Add Session
           </Button>
         </div>
@@ -206,10 +300,26 @@ export default function ManageEventDetail() {
                 </div>
                 <Badge variant="outline" className="text-[10px]">{s.session_type.replace("_", " ")}</Badge>
               </div>
-              {s.date && <p className="text-xs text-muted-foreground">{new Date(s.date).toLocaleString()}</p>}
+              {s.date && <p className="text-xs text-muted-foreground">{new Date(s.date + "T00:00:00").toLocaleDateString()}</p>}
+              {(s.start_time || s.end_time) && (
+                <p className="text-xs text-muted-foreground">{s.start_time || "?"} – {s.end_time || "?"}</p>
+              )}
               <div className="flex items-center justify-between">
                 <Badge variant={s.status === "published" ? "default" : "secondary"} className="text-[10px]">{s.status}</Badge>
                 <div className="flex items-center gap-1">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => openEditSession(s)} title="Edit session">
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 w-7 p-0"
+                    onClick={() => fetchWeatherForSession(s.id)}
+                    disabled={fetchingWeather === s.id}
+                    title="Refresh weather"
+                  >
+                    {fetchingWeather === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CloudSun className="h-3 w-3" />}
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive">
@@ -219,7 +329,7 @@ export default function ManageEventDetail() {
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Session</AlertDialogTitle>
-                        <AlertDialogDescription>This will permanently delete "{s.name}" and all its results. This action cannot be undone.</AlertDialogDescription>
+                        <AlertDialogDescription>This will permanently delete "{s.name}" and all its results.</AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -237,9 +347,10 @@ export default function ManageEventDetail() {
         </div>
       </div>
 
-      <Dialog open={sessionOpen} onOpenChange={setSessionOpen}>
+      {/* Add/Edit Session Dialog */}
+      <Dialog open={sessionOpen} onOpenChange={v => { setSessionOpen(v); if (!v) setEditingSession(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Session</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingSession ? "Edit" : "Add"} Session</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Session Name *</Label><Input value={sessionForm.name} onChange={e => setSessionForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Free Practice 1" /></div>
             <div><Label>Session Type *</Label>
@@ -248,9 +359,42 @@ export default function ManageEventDetail() {
                 <SelectContent>{SESSION_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>Date & Time</Label><Input type="datetime-local" value={sessionForm.date} onChange={e => setSessionForm(f => ({ ...f, date: e.target.value }))} /></div>
+            <div><Label>Date</Label><Input type="date" value={sessionForm.date} onChange={e => setSessionForm(f => ({ ...f, date: e.target.value }))} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Start Time (local)</Label><Input type="time" value={sessionForm.start_time} onChange={e => setSessionForm(f => ({ ...f, start_time: e.target.value }))} placeholder="14:00" /></div>
+              <div><Label>End Time (local)</Label><Input type="time" value={sessionForm.end_time} onChange={e => setSessionForm(f => ({ ...f, end_time: e.target.value }))} placeholder="15:30" /></div>
+            </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setSessionOpen(false)}>Cancel</Button><Button onClick={() => addSession.mutate()} disabled={!sessionForm.name.trim()}>Add</Button></DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSessionOpen(false); setEditingSession(null); }}>Cancel</Button>
+            <Button onClick={() => editingSession ? updateSession.mutate() : addSession.mutate()} disabled={!sessionForm.name.trim()}>
+              {editingSession ? "Save" : "Add"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={editEventOpen} onOpenChange={setEditEventOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Event Name *</Label><Input value={eventForm.name} onChange={e => setEventForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>Round #</Label><Input type="number" value={eventForm.round_number} onChange={e => setEventForm(f => ({ ...f, round_number: e.target.value }))} /></div>
+            <div>
+              <Label>Circuit</Label>
+              <AutocompleteField entityType="circuit" value={editCircuit} onChange={setEditCircuit} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Start Date</Label><Input type="date" value={eventForm.start_date} onChange={e => setEventForm(f => ({ ...f, start_date: e.target.value }))} /></div>
+              <div><Label>End Date</Label><Input type="date" value={eventForm.end_date} onChange={e => setEventForm(f => ({ ...f, end_date: e.target.value }))} /></div>
+            </div>
+            <div><Label>Description</Label><Textarea value={eventForm.description} onChange={e => setEventForm(f => ({ ...f, description: e.target.value }))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditEventOpen(false)}>Cancel</Button>
+            <Button onClick={() => updateEvent.mutate()} disabled={!eventForm.name.trim()}>Save</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

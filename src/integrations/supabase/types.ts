@@ -1064,9 +1064,11 @@ export type Database = {
           country: string | null
           created_at: string
           id: string
+          latitude: number | null
           layout_image_url: string | null
           length_km: number | null
           location: string | null
+          longitude: number | null
           name: string
           updated_at: string
         }
@@ -1074,9 +1076,11 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          latitude?: number | null
           layout_image_url?: string | null
           length_km?: number | null
           location?: string | null
+          longitude?: number | null
           name: string
           updated_at?: string
         }
@@ -1084,9 +1088,11 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          latitude?: number | null
           layout_image_url?: string | null
           length_km?: number | null
           location?: string | null
+          longitude?: number | null
           name?: string
           updated_at?: string
         }
@@ -1612,17 +1618,87 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_session_weather: {
+        Row: {
+          air_temp_max: number | null
+          air_temp_min: number | null
+          condition_emoji: string | null
+          condition_summary: string | null
+          created_at: string
+          fetched_at: string
+          hourly_data: Json | null
+          id: string
+          rain_detail: string | null
+          rain_mm: number | null
+          session_id: string
+          track_temp_max: number | null
+          track_temp_min: number | null
+          wind_direction: string | null
+          wind_speed_max: number | null
+          wind_speed_min: number | null
+          wind_summary: string | null
+        }
+        Insert: {
+          air_temp_max?: number | null
+          air_temp_min?: number | null
+          condition_emoji?: string | null
+          condition_summary?: string | null
+          created_at?: string
+          fetched_at?: string
+          hourly_data?: Json | null
+          id?: string
+          rain_detail?: string | null
+          rain_mm?: number | null
+          session_id: string
+          track_temp_max?: number | null
+          track_temp_min?: number | null
+          wind_direction?: string | null
+          wind_speed_max?: number | null
+          wind_speed_min?: number | null
+          wind_summary?: string | null
+        }
+        Update: {
+          air_temp_max?: number | null
+          air_temp_min?: number | null
+          condition_emoji?: string | null
+          condition_summary?: string | null
+          created_at?: string
+          fetched_at?: string
+          hourly_data?: Json | null
+          id?: string
+          rain_detail?: string | null
+          rain_mm?: number | null
+          session_id?: string
+          track_temp_max?: number | null
+          track_temp_min?: number | null
+          wind_direction?: string | null
+          wind_speed_max?: number | null
+          wind_speed_min?: number | null
+          wind_summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_session_weather_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_sessions: {
         Row: {
           column_order: Json | null
           created_at: string
           date: string | null
+          end_time: string | null
           event_id: string
           id: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order: number
           source_document_url: string | null
+          start_time: string | null
           status: Database["public"]["Enums"]["event_status_enum"]
           updated_at: string
         }
@@ -1630,12 +1706,14 @@ export type Database = {
           column_order?: Json | null
           created_at?: string
           date?: string | null
+          end_time?: string | null
           event_id: string
           id?: string
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
         }
@@ -1643,12 +1721,14 @@ export type Database = {
           column_order?: Json | null
           created_at?: string
           date?: string | null
+          end_time?: string | null
           event_id?: string
           id?: string
           name?: string
           session_type?: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
+          start_time?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
         }
