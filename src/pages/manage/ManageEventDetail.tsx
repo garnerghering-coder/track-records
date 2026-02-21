@@ -46,6 +46,8 @@ export default function ManageEventDetail() {
   const [unresolvedTeams, setUnresolvedTeams] = useState<Record<string, Array<{ id: string; full_name: string }>>>({});
   const [driverResolutions, setDriverResolutions] = useState<Record<string, string>>({});
   const [teamResolutions, setTeamResolutions] = useState<Record<string, string>>({});
+  const [rememberDrivers, setRememberDrivers] = useState<Record<string, boolean>>({});
+  const [rememberTeams, setRememberTeams] = useState<Record<string, boolean>>({});
 
   // Event edit state
   const [editEventOpen, setEditEventOpen] = useState(false);
@@ -251,7 +253,7 @@ export default function ManageEventDetail() {
     }
   };
 
-  const handleF1Import = async (resolutions?: { drivers: Record<string, string>; teams: Record<string, string> }) => {
+  const handleF1Import = async (resolutions?: { drivers: Record<string, string>; teams: Record<string, string> }, saveAliases?: { drivers: string[]; teams: string[] }) => {
     if (!importUrl.trim()) return;
     setImportLoading(true);
     setImportResult(null);
@@ -275,6 +277,8 @@ export default function ManageEventDetail() {
           for (const name of Object.keys(data.unresolved_teams || {})) tr[name] = "create";
           setDriverResolutions(dr);
           setTeamResolutions(tr);
+          setRememberDrivers({});
+          setRememberTeams({});
           setResolveOpen(true);
           setImportLoading(false);
           return;
@@ -287,6 +291,7 @@ export default function ManageEventDetail() {
           url: importUrl.trim(),
           event_id: id,
           resolutions: resolutions || { drivers: {}, teams: {} },
+          save_aliases: saveAliases,
         },
       });
       if (error) throw error;
@@ -303,8 +308,13 @@ export default function ManageEventDetail() {
   };
 
   const handleResolveAndImport = () => {
+    // Build save_aliases from "remember" checkboxes
+    const saveDrivers = Object.entries(rememberDrivers).filter(([name, checked]) => checked && driverResolutions[name] && driverResolutions[name] !== "create").map(([name]) => name);
+    const saveTeams = Object.entries(rememberTeams).filter(([name, checked]) => checked && teamResolutions[name] && teamResolutions[name] !== "create").map(([name]) => name);
+    const saveAliases = (saveDrivers.length > 0 || saveTeams.length > 0) ? { drivers: saveDrivers, teams: saveTeams } : undefined;
+    
     setResolveOpen(false);
-    handleF1Import({ drivers: driverResolutions, teams: teamResolutions });
+    handleF1Import({ drivers: driverResolutions, teams: teamResolutions }, saveAliases);
   };
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
@@ -606,6 +616,17 @@ export default function ManageEventDetail() {
                       <span className="text-muted-foreground">Create new driver "{name}"</span>
                     </label>
                   </div>
+                  {driverResolutions[name] && driverResolutions[name] !== "create" && (
+                    <label className="flex items-center gap-2 text-xs cursor-pointer mt-1 pt-1 border-t border-border/50">
+                      <input
+                        type="checkbox"
+                        checked={rememberDrivers[name] || false}
+                        onChange={e => setRememberDrivers(prev => ({ ...prev, [name]: e.target.checked }))}
+                        className="accent-primary"
+                      />
+                      <span className="text-muted-foreground">Don't ask again for "{name}"</span>
+                    </label>
+                  )}
                 </div>
               ))}
             </div>
@@ -641,6 +662,17 @@ export default function ManageEventDetail() {
                       <span className="text-muted-foreground">Create new team "{name}"</span>
                     </label>
                   </div>
+                  {teamResolutions[name] && teamResolutions[name] !== "create" && (
+                    <label className="flex items-center gap-2 text-xs cursor-pointer mt-1 pt-1 border-t border-border/50">
+                      <input
+                        type="checkbox"
+                        checked={rememberTeams[name] || false}
+                        onChange={e => setRememberTeams(prev => ({ ...prev, [name]: e.target.checked }))}
+                        className="accent-primary"
+                      />
+                      <span className="text-muted-foreground">Don't ask again for "{name}"</span>
+                    </label>
+                  )}
                 </div>
               ))}
             </div>
