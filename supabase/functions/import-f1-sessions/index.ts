@@ -145,14 +145,25 @@ function matchDriver(
 
 function matchTeam(
   teamName: string,
-  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>
+  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
+  seasonAliases: Array<{ team_id: string; display_name: string }> = []
 ): string | null {
   const normalized = teamName.toLowerCase().trim();
 
+  // 1. Check canonical team names
   for (const t of existingTeams) {
     if (t.full_name.toLowerCase() === normalized) return t.id;
     if (t.short_name && t.short_name.toLowerCase() === normalized) return t.id;
-    // Partial match: "McLaren" matches "McLaren Racing"
+  }
+
+  // 2. Check season aliases (e.g. "Kick Sauber" -> "Audi F1 Team")
+  for (const a of seasonAliases) {
+    if (a.display_name.toLowerCase() === normalized) return a.team_id;
+    if (a.display_name.toLowerCase().includes(normalized) || normalized.includes(a.display_name.toLowerCase())) return a.team_id;
+  }
+
+  // 3. Partial match on canonical names
+  for (const t of existingTeams) {
     if (t.full_name.toLowerCase().includes(normalized) || normalized.includes(t.full_name.toLowerCase())) return t.id;
   }
 
@@ -188,8 +199,8 @@ serve(async (req) => {
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify event exists
-    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name").eq("id", event_id).single();
+    // Verify event exists and get season_id
+    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name, season_id").eq("id", event_id).single();
     if (eventErr || !event) {
       return new Response(
         JSON.stringify({ error: "Event not found" }),
@@ -260,15 +271,23 @@ serve(async (req) => {
 
     console.log("Found result URLs:", uniqueUrls);
 
-    // Load existing data for matching
-    const [driversRes, teamsRes, existingSessionsRes] = await Promise.all([
+    // Load existing data for matching (including aliases and season cars)
+    const seasonId = event.season_id;
+    const [driversRes, teamsRes, existingSessionsRes, aliasesRes, seasonCarsRes] = await Promise.all([
       adminClient.from("v2_drivers").select("id, full_name"),
       adminClient.from("v2_teams").select("id, full_name, short_name"),
       adminClient.from("v2_sessions").select("id, name").eq("event_id", event_id),
+      adminClient.from("v2_team_season_names").select("team_id, display_name").eq("season_id", seasonId),
+      adminClient.from("v2_team_season_cars").select("team_id, car_id").eq("season_id", seasonId),
     ]);
     const existingDrivers = driversRes.data || [];
     const existingTeams = teamsRes.data || [];
     const existingSessionNames = new Set((existingSessionsRes.data || []).map((s: any) => s.name));
+    const seasonAliases: Array<{ team_id: string; display_name: string }> = (aliasesRes.data || []) as any;
+    const seasonCarMap = new Map<string, string>();
+    for (const sc of (seasonCarsRes.data || []) as any[]) {
+      seasonCarMap.set(sc.team_id, sc.car_id);
+    }
 
     // ── Step 2: Scrape each result page and parse ──
     const summary = {
@@ -385,7 +404,7 @@ serve(async (req) => {
           // Match or create team
           let teamId: string | null = null;
           if (teamName) {
-            teamId = matchTeam(teamName, existingTeams);
+            teamId = matchTeam(teamName, existingTeams, seasonAliases);
             if (teamId) {
               summary.teams_matched++;
             } else {
@@ -401,6 +420,9 @@ serve(async (req) => {
               }
             }
           }
+
+          // Look up car for this team+season
+          const carId = teamId ? (seasonCarMap.get(teamId) || null) : null;
 
           // Insert into the appropriate results table based on type
           if (tableType === "practice" || (tableType === "unknown" && sessionInfo.type === "practice")) {
@@ -419,6 +441,7 @@ serve(async (req) => {
               car_number: carNumber || null,
               driver_id: driverId,
               team_id: teamId,
+              car_id: carId,
               best_lap_time: bestLapTime || null,
               gap_to_p1: gapToP1 || null,
               laps_run: isNaN(laps!) ? null : laps,
@@ -439,6 +462,7 @@ serve(async (req) => {
               car_number: carNumber || null,
               driver_id: driverId,
               team_id: teamId,
+              car_id: carId,
               q1_time: q1 === "DNF" ? null : q1,
               q2_time: q2 === "DNF" ? null : q2,
               q3_time: q3 === "DNF" ? null : q3,
@@ -471,6 +495,7 @@ serve(async (req) => {
               car_number: carNumber || null,
               driver_id: driverId,
               team_id: teamId,
+              car_id: carId,
               laps_completed: isNaN(lapsCompleted) ? null : lapsCompleted,
               total_time: gapToLeader ? null : totalTime,
               gap_to_leader: gapToLeader,
