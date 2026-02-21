@@ -300,7 +300,7 @@ export default function ManageEventDetail() {
                 </div>
                 <Badge variant="outline" className="text-[10px]">{s.session_type.replace("_", " ")}</Badge>
               </div>
-              {s.date && <p className="text-xs text-muted-foreground">{new Date(s.date + "T00:00:00").toLocaleDateString()}</p>}
+              {s.date && <p className="text-xs text-muted-foreground">{s.date.split("T")[0]}</p>}
               {(s.start_time || s.end_time) && (
                 <p className="text-xs text-muted-foreground">{s.start_time || "?"} – {s.end_time || "?"}</p>
               )}
