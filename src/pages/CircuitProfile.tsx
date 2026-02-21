@@ -2,18 +2,32 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trophy } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { formatDateRange } from "@/lib/date-utils";
 import { computeTrackMetrics, categoryBubbleClasses } from "@/lib/track-calculations";
 import ReportDialog from "@/components/ReportDialog";
+import FlagImage from "@/components/FlagImage";
+
+interface PodiumEntry {
+  driverId: string;
+  name: string;
+  position: number;
+}
+
+const PODIUM_COLORS: Record<number, string> = {
+  1: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
+  2: "bg-gray-300/15 text-gray-300 border-gray-400/40",
+  3: "bg-amber-700/20 text-amber-600 border-amber-700/40",
+};
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [circuit, setCircuit] = useState<any>(null);
   const [layouts, setLayouts] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [podiums, setPodiums] = useState<Record<string, PodiumEntry[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,6 +49,41 @@ const CircuitProfile = () => {
           .order("start_date", { ascending: false })
           .limit(100);
         setEvents(evData ?? []);
+
+        // Fetch podium data
+        const eventIds = (evData || []).map(e => e.id);
+        if (eventIds.length > 0) {
+          const { data: raceSessions } = await supabase
+            .from("v2_sessions")
+            .select("id, event_id")
+            .in("event_id", eventIds)
+            .eq("session_type", "race" as any)
+            .eq("status", "published" as any);
+
+          if (raceSessions && raceSessions.length > 0) {
+            const sIds = raceSessions.map(rs => rs.id);
+            const sessionEventMap: Record<string, string> = {};
+            raceSessions.forEach(rs => { sessionEventMap[rs.id] = rs.event_id; });
+
+            const { data: topResults } = await supabase
+              .from("v2_race_results" as any)
+              .select("session_id, position, driver_id, v2_drivers(full_name)")
+              .in("session_id", sIds)
+              .lte("position", 3)
+              .order("position");
+
+            const podiumMap: Record<string, PodiumEntry[]> = {};
+            for (const r of (topResults || []) as any[]) {
+              const eventId = sessionEventMap[r.session_id];
+              if (!eventId) continue;
+              if (!podiumMap[eventId]) podiumMap[eventId] = [];
+              if (podiumMap[eventId].length < 3 && !podiumMap[eventId].some(p => p.position === r.position)) {
+                podiumMap[eventId].push({ driverId: r.driver_id, name: r.v2_drivers?.full_name || "Unknown", position: r.position });
+              }
+            }
+            setPodiums(podiumMap);
+          }
+        }
       }
       setLoading(false);
     };
@@ -119,14 +168,35 @@ const CircuitProfile = () => {
           <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {events.map((ev: any) => (
-              <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
-                <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? formatDateRange(ev.start_date, ev.end_date) : ev.v2_seasons?.year}
-                </p>
-              </Link>
-            ))}
+            {events.map((ev: any) => {
+              const evPodium = (podiums[ev.id] || []).sort((a, b) => a.position - b.position);
+              return (
+                <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 shrink-0">
+                      <FlagImage nationality={ev.v2_circuits?.country} size={24} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? formatDateRange(ev.start_date, ev.end_date) : ev.v2_seasons?.year}
+                      </p>
+                    </div>
+                  </div>
+                  {evPodium.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-1.5">
+                      {evPodium.map(p => (
+                        <span key={p.position} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${PODIUM_COLORS[p.position] || ""}`}>
+                          <Trophy className="h-2.5 w-2.5" />
+                          <span className="opacity-60">P{p.position}</span>
+                          <span className="truncate max-w-[80px]">{p.name}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         )}
 
