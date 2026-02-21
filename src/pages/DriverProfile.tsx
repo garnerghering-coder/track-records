@@ -16,6 +16,7 @@ const DriverProfilePage = () => {
   const [raceHistory, setRaceHistory] = useState<any[]>([]);
   const [allSessionResults, setAllSessionResults] = useState<any[]>([]);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [teamAliasMap, setTeamAliasMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,7 +26,7 @@ const DriverProfilePage = () => {
       setDriver(d);
 
       if (d) {
-        const sessionSelect = "id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(year, v2_series(id, name)), v2_circuits(id, name, country))";
+        const sessionSelect = "id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(id, name)), v2_circuits(id, name, country))";
         const sortResults = (items: any[]) => items.sort((a: any, b: any) => {
           const dateA = a.event?.start_date || "";
           const dateB = b.event?.start_date || "";
@@ -68,7 +69,26 @@ const DriverProfilePage = () => {
 
         const qualRows = (qualResults || []).map((r: any) => mapResult(r, "qualifying"));
         const pracRows = (pracResults || []).map((r: any) => mapResult(r, "practice"));
-        setAllSessionResults(sortResults([...raceRows, ...qualRows, ...pracRows]));
+        const allRows = [...raceRows, ...qualRows, ...pracRows];
+        setAllSessionResults(sortResults([...allRows]));
+
+        // Build team alias map from v2_team_season_names
+        const seasonIds = new Set<string>();
+        for (const r of allRows) {
+          const sid = r.event?.v2_seasons?.id;
+          if (sid) seasonIds.add(sid);
+        }
+        if (seasonIds.size > 0) {
+          const { data: aliases } = await supabase
+            .from("v2_team_season_names" as any)
+            .select("team_id, season_id, display_name")
+            .in("season_id", Array.from(seasonIds));
+          const map: Record<string, string> = {};
+          for (const a of (aliases || []) as any[]) {
+            map[`${a.team_id}:${a.season_id}`] = a.display_name;
+          }
+          setTeamAliasMap(map);
+        }
       }
       setLoading(false);
     };
@@ -160,7 +180,9 @@ const DriverProfilePage = () => {
                         </TableCell>
                         <TableCell>
                           {r.v2_teams ? (
-                            <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">{r.v2_teams.full_name}</Link>
+                            <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">
+                              {teamAliasMap[`${r.v2_teams.id}:${r.event?.v2_seasons?.id}`] || r.v2_teams.full_name}
+                            </Link>
                           ) : "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
