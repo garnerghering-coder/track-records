@@ -40,6 +40,13 @@ export default function ManageEventDetail() {
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
 
+  // Resolution state for duplicate detection
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [unresolvedDrivers, setUnresolvedDrivers] = useState<Record<string, Array<{ id: string; full_name: string }>>>({});
+  const [unresolvedTeams, setUnresolvedTeams] = useState<Record<string, Array<{ id: string; full_name: string }>>>({});
+  const [driverResolutions, setDriverResolutions] = useState<Record<string, string>>({});
+  const [teamResolutions, setTeamResolutions] = useState<Record<string, string>>({});
+
   // Event edit state
   const [editEventOpen, setEditEventOpen] = useState(false);
   const [eventForm, setEventForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
@@ -244,13 +251,43 @@ export default function ManageEventDetail() {
     }
   };
 
-  const handleF1Import = async () => {
+  const handleF1Import = async (resolutions?: { drivers: Record<string, string>; teams: Record<string, string> }) => {
     if (!importUrl.trim()) return;
     setImportLoading(true);
     setImportResult(null);
     try {
+      // Step 1: Preview mode — detect potential duplicates
+      if (!resolutions) {
+        const { data, error } = await supabase.functions.invoke("import-f1-sessions", {
+          body: { url: importUrl.trim(), event_id: id, mode: "preview" },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        // If there are unresolved entities, show the resolution dialog
+        if (data.has_unresolved) {
+          setUnresolvedDrivers(data.unresolved_drivers || {});
+          setUnresolvedTeams(data.unresolved_teams || {});
+          // Pre-set resolutions to "create" by default
+          const dr: Record<string, string> = {};
+          for (const name of Object.keys(data.unresolved_drivers || {})) dr[name] = "create";
+          const tr: Record<string, string> = {};
+          for (const name of Object.keys(data.unresolved_teams || {})) tr[name] = "create";
+          setDriverResolutions(dr);
+          setTeamResolutions(tr);
+          setResolveOpen(true);
+          setImportLoading(false);
+          return;
+        }
+      }
+
+      // Step 2: Commit mode — actually create sessions and results
       const { data, error } = await supabase.functions.invoke("import-f1-sessions", {
-        body: { url: importUrl.trim(), event_id: id },
+        body: {
+          url: importUrl.trim(),
+          event_id: id,
+          resolutions: resolutions || { drivers: {}, teams: {} },
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -263,6 +300,11 @@ export default function ManageEventDetail() {
     } finally {
       setImportLoading(false);
     }
+  };
+
+  const handleResolveAndImport = () => {
+    setResolveOpen(false);
+    handleF1Import({ drivers: driverResolutions, teams: teamResolutions });
   };
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
@@ -518,10 +560,95 @@ export default function ManageEventDetail() {
               {importResult && !importResult.error ? "Done" : "Cancel"}
             </Button>
             {(!importResult || importResult.error) && (
-              <Button onClick={handleF1Import} disabled={!importUrl.trim() || importLoading}>
+              <Button onClick={() => handleF1Import()} disabled={!importUrl.trim() || importLoading}>
                 {importLoading ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Importing…</> : "Import"}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Resolution Dialog */}
+      <Dialog open={resolveOpen} onOpenChange={v => { if (!importLoading) setResolveOpen(v); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Resolve Potential Duplicates</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            The following names from the F1 data might match existing records. Choose whether to link them or create new entries.
+          </p>
+
+          {Object.keys(unresolvedDrivers).length > 0 && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold">Drivers</h4>
+              {Object.entries(unresolvedDrivers).map(([name, candidates]) => (
+                <div key={name} className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-sm font-medium">"{name}" — could this be:</p>
+                  <div className="space-y-1">
+                    {candidates.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`driver-${name}`}
+                          checked={driverResolutions[name] === c.id}
+                          onChange={() => setDriverResolutions(prev => ({ ...prev, [name]: c.id }))}
+                          className="accent-primary"
+                        />
+                        {c.full_name}
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`driver-${name}`}
+                        checked={driverResolutions[name] === "create"}
+                        onChange={() => setDriverResolutions(prev => ({ ...prev, [name]: "create" }))}
+                        className="accent-primary"
+                      />
+                      <span className="text-muted-foreground">Create new driver "{name}"</span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {Object.keys(unresolvedTeams).length > 0 && (
+            <div className="space-y-3 mt-4">
+              <h4 className="text-sm font-semibold">Teams</h4>
+              {Object.entries(unresolvedTeams).map(([name, candidates]) => (
+                <div key={name} className="rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-sm font-medium">"{name}" — could this be:</p>
+                  <div className="space-y-1">
+                    {candidates.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`team-${name}`}
+                          checked={teamResolutions[name] === c.id}
+                          onChange={() => setTeamResolutions(prev => ({ ...prev, [name]: c.id }))}
+                          className="accent-primary"
+                        />
+                        {c.full_name}
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`team-${name}`}
+                        checked={teamResolutions[name] === "create"}
+                        onChange={() => setTeamResolutions(prev => ({ ...prev, [name]: "create" }))}
+                        className="accent-primary"
+                      />
+                      <span className="text-muted-foreground">Create new team "{name}"</span>
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResolveOpen(false)}>Cancel</Button>
+            <Button onClick={handleResolveAndImport}>Confirm & Import</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
