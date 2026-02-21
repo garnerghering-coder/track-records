@@ -112,7 +112,8 @@ Deno.serve(async (req) => {
     const sessionHours: HourlyWeather[] = [];
 
     for (let i = 0; i < hourly.time.length; i++) {
-      const hour = new Date(hourly.time[i]).getHours();
+      // Parse hour directly from string (e.g. "2024-01-15T14:00") to avoid timezone shifts
+      const hour = parseInt(hourly.time[i].split("T")[1]?.split(":")[0] ?? "0");
       if (hour >= startHour && hour <= endHour) {
         sessionHours.push({
           time: hourly.time[i],
@@ -144,8 +145,8 @@ Deno.serve(async (req) => {
     if (totalRain > 0) {
       const rainHours = sessionHours.filter(h => h.precipitation > 0);
       if (rainHours.length > 0) {
-        const startRain = new Date(rainHours[0].time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-        const endRain = new Date(rainHours[rainHours.length - 1].time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        const startRain = rainHours[0].time.split("T")[1]?.substring(0, 5) || "?";
+        const endRain = rainHours[rainHours.length - 1].time.split("T")[1]?.substring(0, 5) || "?";
         if (rainHours.length === 1) {
           rainDetail = `around ${startRain}`;
         } else {

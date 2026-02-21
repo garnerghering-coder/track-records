@@ -361,8 +361,8 @@ export default function ManageEventDetail() {
             </div>
             <div><Label>Date</Label><Input type="date" value={sessionForm.date} onChange={e => setSessionForm(f => ({ ...f, date: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><Label>Start Time (local)</Label><Input type="time" value={sessionForm.start_time} onChange={e => setSessionForm(f => ({ ...f, start_time: e.target.value }))} placeholder="14:00" /></div>
-              <div><Label>End Time (local)</Label><Input type="time" value={sessionForm.end_time} onChange={e => setSessionForm(f => ({ ...f, end_time: e.target.value }))} placeholder="15:30" /></div>
+              <div><Label>Start Time (track)</Label><Input type="text" pattern="[0-2][0-9]:[0-5][0-9]" maxLength={5} value={sessionForm.start_time} onChange={e => setSessionForm(f => ({ ...f, start_time: e.target.value }))} placeholder="14:00" /></div>
+              <div><Label>End Time (track)</Label><Input type="text" pattern="[0-2][0-9]:[0-5][0-9]" maxLength={5} value={sessionForm.end_time} onChange={e => setSessionForm(f => ({ ...f, end_time: e.target.value }))} placeholder="15:30" /></div>
             </div>
           </div>
           <DialogFooter>
