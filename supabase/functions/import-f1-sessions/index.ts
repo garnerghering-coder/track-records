@@ -7,6 +7,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Time Helpers ─────────────────────────────────────────────────────
+
+/** Parse a time string to milliseconds. Strips leading "+" and trailing "s". */
+function parseTimeMs(str: string): number | null {
+  if (!str || typeof str !== "string") return null;
+  const s = str.trim().replace(/^\+/, "").replace(/s$/i, "").trim();
+  if (!s) return null;
+  const colonMatch = s.match(/^(\d+):(\d{1,2})\.(\d{1,3})$/);
+  if (colonMatch) {
+    return parseInt(colonMatch[1]) * 60000 + parseInt(colonMatch[2]) * 1000 + parseInt(colonMatch[3].padEnd(3, "0"));
+  }
+  const secMatch = s.match(/^(\d+)\.(\d{1,3})$/);
+  if (secMatch) {
+    return parseInt(secMatch[1]) * 1000 + parseInt(secMatch[2].padEnd(3, "0"));
+  }
+  return null;
+}
+
+/** Format ms as lap time "M:SS.mmm" */
+function fmtLapTime(ms: number): string {
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const millis = Math.round(ms % 1000);
+  return `${mins}:${secs.toString().padStart(2, "0")}.${millis.toString().padStart(3, "0")}`;
+}
+
+/** Format ms as gap "+S.mmm" or "+M:SS.mmm" (no trailing "s") */
+function fmtGap(ms: number): string {
+  if (ms <= 0) return "";
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const millis = Math.round(ms % 1000);
+  if (mins > 0) return `+${mins}:${secs.toString().padStart(2, "0")}.${millis.toString().padStart(3, "0")}`;
+  return `+${secs}.${millis.toString().padStart(3, "0")}`;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /** Strip markdown images from a cell, leaving only text */
@@ -368,11 +404,31 @@ serve(async (req) => {
         existingSessionNames.add(sessionInfo.name);
         summary.sessions_created++;
 
-        // Parse each data row and insert results
+        // ── Pass 1: Parse rows and match drivers/teams ──
+        interface ParsedEntry {
+          position: number | null;
+          status: string | null;
+          carNumber: string | null;
+          driverId: string | null;
+          teamId: string | null;
+          carId: string | null;
+          rawTimeGap: string | null;
+          laps: number | null;
+          q1: string | null;
+          q2: string | null;
+          q3: string | null;
+          bestTime: string | null;
+          lapsCompleted: number | null;
+          timeRetired: string | null;
+          points: number;
+          resultStatus: string | null;
+        }
+
+        const entries: ParsedEntry[] = [];
+
         for (const row of dataRows) {
           if (row.length < 4) continue;
 
-          // Common columns across all types: Pos, No, Driver, Team, ...
           const posCell = row[0];
           const carNumber = stripImages(row[1]);
           const driverRaw = row[2];
@@ -421,90 +477,163 @@ serve(async (req) => {
             }
           }
 
-          // Look up car for this team+season
           const carId = teamId ? (seasonCarMap.get(teamId) || null) : null;
 
-          // Insert into the appropriate results table based on type
-          if (tableType === "practice" || (tableType === "unknown" && sessionInfo.type === "practice")) {
-            // Practice: | Pos | No | Driver | Team | Time/Gap | Laps |
-            const timeGap = row.length > 4 ? stripImages(row[4]) : null;
-            const laps = row.length > 5 ? parseInt(stripImages(row[5]), 10) : null;
+          const entry: ParsedEntry = {
+            position, status, carNumber: carNumber || null,
+            driverId, teamId, carId,
+            rawTimeGap: null, laps: null,
+            q1: null, q2: null, q3: null, bestTime: null,
+            lapsCompleted: null, timeRetired: null, points: 0, resultStatus: status,
+          };
 
-            // P1 has actual time, others have gap
-            const isGap = timeGap?.startsWith("+");
-            const bestLapTime = isGap ? null : timeGap;
-            const gapToP1 = isGap ? timeGap : null;
+          if (tableType === "practice" || (tableType === "unknown" && sessionInfo.type === "practice")) {
+            entry.rawTimeGap = row.length > 4 ? stripImages(row[4]) : null;
+            entry.laps = row.length > 5 ? parseInt(stripImages(row[5]), 10) : null;
+          } else if (tableType === "qualifying") {
+            entry.q1 = row.length > 4 ? stripImages(row[4]) || null : null;
+            entry.q2 = row.length > 5 ? stripImages(row[5]) || null : null;
+            entry.q3 = row.length > 6 ? stripImages(row[6]) || null : null;
+            entry.laps = row.length > 7 ? parseInt(stripImages(row[7]), 10) : null;
+            const q3v = entry.q3 && entry.q3 !== "DNF" ? entry.q3 : null;
+            const q2v = entry.q2 && entry.q2 !== "DNF" ? entry.q2 : null;
+            const q1v = entry.q1 && entry.q1 !== "DNF" ? entry.q1 : null;
+            entry.bestTime = q3v || q2v || q1v || null;
+          } else {
+            const lapsStr = row.length > 4 ? stripImages(row[4]) : "";
+            entry.lapsCompleted = parseInt(lapsStr, 10);
+            entry.timeRetired = row.length > 5 ? stripImages(row[5]) : null;
+            const ptsStr = row.length > 6 ? stripImages(row[6]) : "0";
+            entry.points = parseFloat(ptsStr) || 0;
+            let rs = status;
+            if (entry.timeRetired === "DNF" || entry.timeRetired === "Ret") rs = "dnf";
+            else if (entry.timeRetired === "DSQ") rs = "dsq";
+            else if (entry.timeRetired === "DNS") rs = "dns";
+            else if (!rs || rs === "finished") rs = "finished";
+            entry.resultStatus = rs;
+          }
+
+          entries.push(entry);
+          summary.total_entries++;
+        }
+
+        // ── Pass 2: Calculate times, gaps, intervals and insert ──
+
+        if (tableType === "practice" || (tableType === "unknown" && sessionInfo.type === "practice")) {
+          // Determine P1's actual time and compute all best lap times
+          let p1Ms: number | null = null;
+          const bestTimesMs: (number | null)[] = [];
+
+          for (const e of entries) {
+            const raw = e.rawTimeGap?.replace(/s$/i, "").trim() || "";
+            if (!raw.startsWith("+") && raw.length > 0) {
+              const ms = parseTimeMs(raw);
+              if (p1Ms === null && ms !== null) p1Ms = ms;
+              bestTimesMs.push(ms);
+            } else {
+              const gapMs = parseTimeMs(raw);
+              bestTimesMs.push(p1Ms !== null && gapMs !== null ? p1Ms + gapMs : null);
+            }
+          }
+
+          for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            const myMs = bestTimesMs[i];
+            const bestLapTime = myMs !== null ? fmtLapTime(myMs) : null;
+            const gapToP1 = (i > 0 && p1Ms !== null && myMs !== null) ? fmtGap(myMs - p1Ms) : null;
+            const prevMs = i > 0 ? bestTimesMs[i - 1] : null;
+            const interval = (i > 0 && prevMs !== null && myMs !== null) ? fmtGap(myMs - prevMs) : null;
 
             await adminClient.from("v2_practice_results").insert({
               session_id: newSession.id,
-              position,
-              car_number: carNumber || null,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              best_lap_time: bestLapTime || null,
-              gap_to_p1: gapToP1 || null,
-              laps_run: isNaN(laps!) ? null : laps,
+              position: e.position,
+              car_number: e.carNumber,
+              driver_id: e.driverId,
+              team_id: e.teamId,
+              car_id: e.carId,
+              best_lap_time: bestLapTime,
+              gap_to_p1: gapToP1,
+              laps_run: isNaN(e.laps!) ? null : e.laps,
+              extra_data: interval ? { Int: interval } : {},
             });
-          } else if (tableType === "qualifying") {
-            // Qualifying: | Pos | No | Driver | Team | Q1 | Q2 | Q3 | Laps |
-            const q1 = row.length > 4 ? stripImages(row[4]) || null : null;
-            const q2 = row.length > 5 ? stripImages(row[5]) || null : null;
-            const q3 = row.length > 6 ? stripImages(row[6]) || null : null;
-            const laps = row.length > 7 ? parseInt(stripImages(row[7]), 10) : null;
+          }
+        } else if (tableType === "qualifying") {
+          // Calculate gap_to_pole and interval from best times
+          const bestTimesMs: (number | null)[] = entries.map(e => parseTimeMs(e.bestTime || ""));
+          const poleMs = bestTimesMs[0];
 
-            // Determine best time from Q3 > Q2 > Q1
-            const bestTime = (q3 && q3 !== "DNF") ? q3 : (q2 && q2 !== "DNF") ? q2 : (q1 && q1 !== "DNF") ? q1 : null;
+          for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            const myMs = bestTimesMs[i];
+            const gapToPole = (i > 0 && poleMs !== null && myMs !== null) ? fmtGap(myMs - poleMs) : null;
+            const prevMs = i > 0 ? bestTimesMs[i - 1] : null;
+            const interval = (i > 0 && prevMs !== null && myMs !== null) ? fmtGap(myMs - prevMs) : null;
 
             await adminClient.from("v2_qualifying_results").insert({
               session_id: newSession.id,
-              position,
-              car_number: carNumber || null,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              q1_time: q1 === "DNF" ? null : q1,
-              q2_time: q2 === "DNF" ? null : q2,
-              q3_time: q3 === "DNF" ? null : q3,
-              best_time: bestTime,
-              laps_run: isNaN(laps!) ? null : laps,
+              position: e.position,
+              car_number: e.carNumber,
+              driver_id: e.driverId,
+              team_id: e.teamId,
+              car_id: e.carId,
+              q1_time: e.q1 === "DNF" ? null : e.q1,
+              q2_time: e.q2 === "DNF" ? null : e.q2,
+              q3_time: e.q3 === "DNF" ? null : e.q3,
+              best_time: e.bestTime,
+              gap_to_pole: gapToPole,
+              laps_run: isNaN(e.laps!) ? null : e.laps,
+              extra_data: interval ? { Int: interval } : {},
             });
-          } else {
-            // Race: | Pos | No | Driver | Team | Laps | Time/Retired | Pts |
-            const lapsStr = row.length > 4 ? stripImages(row[4]) : "";
-            const lapsCompleted = parseInt(lapsStr, 10);
-            const timeRetired = row.length > 5 ? stripImages(row[5]) : null;
-            const ptsStr = row.length > 6 ? stripImages(row[6]) : "0";
-            const points = parseFloat(ptsStr) || 0;
+          }
+        } else {
+          // Race: calculate intervals from gaps where possible
+          const gapTimesMs: (number | null)[] = [];
 
-            // Determine status from time/retired column
-            let resultStatus = status;
-            if (timeRetired === "DNF" || timeRetired === "Ret") resultStatus = "dnf";
-            else if (timeRetired === "DSQ") resultStatus = "dsq";
-            else if (timeRetired === "DNS") resultStatus = "dns";
-            else if (!resultStatus || resultStatus === "finished") resultStatus = "finished";
+          for (const e of entries) {
+            if (e.resultStatus === "finished" && e.timeRetired) {
+              const raw = e.timeRetired.replace(/s$/i, "").trim();
+              if (raw.startsWith("+")) {
+                // Check for lap-based gaps like "+1 Lap"
+                if (/lap/i.test(raw)) {
+                  gapTimesMs.push(null);
+                } else {
+                  gapTimesMs.push(parseTimeMs(raw));
+                }
+              } else {
+                // P1's total time - gap is 0
+                gapTimesMs.push(0);
+              }
+            } else {
+              gapTimesMs.push(null);
+            }
+          }
 
-            const totalTime = (resultStatus === "finished" && timeRetired && timeRetired !== "DNF" && timeRetired !== "DSQ" && timeRetired !== "DNS")
-              ? timeRetired
-              : null;
-            const gapToLeader = (totalTime && totalTime.startsWith("+")) ? totalTime : null;
+          for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            const myGapMs = gapTimesMs[i];
+            const prevGapMs = i > 0 ? gapTimesMs[i - 1] : null;
+            const interval = (i > 0 && prevGapMs !== null && myGapMs !== null) ? fmtGap(myGapMs - prevGapMs) : null;
+
+            const totalTime = (e.resultStatus === "finished" && e.timeRetired && !e.timeRetired.startsWith("+"))
+              ? e.timeRetired : null;
+            const rawGap = e.timeRetired?.replace(/s$/i, "").trim() || "";
+            const gapToLeader = (e.resultStatus === "finished" && rawGap.startsWith("+")) ? rawGap : null;
 
             await adminClient.from("v2_race_results").insert({
               session_id: newSession.id,
-              position,
-              car_number: carNumber || null,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              laps_completed: isNaN(lapsCompleted) ? null : lapsCompleted,
-              total_time: gapToLeader ? null : totalTime,
+              position: e.position,
+              car_number: e.carNumber,
+              driver_id: e.driverId,
+              team_id: e.teamId,
+              car_id: e.carId,
+              laps_completed: isNaN(e.lapsCompleted!) ? null : e.lapsCompleted,
+              total_time: totalTime,
               gap_to_leader: gapToLeader,
-              points,
-              status: resultStatus as any,
+              points: e.points,
+              status: e.resultStatus as any,
+              extra_data: interval ? { Int: interval } : {},
             });
           }
-
-          summary.total_entries++;
         }
       } catch (pageErr) {
         console.error(`Error processing ${resultUrl}:`, pageErr);
