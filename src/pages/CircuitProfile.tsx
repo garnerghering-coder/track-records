@@ -1,85 +1,37 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Globe, Timer } from "lucide-react";
+import { ArrowLeft, Globe } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import FlagImage from "@/components/FlagImage";
-import type { Tables } from "@/integrations/supabase/types";
-
-const CircuitMapImage = ({ url, name }: { url: string; name: string }) => {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
-  return (
-    <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Map</h3>
-      <img
-        src={url}
-        alt={`${name} layout`}
-        className="w-full rounded"
-        referrerPolicy="no-referrer"
-        onError={() => setFailed(true)}
-      />
-    </div>
-  );
-};
-
-type Circuit = Tables<"circuits">;
-
-const categoryLabels: Record<string, string> = {
-  karting: "Karting", single_seater: "Single Seater", gt: "GT",
-  touring_car: "Touring Car", sports_car: "Sports Car", rally: "Rally",
-  endurance: "Endurance", formula: "Formula", stock_car: "Stock Car", other: "Other",
-};
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [circuit, setCircuit] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lapRecordDriver, setLapRecordDriver] = useState<any>(null);
-  const [lapRecordCar, setLapRecordCar] = useState<any>(null);
 
   useEffect(() => {
     if (!id) return;
-    const fetch = async () => {
-      const { data: c } = await supabase.from("circuits").select("*").eq("id", id).single();
-      setCircuit(c as any);
+    const fetchData = async () => {
+      const { data: c } = await supabase.from("v2_circuits").select("*").eq("id", id).single();
+      setCircuit(c);
 
-      // Fetch lap record details
-      if (c?.lap_record_driver_id) {
-        const { data: driver } = await supabase.from("driver_profiles").select("id, first_name, last_name, nationality").eq("id", c.lap_record_driver_id).single();
-        setLapRecordDriver(driver);
-      }
-      if (c?.lap_record_car_model_id) {
-        const { data: car } = await supabase.from("car_models").select("id, name").eq("id", c.lap_record_car_model_id).single();
-        setLapRecordCar(car);
-      }
-
-      let evQuery = supabase.from("race_events")
-        .select("id, event_name, series_name, season_year, category, location, event_date")
-        .order("event_date", { ascending: false });
-      
       if (c) {
-        evQuery = evQuery.eq("circuit_id", id);
-      }
-      const { data: evData } = await evQuery.limit(100);
-
-      if ((!evData || evData.length === 0) && c?.name) {
-        const { data: locEvents } = await supabase.from("race_events")
-          .select("id, event_name, series_name, season_year, category, location, event_date")
-          .ilike("location", `%${c.name}%`)
-          .order("event_date", { ascending: false })
+        // Find events at this circuit
+        const { data: evData } = await supabase
+          .from("v2_events")
+          .select("id, name, start_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+          .eq("circuit_id", id)
+          .eq("status", "published" as any)
+          .order("start_date", { ascending: false })
           .limit(100);
-        setEvents(locEvents ?? []);
-      } else {
         setEvents(evData ?? []);
       }
       setLoading(false);
     };
-    fetch();
+    fetchData();
   }, [id]);
 
   if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
@@ -90,86 +42,46 @@ const CircuitProfile = () => {
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">
-          <Link to="/results" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
+          <Link to="/search" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> Back
           </Link>
           <h1 className="font-display text-3xl font-bold text-foreground">{circuit.name}</h1>
           <div className="mt-2 flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
             {circuit.country && <span>{circuit.country}</span>}
             {circuit.location && <span>{circuit.location}</span>}
-            {circuit.length_km && <span>{circuit.length_km} km</span>}
-            {circuit.turns && <span>{circuit.turns} turns</span>}
-            {circuit.latitude && circuit.longitude && <span>📍 {Number(circuit.latitude).toFixed(4)}, {Number(circuit.longitude).toFixed(4)}</span>}
+            {circuit.length_km && <span>{Number(circuit.length_km).toFixed(2)} km</span>}
           </div>
-          {circuit.website && (
-            <a href={circuit.website} target="_blank" rel="noopener" className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:underline">
-              <Globe className="h-3.5 w-3.5" /> Website
-            </a>
-          )}
         </div>
       </section>
 
       <div className="container py-8">
-        <div className="grid gap-8 lg:grid-cols-3">
-          <div className="space-y-6">
-            {circuit.description && (
-              <div className="rounded-lg border border-border bg-card p-5">
-                <p className="text-sm text-muted-foreground leading-relaxed">{circuit.description}</p>
-              </div>
-            )}
-
-            {circuit.image_url && (
-              <CircuitMapImage url={circuit.image_url} name={circuit.name} />
-            )}
-
-            {/* Lap Record */}
-            {circuit.lap_record_time && (
-              <div className="rounded-lg border border-border bg-card p-5">
-                <h3 className="font-display text-sm font-semibold text-card-foreground mb-2 flex items-center gap-1.5">
-                  <Timer className="h-4 w-4 text-primary" /> Lap Record
-                </h3>
-                <p className="font-accent text-2xl font-bold text-primary">{circuit.lap_record_time}</p>
-                <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  {lapRecordDriver && (
-                    <Link to={`/driver/${lapRecordDriver.id}`} className="flex items-center gap-1 text-primary hover:underline">
-                      <FlagImage nationality={lapRecordDriver.nationality} size={14} />
-                      {lapRecordDriver.first_name} {lapRecordDriver.last_name}
-                    </Link>
-                  )}
-                  {lapRecordCar && (
-                    <Link to={`/car/${lapRecordCar.id}`} className="text-primary hover:underline block">{lapRecordCar.name}</Link>
-                  )}
-                  {circuit.lap_record_year && <span>{circuit.lap_record_year}</span>}
-                </div>
-              </div>
-            )}
-
-            {/* Contribute CTA */}
-            <div className="rounded-lg border border-border bg-card p-5 text-center">
-              <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
-              <p className="text-xs text-muted-foreground mb-3">Help us improve this circuit profile.</p>
-              <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
-            </div>
+        {circuit.layout_image_url && (
+          <div className="mb-8 rounded-lg border border-border bg-card p-5">
+            <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Layout</h3>
+            <img src={circuit.layout_image_url} alt={`${circuit.name} layout`} className="w-full max-h-64 rounded object-contain" />
           </div>
+        )}
 
-          <div className="lg:col-span-2">
-            <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events at This Circuit</h2>
-            {events.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {events.map(ev => (
-                  <Link key={ev.id} to={`/event/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
-                    <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.event_name}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">{ev.series_name} · {ev.event_date
-                      ? new Date(ev.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })
-                      : ev.season_year}</p>
-                    {ev.category && <Badge variant="secondary" className="mt-2 text-xs">{categoryLabels[ev.category] || ev.category}</Badge>}
-                  </Link>
-                ))}
-              </div>
-            )}
+        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events at This Circuit</h2>
+        {events.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {events.map((ev: any) => (
+              <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
+                <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? new Date(ev.start_date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ev.v2_seasons?.year}
+                </p>
+              </Link>
+            ))}
           </div>
+        )}
+
+        <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
+          <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
+          <p className="text-xs text-muted-foreground mb-3">Help us improve this circuit profile.</p>
+          <Link to="/contribute"><Button size="sm" variant="outline">Contribute</Button></Link>
         </div>
       </div>
       <Footer />
