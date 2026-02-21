@@ -288,7 +288,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
           {!weatherMap[session.id] && (
             <Badge variant="outline" className="text-[10px]">{type.replace(/_/g, " ")}</Badge>
           )}
-          {session.date && <span className="text-xs text-muted-foreground">{new Date(session.date + "T00:00:00").toLocaleDateString()}</span>}
+          {session.date && <span className="text-xs text-muted-foreground">{session.date.split("T")[0]}</span>}
         </div>
         <Button variant="outline" size="sm" onClick={handleExport}>
           <FileDown className="h-3.5 w-3.5 mr-1" />Export PDF
