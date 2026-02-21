@@ -266,7 +266,11 @@ const DriverProfilePage = () => {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {r.event?.start_date ? formatDateRange(r.event.start_date, r.event.end_date) : "—"}
+                          {r.session?.date
+                            ? new Date(r.session.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                            : r.event?.start_date
+                              ? formatDateRange(r.event.start_date, r.event.end_date)
+                              : "—"}
                         </TableCell>
                         <TableCell>
                           {r.v2_teams ? (
