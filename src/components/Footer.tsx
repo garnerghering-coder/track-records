@@ -32,7 +32,7 @@ const Footer = () => {
           <div>
             <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Platform</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/contribute" className="hover:text-foreground transition-colors">Contribute</Link></li>
+              
               <li><Link to="/auth" className="hover:text-foreground transition-colors">Sign Up</Link></li>
               <li><Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link></li>
             </ul>
