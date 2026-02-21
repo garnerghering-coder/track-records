@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, Trophy, MapPin, Calendar } from "lucide-react";
+import { formatDateRange } from "@/lib/date-utils";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
@@ -13,6 +14,7 @@ interface DisplayEvent {
   year: number;
   location: string | null;
   date: string | null;
+  endDate: string | null;
 }
 
 const ResultsPage = () => {
@@ -27,7 +29,7 @@ const ResultsPage = () => {
 
       const { data } = await supabase
         .from("v2_events")
-        .select("id, name, start_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+        .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
         .eq("status", "published" as any)
         .order("start_date", { ascending: false })
         .limit(200);
@@ -39,6 +41,7 @@ const ResultsPage = () => {
         year: e.v2_seasons?.year || 0,
         location: e.v2_circuits ? `${e.v2_circuits.name}${e.v2_circuits.country ? `, ${e.v2_circuits.country}` : ""}` : null,
         date: e.start_date,
+        endDate: e.end_date,
       }));
 
       if (yearFilter) combined = combined.filter(e => e.year === parseInt(yearFilter));
@@ -94,7 +97,7 @@ const ResultsPage = () => {
                     <div className="mt-2 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
                       <span>{ev.year}</span>
                       {ev.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {ev.location}</span>}
-                      {ev.date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(ev.date).toLocaleDateString()}</span>}
+                      {ev.date && <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {formatDateRange(ev.date, ev.endDate)}</span>}
                     </div>
                   </div>
                 </div>

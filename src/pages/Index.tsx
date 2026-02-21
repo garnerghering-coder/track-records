@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WelcomeLightbox from "@/components/WelcomeLightbox";
 import heroImage from "@/assets/hero-racing.jpg";
+import { formatDateRange } from "@/lib/date-utils";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ const Index = () => {
     const fetchRecent = async () => {
       const { data } = await supabase
         .from("v2_events")
-        .select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+        .select("id, name, start_date, end_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
         .eq("status", "published" as any)
         .order("created_at", { ascending: false })
         .limit(6);
@@ -168,7 +169,7 @@ const Index = () => {
                   <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
                     <span>{ev.v2_seasons?.year}</span>
                     {ev.v2_circuits?.name && <span>{ev.v2_circuits.name}{ev.v2_circuits.country ? `, ${ev.v2_circuits.country}` : ""}</span>}
-                    {ev.start_date && <span>{new Date(ev.start_date).toLocaleDateString()}</span>}
+                    {ev.start_date && <span>{formatDateRange(ev.start_date, ev.end_date)}</span>}
                   </div>
                 </Link>
               ))}

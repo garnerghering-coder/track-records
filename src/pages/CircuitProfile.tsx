@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Globe } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { formatDateRange } from "@/lib/date-utils";
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,7 +23,7 @@ const CircuitProfile = () => {
         // Find events at this circuit
         const { data: evData } = await supabase
           .from("v2_events")
-          .select("id, name, start_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+          .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
           .eq("circuit_id", id)
           .eq("status", "published" as any)
           .order("start_date", { ascending: false })
@@ -71,7 +72,7 @@ const CircuitProfile = () => {
               <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
                 <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? new Date(ev.start_date).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : ev.v2_seasons?.year}
+                  {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? formatDateRange(ev.start_date, ev.end_date) : ev.v2_seasons?.year}
                 </p>
               </Link>
             ))}
