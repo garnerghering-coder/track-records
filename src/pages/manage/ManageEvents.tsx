@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Trash2, Search } from "lucide-react";
+import { Plus, Trash2, Search, Pencil } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
 
@@ -27,10 +27,16 @@ export default function ManageEvents() {
   const [circuit, setCircuit] = useState<Ref>(null);
   const [form, setForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
 
+  // Edit event state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
+  const [editCircuit, setEditCircuit] = useState<Ref>(null);
+
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["v2_events_list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, series_id, v2_series(name)), v2_circuits(name)").order("start_date", { ascending: false });
+      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, series_id, v2_series(name)), v2_circuits(id, name)").order("start_date", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -68,6 +74,36 @@ export default function ManageEvents() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const updateEvent = useMutation({
+    mutationFn: async () => {
+      if (!editId) throw new Error("No event selected");
+      const { error } = await supabase.from("v2_events").update({
+        name: editForm.name,
+        round_number: editForm.round_number ? parseInt(editForm.round_number) : null,
+        start_date: editForm.start_date || null,
+        end_date: editForm.end_date || null,
+        description: editForm.description || null,
+        circuit_id: editCircuit?.id || null,
+      }).eq("id", editId);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_events_list"] }); setEditOpen(false); toast.success("Event updated"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const openEdit = (e: any) => {
+    setEditId(e.id);
+    setEditForm({
+      name: e.name,
+      round_number: e.round_number ? String(e.round_number) : "",
+      start_date: e.start_date || "",
+      end_date: e.end_date || "",
+      description: e.description || "",
+    });
+    setEditCircuit(e.v2_circuits ? { id: e.v2_circuits.id, label: e.v2_circuits.name } : null);
+    setEditOpen(true);
+  };
+
   const openNew = () => {
     setSeries(null); setSeason(null); setCircuit(null);
     setForm({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" });
@@ -92,7 +128,7 @@ export default function ManageEvents() {
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Rd</TableHead><TableHead>Event</TableHead><TableHead>Circuit</TableHead><TableHead>Series</TableHead><TableHead>Dates</TableHead><TableHead>Status</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Rd</TableHead><TableHead>Event</TableHead><TableHead>Circuit</TableHead><TableHead>Series</TableHead><TableHead>Dates</TableHead><TableHead>Status</TableHead><TableHead className="w-20"></TableHead></TableRow></TableHeader>
           <TableBody>
             {filtered.map((e: any) => (
               <TableRow key={e.id} className="cursor-pointer hover:bg-accent/50" onClick={() => navigate(`/manage/events/${e.id}`)}>
@@ -103,23 +139,28 @@ export default function ManageEvents() {
                 <TableCell className="text-sm text-muted-foreground">{e.start_date}{e.end_date && e.end_date !== e.start_date ? ` – ${e.end_date}` : ""}</TableCell>
                 <TableCell><Badge variant={e.status === "published" ? "default" : "secondary"}>{e.status}</Badge></TableCell>
                 <TableCell>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={ev => ev.stopPropagation()}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent onClick={ev => ev.stopPropagation()}>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Event</AlertDialogTitle>
-                        <AlertDialogDescription>This will permanently delete "{e.name}" and all its sessions and results. This action cannot be undone.</AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteEvent.mutate(e.id)}>Delete</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={ev => { ev.stopPropagation(); openEdit(e); }}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={ev => ev.stopPropagation()}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent onClick={ev => ev.stopPropagation()}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Event</AlertDialogTitle>
+                          <AlertDialogDescription>This will permanently delete "{e.name}" and all its sessions and results. This action cannot be undone.</AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deleteEvent.mutate(e.id)}>Delete</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -159,6 +200,32 @@ export default function ManageEvents() {
             </div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.name.trim() || !season}>Create</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Round #</Label><Input type="number" value={editForm.round_number} onChange={e => setEditForm(f => ({ ...f, round_number: e.target.value }))} /></div>
+              <div><Label>Event Name *</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
+            </div>
+            <div>
+              <Label>Circuit</Label>
+              <AutocompleteField entityType="circuit" value={editCircuit} onChange={setEditCircuit} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Start Date</Label><Input type="date" value={editForm.start_date} onChange={e => setEditForm(f => ({ ...f, start_date: e.target.value }))} /></div>
+              <div><Label>End Date</Label><Input type="date" value={editForm.end_date} onChange={e => setEditForm(f => ({ ...f, end_date: e.target.value }))} /></div>
+            </div>
+            <div><Label>Description</Label><Textarea value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={() => updateEvent.mutate()} disabled={!editForm.name.trim()}>Save</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
