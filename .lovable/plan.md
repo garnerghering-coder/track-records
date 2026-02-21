@@ -1,67 +1,53 @@
 
+# Fix F1 Import: Alias Matching and Season Car Assignment
 
-# Auto-Import F1 Sessions and Results (No AI)
+## Problem 1: Team aliases not checked during import
+The importer currently only checks `v2_teams.full_name` and `v2_teams.short_name`. It misses entries in `v2_team_season_names` (aliases), so "Kick Sauber" from the F1 site doesn't match "Stake F1 Team Kick Sauber" (an alias of "Audi F1 Team").
 
-## Overview
-Add a button to the event detail page that lets you paste a formula1.com race URL (e.g., `https://www.formula1.com/en/racing/2025/bahrain`). The system will scrape all session pages, parse the results using deterministic regex/text parsing, and create draft sessions with fully populated results -- all without AI.
+### Fix
+In the edge function, after loading existing teams, also load all `v2_team_season_names` for the event's season. The `matchTeam` function will check aliases in addition to canonical names. Flow:
+1. Get the event's `season_id`
+2. Query `v2_team_season_names` filtered to that season
+3. In `matchTeam`, first check canonical team names (existing logic), then check alias `display_name` values -- if an alias matches, return that alias's `team_id`
 
-## How It Works
+## Problem 2: Cars are the same per team per season
+F1 results pages don't list car models, but each team uses one car for an entire season. We can create a mapping table so the importer auto-assigns the correct car.
 
-**Step 1 -- You paste the F1 race URL**
-A dialog on the ManageEventDetail page accepts a URL like `https://www.formula1.com/en/racing/2025/bahrain`.
+### Solution: New `v2_team_season_cars` table
+A simple lookup table:
 
-**Step 2 -- Edge function scrapes and parses (no AI)**
-A new backend function (`import-f1-sessions`) does the following:
-1. Scrapes the race hub page via Firecrawl to discover which sessions exist (Practice 1, Practice 2, Practice 3, Qualifying, Race) and their result page URLs
-2. Scrapes each result page individually
-3. Parses the markdown tables using regex -- the F1 site has a very consistent format:
-   - Driver names come as `OscarPiastriPIA` -- regex splits on camelCase boundaries to extract first/last name
-   - Car numbers, teams, lap times, gaps, laps, points are all in fixed table columns
-   - Qualifying has Q1/Q2/Q3 columns; Practice has Time/Gap + Laps; Race has Laps + Time/Retired + Pts
+| Column | Type | Description |
+|---|---|---|
+| id | uuid | Primary key |
+| team_id | uuid | FK to v2_teams |
+| season_id | uuid | FK to v2_seasons |
+| car_id | uuid | FK to v2_cars |
+| created_at | timestamp | Auto |
 
-**Step 3 -- Smart matching against existing data**
-Before inserting, the function queries your existing `v2_drivers`, `v2_teams`, and `v2_cars` tables and tries to match:
-- **Drivers**: Exact full name match, then fuzzy first+last match, then abbreviated match (e.g., "L. Norris" -> "Lando Norris"). Only creates new records if no match found.
-- **Teams**: Case-insensitive name matching against existing team records. Creates new ones only if not found.
-- **Cars**: For F1, car models are typically not listed on the results page, so this field would be left empty (you can fill it in manually or via a mapping).
+Once you've set up the mapping for a season (e.g., Mercedes -> W16 for 2025), every import for that season will automatically fill in the car field for that team's entries.
 
-**Step 4 -- Sessions created as drafts**
-Each session is created in `v2_sessions` with status "draft", and its results go into the appropriate table (`v2_practice_results`, `v2_qualifying_results`, or `v2_race_results`). You review and publish when ready.
+### UI for managing these mappings
+On the ManageTeams page (where aliases are already managed), add a "Season Cars" section so you can assign a car per team per season. Alternatively, this could live on the event detail page as a one-time setup step.
 
-## What Gets Imported Per Session Type
+## Technical Changes
 
-| Session Type | Fields Imported |
-|---|---|
-| Practice 1/2/3 | Position, Car #, Driver, Team, Best Lap Time, Gap to P1, Laps Run |
-| Qualifying | Position, Car #, Driver, Team, Q1, Q2, Q3, Laps |
-| Race | Position, Car #, Driver, Team, Laps Completed, Total Time/Gap, Points, Status (DNF/DSQ) |
+### 1. Database migration
+- Create `v2_team_season_cars` table with RLS (public read, admin write)
+- Unique constraint on `(team_id, season_id)` so each team has exactly one car per season
 
-## UI Changes
+### 2. Edge function update (`import-f1-sessions/index.ts`)
+- After loading the event, fetch its `season_id`
+- Load `v2_team_season_names` for that season to use as alias lookup
+- Load `v2_team_season_cars` for that season to auto-assign `car_id`
+- Update `matchTeam` to check aliases before creating new teams
+- When inserting results (practice/qualifying/race), look up the `car_id` from the team-season-car mapping and include it
 
-- **ManageEventDetail page**: Add an "Import from F1.com" button next to the "Add Session" button
-- Clicking it opens a dialog where you paste the URL
-- Shows a progress indicator while scraping/parsing
-- On completion, shows a summary: "Created 5 sessions with 20 entries each. 18 drivers matched, 2 new drivers created."
-- Sessions appear as draft cards ready for review
+### 3. UI for season car mappings (`ManageTeams.tsx`)
+- In the existing alias dialog for a team, add a "Season Car" picker alongside the alias name
+- This lets you set which car each team uses per season
+- The car dropdown pulls from existing `v2_cars`
 
-## Technical Details
-
-### New Edge Function: `import-f1-sessions`
-- Receives: `{ url: string, event_id: string }`
-- Uses Firecrawl to scrape the hub page, extracts result page URLs via regex
-- Scrapes each result page, parses the markdown table rows
-- Driver name parsing: regex pattern `/^([A-Z][a-z]+)([A-Z][a-z]+(?:\s[a-z]+)*)([A-Z]{3})$/` handles names like `OscarPiastriPIA`, `MaxVerstappenVER`, `KimiAntonelliANT`
-- Matches drivers/teams against existing DB records using case-insensitive comparison and fuzzy matching
-- Inserts sessions + results into V2 tables
-- Returns summary of what was created/matched
-
-### Duplicate Prevention
-- Before creating sessions, checks if sessions with the same name already exist for this event
-- Driver matching uses a multi-step strategy: exact match, then first+last name match, then partial/abbreviated matching
-- Team matching is case-insensitive with common alias handling (e.g., "Haas F1 Team" matches "Haas")
-
-### Files to Create/Modify
-1. **Create** `supabase/functions/import-f1-sessions/index.ts` -- the edge function with scraping + parsing logic
-2. **Modify** `src/pages/manage/ManageEventDetail.tsx` -- add import button and dialog
-3. **Update** `supabase/config.toml` -- register the new function with `verify_jwt = false`
-
+### File changes
+1. **New migration** -- create `v2_team_season_cars` table
+2. **Edit** `supabase/functions/import-f1-sessions/index.ts` -- add alias + car lookup logic
+3. **Edit** `src/pages/manage/ManageTeams.tsx` -- add season car assignment UI
