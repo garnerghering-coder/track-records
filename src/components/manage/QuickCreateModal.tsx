@@ -21,6 +21,8 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
   const [name, setName] = useState(initialName);
   const [extra, setExtra] = useState("");
   const [extra2, setExtra2] = useState("");
+  const [extra3, setExtra3] = useState("");
+  const [extra4, setExtra4] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -48,7 +50,13 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
         if (error) throw error;
         onCreated({ id: data.id, label: data.name });
       } else if (entityType === "circuit") {
-        const { data, error } = await supabase.from("v2_circuits").insert({ name: name.trim(), country: extra.trim() || null, location: extra2.trim() || null }).select("id, name, country").single();
+        const { data, error } = await supabase.from("v2_circuits").insert({
+          name: name.trim(),
+          country: extra.trim() || null,
+          location: extra2.trim() || null,
+          latitude: extra3.trim() ? parseFloat(extra3) : null,
+          longitude: extra4.trim() ? parseFloat(extra4) : null,
+        } as any).select("id, name, country").single();
         if (error) throw error;
         onCreated({ id: data.id, label: data.country ? `${data.name}, ${data.country}` : data.name });
       } else if (entityType === "season") {
@@ -99,6 +107,10 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
             <>
               <div><Label>Country</Label><Input value={extra} onChange={e => setExtra(e.target.value)} /></div>
               <div><Label>Location</Label><Input value={extra2} onChange={e => setExtra2(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Latitude</Label><Input type="number" step="0.0001" value={extra3} onChange={e => setExtra3(e.target.value)} placeholder="e.g. 51.5014" /></div>
+                <div><Label>Longitude</Label><Input type="number" step="0.0001" value={extra4} onChange={e => setExtra4(e.target.value)} placeholder="e.g. -0.1419" /></div>
+              </div>
             </>
           )}
         </div>

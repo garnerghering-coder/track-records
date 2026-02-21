@@ -12,6 +12,7 @@ import { FileDown, TriangleIcon } from "lucide-react";
 import { exportSessionPdf } from "@/lib/pdf-export";
 import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
+import WeatherBubble from "@/components/WeatherBubble";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -64,6 +65,23 @@ export default function EventPage() {
     teamNameMap[tsn.team_id] = tsn.display_name;
   }
 
+  // Fetch weather data for all sessions
+  const sessionIds = sessions.map((s: any) => s.id);
+  const { data: weatherData = [] } = useQuery({
+    queryKey: ["public_weather", slug],
+    queryFn: async () => {
+      if (sessionIds.length === 0) return [];
+      const { data } = await supabase.from("v2_session_weather" as any).select("*").in("session_id", sessionIds);
+      return (data || []) as any[];
+    },
+    enabled: sessionIds.length > 0,
+  });
+
+  const weatherMap: Record<string, any> = {};
+  for (const w of weatherData) {
+    weatherMap[w.session_id] = w;
+  }
+
   if (isLoading) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Loading…</div></div>;
   if (!event) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Event not found or not published.</div><Footer /></div>;
 
@@ -111,7 +129,7 @@ export default function EventPage() {
               </TabsList>
               {sessions.map((s: any) => (
                 <TabsContent key={s.id} value={s.id}>
-                  <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} />
+                  <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} />
                 </TabsContent>
               ))}
             </Tabs>
@@ -144,7 +162,7 @@ function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: 
   );
 }
 
-function SessionResults({ session, event, teamNameMap, allSessions }: { session: any; event: any; teamNameMap: Record<string, string>; allSessions: any[] }) {
+function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }: { session: any; event: any; teamNameMap: Record<string, string>; allSessions: any[]; weatherMap: Record<string, any> }) {
   const type = session.session_type;
   const isRace = type === "race" || type === "sprint_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
@@ -266,8 +284,11 @@ function SessionResults({ session, event, teamNameMap, allSessions }: { session:
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">{session.name}</h3>
-          <Badge variant="outline" className="text-[10px]">{type.replace(/_/g, " ")}</Badge>
-          {session.date && <span className="text-xs text-muted-foreground">{new Date(session.date).toLocaleDateString()}</span>}
+          <WeatherBubble weather={weatherMap[session.id] || null} />
+          {!weatherMap[session.id] && (
+            <Badge variant="outline" className="text-[10px]">{type.replace(/_/g, " ")}</Badge>
+          )}
+          {session.date && <span className="text-xs text-muted-foreground">{new Date(session.date + "T00:00:00").toLocaleDateString()}</span>}
         </div>
         <Button variant="outline" size="sm" onClick={handleExport}>
           <FileDown className="h-3.5 w-3.5 mr-1" />Export PDF

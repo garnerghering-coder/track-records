@@ -1,0 +1,89 @@
+import { useState, useRef, useEffect } from "react";
+
+interface WeatherData {
+  condition_summary: string | null;
+  condition_emoji: string | null;
+  air_temp_min: number | null;
+  air_temp_max: number | null;
+  track_temp_min: number | null;
+  track_temp_max: number | null;
+  rain_mm: number | null;
+  rain_detail: string | null;
+  wind_summary: string | null;
+}
+
+export default function WeatherBubble({ weather }: { weather: WeatherData | null }) {
+  const [hovered, setHovered] = useState(false);
+  const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (hovered && bubbleRef.current) {
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const spaceRight = window.innerWidth - rect.right;
+      const style: React.CSSProperties = {
+        position: "fixed",
+        top: rect.bottom + 6,
+        zIndex: 50,
+      };
+      if (spaceRight > 280) {
+        style.left = rect.left;
+      } else {
+        style.right = window.innerWidth - rect.right;
+      }
+      setTooltipStyle(style);
+    }
+  }, [hovered]);
+
+  if (!weather) return null;
+
+  const emoji = weather.condition_emoji || "🌤️";
+  const hasRain = weather.rain_mm != null && weather.rain_mm > 0;
+
+  // Build compact bubble content
+  const bubbleContent = (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-sm leading-none">{emoji}</span>
+      {hasRain && (
+        <span className="text-[10px] font-medium text-muted-foreground">{weather.rain_mm}mm</span>
+      )}
+    </span>
+  );
+
+  return (
+    <div
+      ref={bubbleRef}
+      className="relative inline-flex"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/60 border border-border cursor-default text-sm leading-snug">
+        {bubbleContent}
+      </div>
+
+      {hovered && (
+        <div style={tooltipStyle} className="w-64 rounded-lg border border-border bg-popover p-3 shadow-lg">
+          <p className="text-xs font-semibold text-foreground mb-1.5">Weather</p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>
+              <span className="text-sm mr-1">{emoji}</span>
+              <span className="text-foreground font-medium">{weather.condition_summary || "No data"}</span>
+            </p>
+            {(weather.air_temp_min != null || weather.air_temp_max != null) && (
+              <p>Air: {weather.air_temp_min}–{weather.air_temp_max} °C</p>
+            )}
+            {(weather.track_temp_min != null || weather.track_temp_max != null) && (
+              <p>Track: {weather.track_temp_min}–{weather.track_temp_max} °C</p>
+            )}
+            {hasRain && (
+              <p>Rain: {weather.rain_mm} mm{weather.rain_detail ? ` (${weather.rain_detail})` : ""}</p>
+            )}
+            {weather.wind_summary && (
+              <p>Wind: {weather.wind_summary}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

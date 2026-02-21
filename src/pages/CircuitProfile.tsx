@@ -99,6 +99,7 @@ const CircuitProfile = () => {
             {circuit.location && <span>{circuit.location}</span>}
             {circuit.length_km && <span>{circuit.length_km} km</span>}
             {circuit.turns && <span>{circuit.turns} turns</span>}
+            {circuit.latitude && circuit.longitude && <span>📍 {Number(circuit.latitude).toFixed(4)}, {Number(circuit.longitude).toFixed(4)}</span>}
           </div>
           {circuit.website && (
             <a href={circuit.website} target="_blank" rel="noopener" className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:underline">
