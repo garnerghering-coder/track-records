@@ -364,7 +364,7 @@ serve(async (req) => {
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Verify event exists and get season_id + year
-    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name, season_id, v2_seasons(year)").eq("id", event_id).single();
+    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name, season_id, circuit_id, v2_seasons(year)").eq("id", event_id).single();
     if (eventErr || !event) {
       return new Response(
         JSON.stringify({ error: "Event not found" }),
@@ -558,6 +558,17 @@ serve(async (req) => {
           }
           newSession = sess;
           existingSessionNames.add(sessionInfo.name);
+
+          // Auto-assign layout if the event's circuit has exactly one layout
+          if (event.circuit_id) {
+            const { data: layouts } = await adminClient
+              .from("v2_circuit_layouts")
+              .select("id")
+              .eq("circuit_id", event.circuit_id);
+            if (layouts && layouts.length === 1) {
+              await adminClient.from("v2_sessions").update({ layout_id: layouts[0].id } as any).eq("id", newSession.id);
+            }
+          }
         }
         summary.sessions_created++;
 
@@ -834,7 +845,14 @@ serve(async (req) => {
             if (e.resultStatus === "finished" && rawGap.startsWith("+")) {
               // Clean the gap: remove trailing 's', ensure proper format
               if (/lap/i.test(rawGap)) {
-                gapToLeader = rawGap; // Keep "+1 Lap" as-is
+                // Normalize: "+1 Lap", "+2 Laps", etc.
+                const lapMatch = rawGap.match(/\+(\d+)\s*lap/i);
+                if (lapMatch) {
+                  const n = parseInt(lapMatch[1], 10);
+                  gapToLeader = `+${n} ${n === 1 ? "Lap" : "Laps"}`;
+                } else {
+                  gapToLeader = rawGap;
+                }
               } else {
                 const gapMs = parseTimeMs(rawGap);
                 gapToLeader = gapMs !== null ? fmtGap(gapMs) : rawGap;
