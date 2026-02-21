@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { formatDateRange } from "@/lib/date-utils";
-import { computeTrackMetrics, categoryColor } from "@/lib/track-calculations";
+import { computeTrackMetrics, categoryBubbleClasses } from "@/lib/track-calculations";
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -82,11 +82,11 @@ const CircuitProfile = () => {
                   l.heavy_braking_corners
                 );
                 const metrics = [
-                  m.tcsCategory && { title: "Track Character", label: m.tcsCategory, color: categoryColor(m.tcsCategory) },
-                  m.eiCategory && { title: "Elevation", label: m.eiCategory, color: categoryColor(m.eiCategory) },
-                  m.csiCategory && { title: "Corner Severity", label: m.csiCategory, color: categoryColor(m.csiCategory) },
-                  m.tdiCategory && { title: "Track Demand", label: m.tdiCategory, color: categoryColor(m.tdiCategory) },
-                ].filter(Boolean) as { title: string; label: string; color: string }[];
+                  m.tcsCategory && { title: "Track Character", label: m.tcsCategory, classes: categoryBubbleClasses(m.tcsCategory) },
+                  m.eiCategory && { title: "Elevation", label: m.eiCategory, classes: categoryBubbleClasses(m.eiCategory) },
+                  m.csiCategory && { title: "Corner Severity", label: m.csiCategory, classes: categoryBubbleClasses(m.csiCategory) },
+                  m.tdiCategory && { title: "Track Demand", label: m.tdiCategory, classes: categoryBubbleClasses(m.tdiCategory) },
+                ].filter(Boolean) as { title: string; label: string; classes: string }[];
 
                 return (
                   <div key={l.id} className="rounded-lg border border-border bg-card p-4">
@@ -98,12 +98,11 @@ const CircuitProfile = () => {
                       </div>
                     </div>
                     {metrics.length > 0 && (
-                      <div className="flex flex-wrap gap-4 mt-3">
+                      <div className="flex flex-wrap gap-2 mt-3">
                         {metrics.map((t) => (
-                          <div key={t.title} className="flex flex-col">
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{t.title}</span>
-                            <span className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
-                          </div>
+                          <span key={t.title} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${t.classes}`}>
+                            <span className="opacity-60 font-medium">{t.title}:</span> {t.label}
+                          </span>
                         ))}
                       </div>
                     )}

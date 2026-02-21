@@ -89,29 +89,50 @@ function tdiCategory(v: number): string {
 
 export function categoryColor(category: string): string {
   switch (category) {
-    // TCS
     case "Power Circuit": return "text-blue-400";
     case "Speed Circuit": return "text-sky-400";
     case "High-Speed Technical": return "text-teal-400";
     case "Balanced": return "text-green-400";
     case "Technical": return "text-orange-400";
     case "Tight & Twisty": return "text-red-400";
-    // EI
     case "Flat": return "text-green-400";
     case "Undulating": return "text-yellow-400";
     case "Hilly": return "text-orange-400";
     case "Highland": return "text-amber-500";
     case "Mountain": return "text-red-400";
-    // CSI
     case "Flowing": return "text-green-400";
     case "Rhythmic": return "text-yellow-400";
     case "High Braking Density": return "text-orange-400";
     case "Extreme Braking Density": return "text-red-400";
-    // TDI
     case "Efficient": return "text-green-400";
     case "Active": return "text-yellow-400";
     case "Punishing": return "text-orange-400";
     case "Relentless": return "text-red-400";
     default: return "text-muted-foreground";
+  }
+}
+
+export function categoryBubbleClasses(category: string): string {
+  switch (category) {
+    case "Power Circuit": return "bg-blue-400/15 text-blue-400 border-blue-400/30";
+    case "Speed Circuit": return "bg-sky-400/15 text-sky-400 border-sky-400/30";
+    case "High-Speed Technical": return "bg-teal-400/15 text-teal-400 border-teal-400/30";
+    case "Balanced": return "bg-green-400/15 text-green-400 border-green-400/30";
+    case "Technical": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
+    case "Tight & Twisty": return "bg-red-400/15 text-red-400 border-red-400/30";
+    case "Flat": return "bg-green-400/15 text-green-400 border-green-400/30";
+    case "Undulating": return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
+    case "Hilly": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
+    case "Highland": return "bg-amber-500/15 text-amber-500 border-amber-500/30";
+    case "Mountain": return "bg-red-400/15 text-red-400 border-red-400/30";
+    case "Flowing": return "bg-green-400/15 text-green-400 border-green-400/30";
+    case "Rhythmic": return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
+    case "High Braking Density": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
+    case "Extreme Braking Density": return "bg-red-400/15 text-red-400 border-red-400/30";
+    case "Efficient": return "bg-green-400/15 text-green-400 border-green-400/30";
+    case "Active": return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
+    case "Punishing": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
+    case "Relentless": return "bg-red-400/15 text-red-400 border-red-400/30";
+    default: return "bg-muted text-muted-foreground border-border";
   }
 }
