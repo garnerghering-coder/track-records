@@ -112,6 +112,43 @@ function detectSessionType(url: string, title: string): { type: string; name: st
   return { type: "other", name: "Unknown Session" };
 }
 
+/** Parse session schedule from the F1 hub page markdown.
+ *  Lines look like: "- 11AprChequered FlagPractice 107:30\- 08:30"
+ *  or "- 13AprChequered FlagRace11:00"
+ */
+function parseScheduleFromHub(hubMarkdown: string, year: number): Map<string, { date: string; start_time: string; end_time: string | null }> {
+  const schedule = new Map<string, { date: string; start_time: string; end_time: string | null }>();
+  const months: Record<string, string> = {
+    Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+    Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+  };
+
+  // Match lines like: "- 11AprChequered FlagPractice 107:30\- 08:30" or "- 13AprRace11:00"
+  // Pattern: day + month + optional junk + session name + start time + optional end time
+  const lineRegex = /[-*]\s*(\d{1,2})(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*?(?:Chequered Flag|Green Flag|Red Flag)?(Practice \d|Qualifying|Sprint Qualifying|Sprint Shootout|Sprint Race|Sprint|Race)(\d{1,2}:\d{2})(?:\\?-\s*(\d{1,2}:\d{2}))?/gi;
+
+  let m: RegExpExecArray | null;
+  while ((m = lineRegex.exec(hubMarkdown)) !== null) {
+    const day = m[1].padStart(2, "0");
+    const monthStr = m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase();
+    const month = months[monthStr];
+    if (!month) continue;
+
+    let sessionName = m[3].trim();
+    // Normalize session names to match detectSessionType output
+    if (/^Sprint Qualifying|Sprint Shootout$/i.test(sessionName)) sessionName = "Sprint Qualifying";
+    else if (/^Sprint Race|^Sprint$/i.test(sessionName)) sessionName = "Sprint Race";
+
+    const date = `${year}-${month}-${day}`;
+    const startTime = m[4];
+    const endTime = m[5] || null;
+
+    schedule.set(sessionName, { date, start_time: startTime, end_time: endTime });
+  }
+
+  return schedule;
+}
+
 /** Parse markdown table rows into arrays of cells */
 function parseMarkdownTable(markdown: string): string[][] {
   const lines = markdown.split("\n");
@@ -324,8 +361,8 @@ serve(async (req) => {
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify event exists and get season_id
-    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name, season_id").eq("id", event_id).single();
+    // Verify event exists and get season_id + year
+    const { data: event, error: eventErr } = await adminClient.from("v2_events").select("id, name, season_id, v2_seasons(year)").eq("id", event_id).single();
     if (eventErr || !event) {
       return new Response(
         JSON.stringify({ error: "Event not found" }),
@@ -395,6 +432,11 @@ serve(async (req) => {
     }
 
     console.log("Found result URLs:", uniqueUrls);
+
+    // Parse session schedule (dates, times) from the hub page
+    const seasonYear = (event as any).v2_seasons?.year || new Date().getFullYear();
+    const sessionSchedule = parseScheduleFromHub(hubMarkdown, seasonYear);
+    console.log("Parsed schedule:", JSON.stringify(Object.fromEntries(sessionSchedule)));
 
     // Load existing data for matching (including aliases and season cars)
     const seasonId = event.season_id;
@@ -478,6 +520,9 @@ serve(async (req) => {
         // In preview mode, skip session creation — just parse data
         let newSession: { id: string } | null = null;
         if (!isPreview) {
+          // Look up schedule info for this session
+          const scheduleInfo = sessionSchedule.get(sessionInfo.name);
+
           const { data: sess, error: sessionErr } = await adminClient
             .from("v2_sessions")
             .insert({
@@ -487,6 +532,9 @@ serve(async (req) => {
               status: "draft" as any,
               sort_order: sortOrder++,
               source_document_url: resultUrl,
+              date: scheduleInfo?.date || null,
+              start_time: scheduleInfo?.start_time || null,
+              end_time: scheduleInfo?.end_time || null,
             } as any)
             .select("id")
             .single();
