@@ -144,7 +144,7 @@ const DriverProfilePage = () => {
                 {driver.full_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
               </div>
               <div>
-                <h1 className="font-accent text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
+                <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
                   {driver.full_name}
                 </h1>
                 <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
