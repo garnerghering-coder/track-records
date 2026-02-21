@@ -380,7 +380,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
                 {isRace && <>
                   {hasRaceLaps && <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>}
                   {hasTotalTime && <TableCell className="font-mono text-xs">{r.total_time || "—"}</TableCell>}
-                  {hasGapLeader && <TableCell className="font-mono text-xs">{r.gap_to_leader || "—"}</TableCell>}
+                  {hasGapLeader && <TableCell className="font-mono text-xs">{(() => { const g = r.gap_to_leader; if (!g) return "—"; const lapMatch = g.match(/^\+(\d+)\s*lap/i); if (lapMatch) { const n = parseInt(lapMatch[1], 10); return `+${n} ${n === 1 ? "Lap" : "Laps"}`; } return g; })()}</TableCell>}
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   {hasFastestLap && <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>}
                   {hasAvgLap && <TableCell className="font-mono text-xs">{r.average_lap_time || "—"}</TableCell>}
