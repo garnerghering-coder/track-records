@@ -1059,6 +1059,47 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_circuit_layouts: {
+        Row: {
+          circuit_id: string
+          created_at: string
+          id: string
+          layout_image_url: string | null
+          length_km: number | null
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          circuit_id: string
+          created_at?: string
+          id?: string
+          layout_image_url?: string | null
+          length_km?: number | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          circuit_id?: string
+          created_at?: string
+          id?: string
+          layout_image_url?: string | null
+          length_km?: number | null
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_circuit_layouts_circuit_id_fkey"
+            columns: ["circuit_id"]
+            isOneToOne: false
+            referencedRelation: "v2_circuits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_circuits: {
         Row: {
           country: string | null
@@ -1694,6 +1735,7 @@ export type Database = {
           end_time: string | null
           event_id: string
           id: string
+          layout_id: string | null
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order: number
@@ -1709,6 +1751,7 @@ export type Database = {
           end_time?: string | null
           event_id: string
           id?: string
+          layout_id?: string | null
           name: string
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
@@ -1724,6 +1767,7 @@ export type Database = {
           end_time?: string | null
           event_id?: string
           id?: string
+          layout_id?: string | null
           name?: string
           session_type?: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
@@ -1738,6 +1782,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "v2_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_sessions_layout_id_fkey"
+            columns: ["layout_id"]
+            isOneToOne: false
+            referencedRelation: "v2_circuit_layouts"
             referencedColumns: ["id"]
           },
         ]

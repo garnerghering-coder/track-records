@@ -30,7 +30,7 @@ export default function ManageEventDetail() {
   const qc = useQueryClient();
   const [sessionOpen, setSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<any>(null);
-  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "" });
+  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "", layout_id: "" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   // Event edit state
@@ -52,10 +52,23 @@ export default function ManageEventDetail() {
   const { data: sessions = [] } = useQuery({
     queryKey: ["v2_sessions", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_sessions").select("*").eq("event_id", id!).order("sort_order", { ascending: true }).order("date", { ascending: true });
+      const { data, error } = await supabase.from("v2_sessions").select("*, v2_circuit_layouts(id, name, length_km)").eq("event_id", id!).order("sort_order", { ascending: true }).order("date", { ascending: true });
       if (error) throw error;
       return data;
     },
+  });
+
+  // Fetch layouts for the event's circuit
+  const eventCircuitId = event?.circuit_id;
+  const { data: circuitLayouts = [] } = useQuery({
+    queryKey: ["v2_circuit_layouts", eventCircuitId],
+    queryFn: async () => {
+      if (!eventCircuitId) return [];
+      const { data, error } = await supabase.from("v2_circuit_layouts").select("*").eq("circuit_id", eventCircuitId).order("sort_order");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!eventCircuitId,
   });
 
   const addSession = useMutation({
@@ -69,6 +82,7 @@ export default function ManageEventDetail() {
         start_time: sessionForm.start_time || null,
         end_time: sessionForm.end_time || null,
         sort_order: maxOrder + 1,
+        layout_id: sessionForm.layout_id || null,
       } as any);
       if (error) throw error;
     },
@@ -85,6 +99,7 @@ export default function ManageEventDetail() {
         date: sessionForm.date || null,
         start_time: sessionForm.start_time || null,
         end_time: sessionForm.end_time || null,
+        layout_id: sessionForm.layout_id || null,
       } as any).eq("id", editingSession.id);
       if (error) throw error;
     },
@@ -184,13 +199,14 @@ export default function ManageEventDetail() {
       date: s.date ? s.date.split("T")[0] : "",
       start_time: s.start_time || "",
       end_time: s.end_time || "",
+      layout_id: s.layout_id || "",
     });
     setSessionOpen(true);
   };
 
   const openNewSession = () => {
     setEditingSession(null);
-    setSessionForm({ name: "", session_type: "practice", date: "", start_time: "", end_time: "" });
+    setSessionForm({ name: "", session_type: "practice", date: "", start_time: "", end_time: "", layout_id: "" });
     setSessionOpen(true);
   };
 
@@ -301,6 +317,9 @@ export default function ManageEventDetail() {
                 <Badge variant="outline" className="text-[10px]">{s.session_type.replace("_", " ")}</Badge>
               </div>
               {s.date && <p className="text-xs text-muted-foreground">{s.date.split("T")[0]}</p>}
+              {s.v2_circuit_layouts && (
+                <p className="text-xs text-muted-foreground">Layout: {s.v2_circuit_layouts.name}{s.v2_circuit_layouts.length_km ? ` (${s.v2_circuit_layouts.length_km} km)` : ""}</p>
+              )}
               {(s.start_time || s.end_time) && (
                 <p className="text-xs text-muted-foreground">{s.start_time || "?"} – {s.end_time || "?"}</p>
               )}
@@ -364,6 +383,20 @@ export default function ManageEventDetail() {
               <div><Label>Start Time (track)</Label><Input type="text" pattern="[0-2][0-9]:[0-5][0-9]" maxLength={5} value={sessionForm.start_time} onChange={e => setSessionForm(f => ({ ...f, start_time: e.target.value }))} placeholder="14:00" /></div>
               <div><Label>End Time (track)</Label><Input type="text" pattern="[0-2][0-9]:[0-5][0-9]" maxLength={5} value={sessionForm.end_time} onChange={e => setSessionForm(f => ({ ...f, end_time: e.target.value }))} placeholder="15:30" /></div>
             </div>
+            {circuitLayouts.length > 0 && (
+              <div>
+                <Label>Track Layout</Label>
+                <Select value={sessionForm.layout_id} onValueChange={v => setSessionForm(f => ({ ...f, layout_id: v === "_none" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select layout…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {circuitLayouts.map((l: any) => (
+                      <SelectItem key={l.id} value={l.id}>{l.name}{l.length_km ? ` (${l.length_km} km)` : ""}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setSessionOpen(false); setEditingSession(null); }}>Cancel</Button>
