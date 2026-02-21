@@ -1063,11 +1063,13 @@ export type Database = {
         Row: {
           circuit_id: string
           created_at: string
+          heavy_braking_corners: number | null
           id: string
           layout_image_url: string | null
           length_km: number | null
           name: string
           sort_order: number
+          total_elevation_change_m: number | null
           total_straight_length_km: number | null
           turns: number | null
           updated_at: string
@@ -1075,11 +1077,13 @@ export type Database = {
         Insert: {
           circuit_id: string
           created_at?: string
+          heavy_braking_corners?: number | null
           id?: string
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
           sort_order?: number
+          total_elevation_change_m?: number | null
           total_straight_length_km?: number | null
           turns?: number | null
           updated_at?: string
@@ -1087,11 +1091,13 @@ export type Database = {
         Update: {
           circuit_id?: string
           created_at?: string
+          heavy_braking_corners?: number | null
           id?: string
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
           sort_order?: number
+          total_elevation_change_m?: number | null
           total_straight_length_km?: number | null
           turns?: number | null
           updated_at?: string

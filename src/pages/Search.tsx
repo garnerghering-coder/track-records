@@ -9,6 +9,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
 import { formatDateRange } from "@/lib/date-utils";
+import { computeTrackMetrics, categoryColor } from "@/lib/track-calculations";
 
 type ResultItem = {
   type: "driver" | "team" | "event" | "series" | "circuit" | "car";
@@ -17,6 +18,7 @@ type ResultItem = {
   url: string;
   subtitle?: string;
   nationality?: string | null;
+  tags?: { label: string; color: string }[];
 };
 
 const typeFilter = [
@@ -152,9 +154,31 @@ const SearchPage = () => {
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_circuits").select("id, name, country, location")
               .or(`name.ilike.%${term}%,country.ilike.%${term}%,location.ilike.%${term}%`).limit(20);
-            (data || []).forEach((c: any) => {
+            if (!data) continue;
+            const circuitIds = data.map((c: any) => c.id);
+            const { data: layoutData } = circuitIds.length > 0
+              ? await supabase.from("v2_circuit_layouts").select("circuit_id, length_km, turns, total_straight_length_km, total_elevation_change_m, heavy_braking_corners").in("circuit_id", circuitIds).order("sort_order").limit(100)
+              : { data: [] };
+            const layoutMap: Record<string, any> = {};
+            (layoutData || []).forEach((l: any) => { if (!layoutMap[l.circuit_id]) layoutMap[l.circuit_id] = l; });
+
+            data.forEach((c: any) => {
               if (!existing.has(c.id)) {
-                items.push({ type: "circuit", id: c.id, label: c.name, url: `/circuit/${c.id}`, subtitle: [c.location, c.country].filter(Boolean).join(", ") });
+                const l = layoutMap[c.id];
+                let tags: { label: string; color: string }[] = [];
+                if (l) {
+                  const m = computeTrackMetrics(
+                    l.length_km ? Number(l.length_km) : null, l.turns,
+                    l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
+                    l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
+                    l.heavy_braking_corners
+                  );
+                  if (m.tcsCategory) tags.push({ label: m.tcsCategory, color: categoryColor(m.tcsCategory) });
+                  if (m.eiCategory) tags.push({ label: m.eiCategory, color: categoryColor(m.eiCategory) });
+                  if (m.csiCategory) tags.push({ label: m.csiCategory, color: categoryColor(m.csiCategory) });
+                  if (m.tdiCategory) tags.push({ label: m.tdiCategory, color: categoryColor(m.tdiCategory) });
+                }
+                items.push({ type: "circuit", id: c.id, label: c.name, url: `/circuit/${c.id}`, subtitle: [c.location, c.country].filter(Boolean).join(", "), tags });
                 existing.add(c.id);
               }
             });
@@ -254,6 +278,13 @@ const SearchPage = () => {
                     <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
                   </div>
                   {r.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{r.subtitle}</p>}
+                  {r.tags && r.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {r.tags.map((t) => (
+                        <span key={t.label} className={`text-xs font-semibold ${t.color}`}>{t.label}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </Link>
             ))}
