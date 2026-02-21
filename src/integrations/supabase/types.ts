@@ -1067,8 +1067,8 @@ export type Database = {
           layout_image_url: string | null
           length_km: number | null
           name: string
-          significant_straights: number | null
           sort_order: number
+          total_straight_length_km: number | null
           turns: number | null
           updated_at: string
         }
@@ -1079,8 +1079,8 @@ export type Database = {
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
-          significant_straights?: number | null
           sort_order?: number
+          total_straight_length_km?: number | null
           turns?: number | null
           updated_at?: string
         }
@@ -1091,8 +1091,8 @@ export type Database = {
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
-          significant_straights?: number | null
           sort_order?: number
+          total_straight_length_km?: number | null
           turns?: number | null
           updated_at?: string
         }
