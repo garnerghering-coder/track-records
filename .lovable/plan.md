@@ -1,18 +1,34 @@
 
 
-# Fix: Convert Session Times to Track Time
+## Driver Profile: Average Statistics Section
 
-## Status: IMPLEMENTED ✅
+### What will be added
+A new "Statistics" card section placed between the hero banner and the results table. It will display two key averages computed from the driver's existing result data:
 
-## Problem
-The F1 website renders schedule times in a server-side timezone that differs from both the scraper's browser timezone and track time. The previous offset approach (MY TIME vs TRACK TIME) was unreliable because the schedule times and the clock indicator use different timezone sources.
+- **Avg. Qualifying Position** -- mean of all `position` values from qualifying results
+- **Avg. Race Finish** -- mean of all `position` values from race results (only counting finished results with a valid position)
 
-## Solution
-Instead of calculating timezone offsets, we now use Firecrawl's `actions` feature to click the "Track time" toggle on the F1 hub page before scraping. This makes the schedule render in track-local time directly — no math needed.
+A **season filter dropdown** will let users narrow these averages to a specific year (e.g. "2025", "2024") or view "All Seasons" (default). The available years are derived from the results data already fetched, so no extra database calls are needed.
 
-## Implementation
-Single file: `supabase/functions/import-f1-sessions/index.ts`
+### Visual design
+- Two stat cards side by side (responsive grid, 2 columns on desktop, stacked on mobile)
+- Each card shows the metric title, the computed average (to 1 decimal place), and a small subtitle like "across X results"
+- A compact Select dropdown in the section header for season filtering
+- Uses the existing Card component and theme colors to match the rest of the profile
 
-- Added Firecrawl `actions` to the hub page scrape: wait 2s for page load, click `menu li:nth-child(2) button` (the "Track time" toggle), wait 1s for re-render
-- Removed `extractTrackTimeOffsetMinutes` and `applyTimeOffset` helper functions
-- Removed offset parameter from `parseScheduleFromHub` — times are used as-is since they're already in track time
+### Technical approach (single file edit)
+
+**File: `src/pages/DriverProfile.tsx`**
+
+1. Add a `selectedSeason` state (string, default `"all"`)
+2. Derive the list of unique season years from `raceHistory` and qualifying results (from `allSessionResults` where `_source === "qualifying"`)
+3. Compute averages with a `useMemo`:
+   - Filter race rows and qualifying rows by selected season (if not "all")
+   - For each set, collect valid `position` values, compute mean
+4. Render a new section between the hero `</section>` and the results `<div>`:
+   - Section heading "Statistics" with the season Select dropdown aligned right
+   - Two Card components displaying the averages
+5. Import `Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem` from the existing UI components, and `Card`, `CardContent`
+
+No database changes, no new files -- purely client-side math on data already fetched.
+
