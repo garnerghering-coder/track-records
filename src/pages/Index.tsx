@@ -18,11 +18,11 @@ const Index = () => {
   useEffect(() => {
     const fetchStats = async () => {
       const [d, t, e, s, c] = await Promise.all([
-        supabase.from("driver_profiles").select("id", { count: "exact", head: true }),
-        supabase.from("team_profiles").select("id", { count: "exact", head: true }),
-        supabase.from("race_events").select("id", { count: "exact", head: true }),
-        supabase.from("series").select("id", { count: "exact", head: true }),
-        supabase.from("car_models").select("id", { count: "exact", head: true }),
+        supabase.from("v2_drivers").select("id", { count: "exact", head: true }),
+        supabase.from("v2_teams").select("id", { count: "exact", head: true }),
+        supabase.from("v2_events").select("id", { count: "exact", head: true }),
+        supabase.from("v2_series").select("id", { count: "exact", head: true }),
+        supabase.from("v2_cars").select("id", { count: "exact", head: true }),
       ]);
       setStats({
         drivers: d.count ?? 0,
@@ -35,8 +35,9 @@ const Index = () => {
 
     const fetchRecent = async () => {
       const { data } = await supabase
-        .from("race_events")
-        .select("id, event_name, series_name, season_year, location, event_date")
+        .from("v2_events")
+        .select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
+        .eq("status", "published" as any)
         .order("created_at", { ascending: false })
         .limit(6);
       setRecentEvents(data ?? []);
@@ -152,20 +153,20 @@ const Index = () => {
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {recentEvents.map((ev) => (
+              {recentEvents.map((ev: any) => (
                 <Link
                   key={ev.id}
-                  to={`/event/${ev.id}`}
+                  to={`/events/${ev.id}`}
                   className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all"
                 >
                   <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
-                    {ev.event_name}
+                    {ev.name}
                   </h3>
-                  <p className="text-sm text-muted-foreground mt-1 truncate">{ev.series_name}</p>
+                  <p className="text-sm text-muted-foreground mt-1 truncate">{ev.v2_seasons?.v2_series?.name}</p>
                   <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                    <span>{ev.season_year}</span>
-                    {ev.location && <span>{ev.location}</span>}
-                    {ev.event_date && <span>{new Date(ev.event_date).toLocaleDateString()}</span>}
+                    <span>{ev.v2_seasons?.year}</span>
+                    {ev.v2_circuits?.name && <span>{ev.v2_circuits.name}{ev.v2_circuits.country ? `, ${ev.v2_circuits.country}` : ""}</span>}
+                    {ev.start_date && <span>{new Date(ev.start_date).toLocaleDateString()}</span>}
                   </div>
                 </Link>
               ))}

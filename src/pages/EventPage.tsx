@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
@@ -324,10 +324,16 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
                   </TableCell>
                 )}
                 <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>
-                <TableCell className="font-medium">{r.v2_drivers?.full_name || "—"}</TableCell>
+                <TableCell className="font-medium">
+                  {r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors">{r.v2_drivers?.full_name || "—"}</Link> : "—"}
+                </TableCell>
                 <TableCell><FlagImage nationality={r.v2_drivers?.nationality} size={18} /></TableCell>
-                <TableCell className="text-muted-foreground">{getTeamName(r)}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {r.team_id ? <Link to={`/team/${r.team_id}`} className="hover:text-primary transition-colors">{getTeamName(r)}</Link> : getTeamName(r)}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-xs">
+                  {r.car_id ? <Link to={`/car/${r.car_id}`} className="hover:text-primary transition-colors">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</Link> : (r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—")}
+                </TableCell>
                 {isPractice && <>
                   <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>
