@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { computeTrackMetrics, trackTypeLabel, trackTypeColor } from "@/lib/track-calculations";
 
 export default function ManageCircuits() {
   const qc = useQueryClient();
@@ -19,7 +20,7 @@ export default function ManageCircuits() {
   // Layout state
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [editingLayout, setEditingLayout] = useState<any>(null);
-  const [layoutForm, setLayoutForm] = useState({ name: "", length_km: "", layout_image_url: "" });
+  const [layoutForm, setLayoutForm] = useState({ name: "", length_km: "", layout_image_url: "", turns: "", significant_straights: "" });
   const [expandedCircuit, setExpandedCircuit] = useState<string | null>(null);
 
   const { data: circuits = [], isLoading } = useQuery({
@@ -86,6 +87,8 @@ export default function ManageCircuits() {
         name: layoutForm.name,
         length_km: layoutForm.length_km ? parseFloat(layoutForm.length_km) : null,
         layout_image_url: layoutForm.layout_image_url || null,
+        turns: layoutForm.turns ? parseInt(layoutForm.turns) : null,
+        significant_straights: layoutForm.significant_straights ? parseInt(layoutForm.significant_straights) : null,
       };
       if (editingLayout) {
         const { error } = await supabase.from("v2_circuit_layouts").update(payload as any).eq("id", editingLayout.id);
@@ -123,7 +126,7 @@ export default function ManageCircuits() {
 
   const openNewLayout = (circuitId: string) => {
     setEditingLayout(null);
-    setLayoutForm({ name: "", length_km: "", layout_image_url: "" });
+    setLayoutForm({ name: "", length_km: "", layout_image_url: "", turns: "", significant_straights: "" });
     setExpandedCircuit(circuitId);
     setLayoutOpen(true);
   };
@@ -134,6 +137,8 @@ export default function ManageCircuits() {
       name: layout.name,
       length_km: layout.length_km != null ? String(layout.length_km) : "",
       layout_image_url: layout.layout_image_url || "",
+      turns: layout.turns != null ? String(layout.turns) : "",
+      significant_straights: layout.significant_straights != null ? String(layout.significant_straights) : "",
     });
     setLayoutOpen(true);
   };
@@ -189,18 +194,30 @@ export default function ManageCircuits() {
                             <p className="text-xs text-muted-foreground">No layouts defined. Add one to specify different track configurations.</p>
                           ) : (
                             <div className="space-y-1">
-                              {circuitLayouts.map((l: any) => (
+                              {circuitLayouts.map((l: any) => {
+                                const metrics = computeTrackMetrics(l.length_km ? Number(l.length_km) : null, l.turns, l.significant_straights);
+                                return (
                                 <div key={l.id} className="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-sm">
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-3 flex-wrap">
                                     <span className="font-medium">{l.name}</span>
                                     {l.length_km && <span className="text-xs text-muted-foreground">{l.length_km} km</span>}
+                                    {l.turns != null && <span className="text-xs text-muted-foreground">{l.turns} turns</span>}
+                                    {metrics.trackType && (
+                                      <span className={`text-xs font-medium ${trackTypeColor(metrics.trackType)}`}>
+                                        {trackTypeLabel(metrics.trackType)}
+                                      </span>
+                                    )}
+                                    {metrics.technicalityScore != null && (
+                                      <span className="text-xs text-muted-foreground">Tech: {metrics.technicalityScore}/10</span>
+                                    )}
                                   </div>
                                   <div className="flex gap-1">
                                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEditLayout(l)}><Pencil className="h-3 w-3" /></Button>
                                     <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => delLayout.mutate(l.id)}><Trash2 className="h-3 w-3" /></Button>
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -241,6 +258,10 @@ export default function ManageCircuits() {
           <div className="space-y-3">
             <div><Label>Layout Name *</Label><Input value={layoutForm.name} onChange={e => setLayoutForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. GP Circuit, National, Sprint" /></div>
             <div><Label>Length (km)</Label><Input type="number" step="0.001" value={layoutForm.length_km} onChange={e => setLayoutForm(f => ({ ...f, length_km: e.target.value }))} placeholder="e.g. 3.621" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Turns</Label><Input type="number" value={layoutForm.turns} onChange={e => setLayoutForm(f => ({ ...f, turns: e.target.value }))} placeholder="e.g. 14" /></div>
+              <div><Label>Significant Straights (≥500m)</Label><Input type="number" value={layoutForm.significant_straights} onChange={e => setLayoutForm(f => ({ ...f, significant_straights: e.target.value }))} placeholder="e.g. 2" /></div>
+            </div>
             <div><Label>Layout Image URL</Label><Input value={layoutForm.layout_image_url} onChange={e => setLayoutForm(f => ({ ...f, layout_image_url: e.target.value }))} /></div>
           </div>
           <DialogFooter>

@@ -1067,7 +1067,9 @@ export type Database = {
           layout_image_url: string | null
           length_km: number | null
           name: string
+          significant_straights: number | null
           sort_order: number
+          turns: number | null
           updated_at: string
         }
         Insert: {
@@ -1077,7 +1079,9 @@ export type Database = {
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
+          significant_straights?: number | null
           sort_order?: number
+          turns?: number | null
           updated_at?: string
         }
         Update: {
@@ -1087,7 +1091,9 @@ export type Database = {
           layout_image_url?: string | null
           length_km?: number | null
           name?: string
+          significant_straights?: number | null
           sort_order?: number
+          turns?: number | null
           updated_at?: string
         }
         Relationships: [

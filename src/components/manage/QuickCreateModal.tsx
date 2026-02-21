@@ -56,7 +56,7 @@ export default function QuickCreateModal({ open, onClose, entityType, initialNam
           location: extra2.trim() || null,
           latitude: extra3.trim() ? parseFloat(extra3) : null,
           longitude: extra4.trim() ? parseFloat(extra4) : null,
-        } as any).select("id, name, country").single();
+        }).select("id, name, country").single();
         if (error) throw error;
         onCreated({ id: data.id, label: data.country ? `${data.name}, ${data.country}` : data.name });
       } else if (entityType === "season") {
