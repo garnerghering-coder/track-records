@@ -351,9 +351,10 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { url, event_id, mode, resolutions } = await req.json();
+    const { url, event_id, mode, resolutions, save_aliases } = await req.json();
     const isPreview = mode === "preview";
     // resolutions: { drivers: { [parsedName]: existingId | "create" }, teams: { [parsedName]: existingId | "create" } }
+    // save_aliases: { drivers: string[], teams: string[] } — names to save as search_aliases for future auto-matching
     if (!url || !event_id) {
       return new Response(
         JSON.stringify({ error: "Both url and event_id are required" }),
@@ -453,12 +454,14 @@ serve(async (req) => {
 
     // Load existing data for matching (including aliases and season cars)
     const seasonId = event.season_id;
-    const [driversRes, teamsRes, existingSessionsRes, aliasesRes, seasonCarsRes] = await Promise.all([
+    const [driversRes, teamsRes, existingSessionsRes, aliasesRes, seasonCarsRes, driverAliasesRes, teamAliasesRes] = await Promise.all([
       adminClient.from("v2_drivers").select("id, full_name"),
       adminClient.from("v2_teams").select("id, full_name, short_name"),
       adminClient.from("v2_sessions").select("id, name").eq("event_id", event_id),
       adminClient.from("v2_team_season_names").select("team_id, display_name").eq("season_id", seasonId),
       adminClient.from("v2_team_season_cars").select("team_id, car_id").eq("season_id", seasonId),
+      adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "driver"),
+      adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "team"),
     ]);
     const existingDrivers = driversRes.data || [];
     const existingTeams = teamsRes.data || [];
@@ -467,6 +470,16 @@ serve(async (req) => {
     const seasonCarMap = new Map<string, string>();
     for (const sc of (seasonCarsRes.data || []) as any[]) {
       seasonCarMap.set(sc.team_id, sc.car_id);
+    }
+
+    // Build search alias maps: alias (lowercase) -> canonical entity id
+    const driverAliasMap = new Map<string, string>();
+    for (const a of (driverAliasesRes.data || []) as any[]) {
+      driverAliasMap.set(a.alias.toLowerCase(), a.canonical);
+    }
+    const teamAliasMap = new Map<string, string>();
+    for (const a of (teamAliasesRes.data || []) as any[]) {
+      teamAliasMap.set(a.alias.toLowerCase(), a.canonical);
     }
 
     // ── Step 2: Scrape each result page and parse ──
@@ -613,6 +626,15 @@ serve(async (req) => {
           // Match or create driver
           let driverId = matchDriver(driverInfo.firstName, driverInfo.lastName, existingDrivers);
           
+          // Check search_aliases for a saved mapping
+          if (!driverId) {
+            const aliasId = driverAliasMap.get(driverFullName.toLowerCase());
+            if (aliasId) {
+              driverId = aliasId;
+              summary.drivers_matched++;
+            }
+          }
+          
           // Check resolutions map first (from preview step)
           if (!driverId && resolutions?.drivers?.[driverFullName]) {
             const resolved = resolutions.drivers[driverFullName];
@@ -650,6 +672,15 @@ serve(async (req) => {
           let teamId: string | null = null;
           if (teamName) {
             teamId = matchTeam(teamName, existingTeams, seasonAliases);
+            
+            // Check search_aliases for a saved mapping
+            if (!teamId) {
+              const aliasId = teamAliasMap.get(teamName.toLowerCase());
+              if (aliasId) {
+                teamId = aliasId;
+                summary.teams_matched++;
+              }
+            }
             
             // Check resolutions map
             if (!teamId && resolutions?.teams?.[teamName]) {
@@ -919,6 +950,28 @@ serve(async (req) => {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Save aliases for "don't ask again" selections
+    if (save_aliases && resolutions) {
+      const aliasInserts: Array<{ alias: string; canonical: string; entity_type: string }> = [];
+      for (const name of (save_aliases.drivers || [])) {
+        const resolvedId = resolutions.drivers?.[name];
+        if (resolvedId && resolvedId !== "create") {
+          aliasInserts.push({ alias: name, canonical: resolvedId, entity_type: "driver" });
+        }
+      }
+      for (const name of (save_aliases.teams || [])) {
+        const resolvedId = resolutions.teams?.[name];
+        if (resolvedId && resolvedId !== "create") {
+          aliasInserts.push({ alias: name, canonical: resolvedId, entity_type: "team" });
+        }
+      }
+      if (aliasInserts.length > 0) {
+        const { error: aliasErr } = await adminClient.from("search_aliases").upsert(aliasInserts, { onConflict: "alias,entity_type", ignoreDuplicates: true });
+        if (aliasErr) console.error("Failed to save aliases:", aliasErr);
+        else console.log(`Saved ${aliasInserts.length} alias(es) for future imports`);
+      }
     }
 
     return new Response(JSON.stringify({ success: true, ...summary }), {
