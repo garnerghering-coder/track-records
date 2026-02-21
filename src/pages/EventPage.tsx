@@ -240,6 +240,34 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
 
   const hasInt = results.some((r: any) => r.extra_data?.Int);
 
+  // Determine which columns have data (to hide empty ones)
+  const hasCarNumber = results.some((r: any) => r.car_number);
+  const hasCar = results.some((r: any) => r.v2_cars);
+  const hasTeam = results.some((r: any) => r.v2_teams);
+
+  // Practice columns
+  const hasBestLap = isPractice && results.some((r: any) => r.best_lap_time);
+  const hasGapP1 = isPractice && results.some((r: any) => r.gap_to_p1);
+  const hasPracticeLaps = isPractice && results.some((r: any) => r.laps_run);
+
+  // Qualifying columns
+  const hasQ1 = isQual && results.some((r: any) => r.q1_time);
+  const hasQ2 = isQual && results.some((r: any) => r.q2_time);
+  const hasQ3 = isQual && results.some((r: any) => r.q3_time);
+  const hasQualBest = isQual && results.some((r: any) => r.best_time);
+  const hasGapPole = isQual && results.some((r: any) => r.gap_to_pole);
+  const hasQualLaps = isQual && results.some((r: any) => r.laps_run);
+
+  // Race columns
+  const hasRaceLaps = isRace && results.some((r: any) => r.laps_completed);
+  const hasTotalTime = isRace && results.some((r: any) => r.total_time);
+  const hasGapLeader = isRace && results.some((r: any) => r.gap_to_leader);
+  const hasFastestLap = isRace && results.some((r: any) => r.fastest_lap_time);
+  const hasAvgLap = isRace && results.some((r: any) => r.average_lap_time);
+  const hasPits = isRace && results.some((r: any) => r.pit_stops != null);
+  const hasPoints = isRace && results.some((r: any) => r.points != null && r.points !== 0);
+  const hasStatus = isRace && results.some((r: any) => r.status && r.status !== "finished");
+
   const bestLapField = isPractice ? "best_lap_time" : isQual ? "best_time" : "fastest_lap_time";
   let fastestLapMs: number | null = null;
   let fastestLapStr: string | null = null;
@@ -298,17 +326,17 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
       <div className="overflow-x-auto border border-border rounded-lg">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
+           <TableRow className="bg-muted/50">
               <TableHead className="w-12">Pos</TableHead>
               {isRace && <TableHead className="w-12">+/-</TableHead>}
-              <TableHead className="w-14">No.</TableHead>
+              {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
               <TableHead>Driver</TableHead>
               <TableHead className="w-10">Nat</TableHead>
-              <TableHead>Team</TableHead>
-              <TableHead>Car</TableHead>
-              {isPractice && <><TableHead>Best Lap</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
-              {isQual && <><TableHead>Q1</TableHead><TableHead>Q2</TableHead><TableHead>Q3</TableHead><TableHead>Best</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Laps</TableHead></>}
-              {isRace && <><TableHead>Laps</TableHead><TableHead>Time</TableHead><TableHead>Gap</TableHead>{hasInt && <TableHead>Int</TableHead>}<TableHead>Best Lap</TableHead><TableHead>Avg Lap</TableHead><TableHead>Pits</TableHead><TableHead>Pts</TableHead><TableHead>Status</TableHead></>}
+              {hasTeam && <TableHead>Team</TableHead>}
+              {hasCar && <TableHead>Car</TableHead>}
+              {isPractice && <>{hasBestLap && <TableHead>Best Lap</TableHead>}{hasGapP1 && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasPracticeLaps && <TableHead>Laps</TableHead>}</>}
+              {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}</>}
+              {isRace && <>{hasRaceLaps && <TableHead>Laps</TableHead>}{hasTotalTime && <TableHead>Time</TableHead>}{hasGapLeader && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasFastestLap && <TableHead>Best Lap</TableHead>}{hasAvgLap && <TableHead>Avg Lap</TableHead>}{hasPits && <TableHead>Pits</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}{hasStatus && <TableHead>Status</TableHead>}</>}
               {extraDataKeys.map(col => (
                 <TableHead key={col.key}>{col.name}</TableHead>
               ))}
@@ -323,46 +351,46 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
                     <PositionDelta racePos={r.position} qualPos={r.driver_id ? qualPosMap[r.driver_id] ?? null : null} />
                   </TableCell>
                 )}
-                <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>
+                {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
                 <TableCell className="font-medium">
                   {r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors">{r.v2_drivers?.full_name || "—"}</Link> : "—"}
                 </TableCell>
                 <TableCell><FlagImage nationality={r.v2_drivers?.nationality} size={18} /></TableCell>
-                <TableCell className="text-muted-foreground">
+                {hasTeam && <TableCell className="text-muted-foreground">
                   {r.team_id ? <Link to={`/team/${r.team_id}`} className="hover:text-primary transition-colors">{getTeamName(r)}</Link> : getTeamName(r)}
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
+                </TableCell>}
+                {hasCar && <TableCell className="text-muted-foreground text-xs">
                   {r.car_id ? <Link to={`/car/${r.car_id}`} className="hover:text-primary transition-colors">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</Link> : (r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—")}
-                </TableCell>
+                </TableCell>}
                 {isPractice && <>
-                  <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>
+                  {hasBestLap && <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>}
+                  {hasGapP1 && <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>}
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
+                  {hasPracticeLaps && <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>}
                 </>}
                 {isQual && <>
-                  <TableCell className="font-mono text-xs">{r.q1_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.q2_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.q3_time || "—"}</TableCell>
-                  <TableCell className={`font-mono text-xs font-semibold ${r.best_time && r.best_time === fastestLapStr ? "text-purple-400" : ""}`}>{r.best_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>
+                  {hasQ1 && <TableCell className="font-mono text-xs">{r.q1_time || "—"}</TableCell>}
+                  {hasQ2 && <TableCell className="font-mono text-xs">{r.q2_time || "—"}</TableCell>}
+                  {hasQ3 && <TableCell className="font-mono text-xs">{r.q3_time || "—"}</TableCell>}
+                  {hasQualBest && <TableCell className={`font-mono text-xs font-semibold ${r.best_time && r.best_time === fastestLapStr ? "text-purple-400" : ""}`}>{r.best_time || "—"}</TableCell>}
+                  {hasGapPole && <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>}
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>
+                  {hasQualLaps && <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>}
                 </>}
                 {isRace && <>
-                  <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.total_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.gap_to_leader || "—"}</TableCell>
+                  {hasRaceLaps && <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>}
+                  {hasTotalTime && <TableCell className="font-mono text-xs">{r.total_time || "—"}</TableCell>}
+                  {hasGapLeader && <TableCell className="font-mono text-xs">{r.gap_to_leader || "—"}</TableCell>}
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.average_lap_time || "—"}</TableCell>
-                  <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>
-                  <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>
-                  <TableCell>
+                  {hasFastestLap && <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>}
+                  {hasAvgLap && <TableCell className="font-mono text-xs">{r.average_lap_time || "—"}</TableCell>}
+                  {hasPits && <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>}
+                  {hasPoints && <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>}
+                  {hasStatus && <TableCell>
                     {r.status && r.status !== "finished" ? (
                       <Badge variant="destructive" className="text-[10px]">{r.status.toUpperCase()}</Badge>
                     ) : null}
-                  </TableCell>
+                  </TableCell>}
                 </>}
                 {extraDataKeys.map(col => (
                   <TableCell key={col.key} className="text-xs">{(r.extra_data as any)?.[col.key] || "—"}</TableCell>

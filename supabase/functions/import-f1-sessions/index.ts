@@ -206,6 +206,93 @@ function matchTeam(
   return null;
 }
 
+/** Extended time parser for race total times like "1:35:39.435" (H:MM:SS.mmm) */
+function parseRaceTotalTimeMs(str: string): number | null {
+  if (!str || typeof str !== "string") return null;
+  const s = str.trim().replace(/^\+/, "").replace(/s$/i, "").trim();
+  if (!s) return null;
+  // H:MM:SS.mmm or HH:MM:SS.mmm
+  const hmsMatch = s.match(/^(\d+):(\d{1,2}):(\d{1,2})\.(\d{1,3})$/);
+  if (hmsMatch) {
+    return parseInt(hmsMatch[1]) * 3600000 + parseInt(hmsMatch[2]) * 60000 + parseInt(hmsMatch[3]) * 1000 + parseInt(hmsMatch[4].padEnd(3, "0"));
+  }
+  // M:SS.mmm (no hours)
+  return parseTimeMs(s);
+}
+
+/** Format ms as race total time "H:MM:SS.mmm" */
+function fmtRaceTotalTime(ms: number): string {
+  const hours = Math.floor(ms / 3600000);
+  const mins = Math.floor((ms % 3600000) / 60000);
+  const secs = Math.floor((ms % 60000) / 1000);
+  const millis = Math.round(ms % 1000);
+  if (hours > 0) return `${hours}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${millis.toString().padStart(3, "0")}`;
+  return `${mins}:${secs.toString().padStart(2, "0")}.${millis.toString().padStart(3, "0")}`;
+}
+
+/** Find fuzzy driver candidates (partial last name match) */
+function findDriverCandidates(
+  firstName: string,
+  lastName: string,
+  existingDrivers: Array<{ id: string; full_name: string }>
+): Array<{ id: string; full_name: string; score: number }> {
+  const candidates: Array<{ id: string; full_name: string; score: number }> = [];
+  const ln = lastName.toLowerCase();
+  const fn = firstName.toLowerCase();
+  for (const d of existingDrivers) {
+    const parts = d.full_name.toLowerCase().split(/\s+/);
+    const existLast = parts[parts.length - 1];
+    // Last name exact match but first name doesn't match
+    if (existLast === ln && !parts[0].startsWith(fn.charAt(0))) {
+      candidates.push({ ...d, score: 70 });
+    }
+    // Last name contained in full_name
+    else if (d.full_name.toLowerCase().includes(ln) && parts.length > 1) {
+      const existFirst = parts[0];
+      if (existFirst !== fn && !existFirst.startsWith(fn.charAt(0))) {
+        candidates.push({ ...d, score: 50 });
+      }
+    }
+  }
+  return candidates;
+}
+
+/** Find fuzzy team candidates */
+function findTeamCandidates(
+  teamName: string,
+  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
+  seasonAliases: Array<{ team_id: string; display_name: string }>
+): Array<{ id: string; full_name: string; score: number }> {
+  const candidates: Array<{ id: string; full_name: string; score: number }> = [];
+  const normalized = teamName.toLowerCase().trim();
+  const words = normalized.split(/\s+/);
+
+  for (const t of existingTeams) {
+    const tl = t.full_name.toLowerCase();
+    // Check if any significant word overlaps (at least 2 words shared)
+    const tWords = tl.split(/\s+/);
+    const shared = words.filter(w => w.length > 2 && tWords.some(tw => tw.includes(w) || w.includes(tw)));
+    if (shared.length >= 1 && tl !== normalized && !tl.includes(normalized) && !normalized.includes(tl)) {
+      candidates.push({ id: t.id, full_name: t.full_name, score: shared.length * 30 });
+    }
+  }
+
+  // Also check aliases
+  for (const a of seasonAliases) {
+    const al = a.display_name.toLowerCase();
+    const aWords = al.split(/\s+/);
+    const shared = words.filter(w => w.length > 2 && aWords.some(aw => aw.includes(w) || w.includes(aw)));
+    if (shared.length >= 1 && al !== normalized && !al.includes(normalized) && !normalized.includes(al)) {
+      const team = existingTeams.find(t => t.id === a.team_id);
+      if (team && !candidates.find(c => c.id === team.id)) {
+        candidates.push({ id: team.id, full_name: `${team.full_name} (alias: ${a.display_name})`, score: shared.length * 30 });
+      }
+    }
+  }
+
+  return candidates;
+}
+
 // ── Main ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -225,7 +312,9 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const { url, event_id } = await req.json();
+    const { url, event_id, mode, resolutions } = await req.json();
+    const isPreview = mode === "preview";
+    // resolutions: { drivers: { [parsedName]: existingId | "create" }, teams: { [parsedName]: existingId | "create" } }
     if (!url || !event_id) {
       return new Response(
         JSON.stringify({ error: "Both url and event_id are required" }),
@@ -337,6 +426,10 @@ serve(async (req) => {
       errors: [] as string[],
     };
 
+    // Track unresolved entities for preview mode
+    const unresolvedDrivers = new Map<string, Array<{ id: string; full_name: string }>>();
+    const unresolvedTeams = new Map<string, Array<{ id: string; full_name: string }>>();
+
     // Get current max sort order for sessions
     const { data: allSessions } = await adminClient.from("v2_sessions").select("sort_order").eq("event_id", event_id).order("sort_order", { ascending: false }).limit(1);
     let sortOrder = (allSessions?.[0]?.sort_order ?? -1) + 1;
@@ -382,26 +475,29 @@ serve(async (req) => {
         const dataRows = rows.slice(1);
         const tableType = detectTableType(headerRow);
 
-        // Create session
-        const { data: newSession, error: sessionErr } = await adminClient
-          .from("v2_sessions")
-          .insert({
-            event_id,
-            name: sessionInfo.name,
-            session_type: sessionInfo.type as any,
-            status: "draft" as any,
-            sort_order: sortOrder++,
-            source_document_url: resultUrl,
-          } as any)
-          .select("id")
-          .single();
+        // In preview mode, skip session creation — just parse data
+        let newSession: { id: string } | null = null;
+        if (!isPreview) {
+          const { data: sess, error: sessionErr } = await adminClient
+            .from("v2_sessions")
+            .insert({
+              event_id,
+              name: sessionInfo.name,
+              session_type: sessionInfo.type as any,
+              status: "draft" as any,
+              sort_order: sortOrder++,
+              source_document_url: resultUrl,
+            } as any)
+            .select("id")
+            .single();
 
-        if (sessionErr || !newSession) {
-          summary.errors.push(`Failed to create session ${sessionInfo.name}: ${sessionErr?.message}`);
-          continue;
+          if (sessionErr || !sess) {
+            summary.errors.push(`Failed to create session ${sessionInfo.name}: ${sessionErr?.message}`);
+            continue;
+          }
+          newSession = sess;
+          existingSessionNames.add(sessionInfo.name);
         }
-
-        existingSessionNames.add(sessionInfo.name);
         summary.sessions_created++;
 
         // ── Pass 1: Parse rows and match drivers/teams ──
@@ -440,20 +536,41 @@ serve(async (req) => {
 
           if (!driverInfo) continue;
 
+          const driverFullName = `${driverInfo.firstName} ${driverInfo.lastName}`;
+
           // Match or create driver
           let driverId = matchDriver(driverInfo.firstName, driverInfo.lastName, existingDrivers);
+          
+          // Check resolutions map first (from preview step)
+          if (!driverId && resolutions?.drivers?.[driverFullName]) {
+            const resolved = resolutions.drivers[driverFullName];
+            if (resolved !== "create") {
+              driverId = resolved;
+              summary.drivers_matched++;
+            }
+          }
+          
           if (driverId) {
-            summary.drivers_matched++;
+            if (!resolutions?.drivers?.[driverFullName]) summary.drivers_matched++;
           } else {
-            const { data: newDriver } = await adminClient
-              .from("v2_drivers")
-              .insert({ full_name: `${driverInfo.firstName} ${driverInfo.lastName}` })
-              .select("id, full_name")
-              .single();
-            if (newDriver) {
-              driverId = newDriver.id;
-              existingDrivers.push(newDriver);
+            if (isPreview) {
+              // In preview mode, find fuzzy candidates instead of creating
+              const candidates = findDriverCandidates(driverInfo.firstName, driverInfo.lastName, existingDrivers);
+              if (candidates.length > 0 && !unresolvedDrivers.has(driverFullName)) {
+                unresolvedDrivers.set(driverFullName, candidates.map(c => ({ id: c.id, full_name: c.full_name })));
+              }
               summary.drivers_created++;
+            } else {
+              const { data: newDriver } = await adminClient
+                .from("v2_drivers")
+                .insert({ full_name: driverFullName })
+                .select("id, full_name")
+                .single();
+              if (newDriver) {
+                driverId = newDriver.id;
+                existingDrivers.push(newDriver);
+                summary.drivers_created++;
+              }
             }
           }
 
@@ -461,18 +578,36 @@ serve(async (req) => {
           let teamId: string | null = null;
           if (teamName) {
             teamId = matchTeam(teamName, existingTeams, seasonAliases);
+            
+            // Check resolutions map
+            if (!teamId && resolutions?.teams?.[teamName]) {
+              const resolved = resolutions.teams[teamName];
+              if (resolved !== "create") {
+                teamId = resolved;
+                summary.teams_matched++;
+              }
+            }
+            
             if (teamId) {
-              summary.teams_matched++;
+              if (!resolutions?.teams?.[teamName]) summary.teams_matched++;
             } else {
-              const { data: newTeam } = await adminClient
-                .from("v2_teams")
-                .insert({ full_name: teamName })
-                .select("id, full_name, short_name")
-                .single();
-              if (newTeam) {
-                teamId = newTeam.id;
-                existingTeams.push(newTeam);
+              if (isPreview) {
+                const candidates = findTeamCandidates(teamName, existingTeams, seasonAliases);
+                if (candidates.length > 0 && !unresolvedTeams.has(teamName)) {
+                  unresolvedTeams.set(teamName, candidates.map(c => ({ id: c.id, full_name: c.full_name })));
+                }
                 summary.teams_created++;
+              } else {
+                const { data: newTeam } = await adminClient
+                  .from("v2_teams")
+                  .insert({ full_name: teamName })
+                  .select("id, full_name, short_name")
+                  .single();
+                if (newTeam) {
+                  teamId = newTeam.id;
+                  existingTeams.push(newTeam);
+                  summary.teams_created++;
+                }
               }
             }
           }
@@ -518,6 +653,11 @@ serve(async (req) => {
         }
 
         // ── Pass 2: Calculate times, gaps, intervals and insert ──
+        // In preview mode, skip DB inserts
+        if (isPreview) {
+          // Just count entries
+          continue;
+        }
 
         if (tableType === "practice" || (tableType === "unknown" && sessionInfo.type === "practice")) {
           // Determine P1's actual time and compute all best lap times
@@ -545,7 +685,7 @@ serve(async (req) => {
             const interval = (i > 0 && prevMs !== null && myMs !== null) ? fmtGap(myMs - prevMs) : null;
 
             await adminClient.from("v2_practice_results").insert({
-              session_id: newSession.id,
+              session_id: newSession!.id,
               position: e.position,
               car_number: e.carNumber,
               driver_id: e.driverId,
@@ -570,7 +710,7 @@ serve(async (req) => {
             const interval = (i > 0 && prevMs !== null && myMs !== null) ? fmtGap(myMs - prevMs) : null;
 
             await adminClient.from("v2_qualifying_results").insert({
-              session_id: newSession.id,
+              session_id: newSession!.id,
               position: e.position,
               car_number: e.carNumber,
               driver_id: e.driverId,
@@ -586,21 +726,22 @@ serve(async (req) => {
             });
           }
         } else {
-          // Race: calculate intervals from gaps where possible
+          // Race: calculate total_time for P2+ and intervals from gaps
           const gapTimesMs: (number | null)[] = [];
+          let p1TotalTimeMs: number | null = null;
 
           for (const e of entries) {
             if (e.resultStatus === "finished" && e.timeRetired) {
               const raw = e.timeRetired.replace(/s$/i, "").trim();
               if (raw.startsWith("+")) {
-                // Check for lap-based gaps like "+1 Lap"
                 if (/lap/i.test(raw)) {
                   gapTimesMs.push(null);
                 } else {
                   gapTimesMs.push(parseTimeMs(raw));
                 }
               } else {
-                // P1's total time - gap is 0
+                // P1's total time
+                p1TotalTimeMs = parseRaceTotalTimeMs(raw);
                 gapTimesMs.push(0);
               }
             } else {
@@ -614,13 +755,28 @@ serve(async (req) => {
             const prevGapMs = i > 0 ? gapTimesMs[i - 1] : null;
             const interval = (i > 0 && prevGapMs !== null && myGapMs !== null) ? fmtGap(myGapMs - prevGapMs) : null;
 
-            const totalTime = (e.resultStatus === "finished" && e.timeRetired && !e.timeRetired.startsWith("+"))
-              ? e.timeRetired : null;
+            // P1 gets their raw total time; P2+ get computed total time
+            let totalTime: string | null = null;
+            if (i === 0 && e.resultStatus === "finished" && e.timeRetired && !e.timeRetired.startsWith("+")) {
+              totalTime = e.timeRetired.replace(/s$/i, "").trim();
+            } else if (i > 0 && p1TotalTimeMs !== null && myGapMs !== null) {
+              totalTime = fmtRaceTotalTime(p1TotalTimeMs + myGapMs);
+            }
+
             const rawGap = e.timeRetired?.replace(/s$/i, "").trim() || "";
-            const gapToLeader = (e.resultStatus === "finished" && rawGap.startsWith("+")) ? rawGap : null;
+            let gapToLeader: string | null = null;
+            if (e.resultStatus === "finished" && rawGap.startsWith("+")) {
+              // Clean the gap: remove trailing 's', ensure proper format
+              if (/lap/i.test(rawGap)) {
+                gapToLeader = rawGap; // Keep "+1 Lap" as-is
+              } else {
+                const gapMs = parseTimeMs(rawGap);
+                gapToLeader = gapMs !== null ? fmtGap(gapMs) : rawGap;
+              }
+            }
 
             await adminClient.from("v2_race_results").insert({
-              session_id: newSession.id,
+              session_id: newSession!.id,
               position: e.position,
               car_number: e.carNumber,
               driver_id: e.driverId,
@@ -642,6 +798,28 @@ serve(async (req) => {
     }
 
     console.log("Import summary:", JSON.stringify(summary));
+
+    // In preview mode, return unresolved entities for the user to resolve
+    if (isPreview) {
+      const unresolvedDriversObj: Record<string, Array<{ id: string; full_name: string }>> = {};
+      unresolvedDrivers.forEach((candidates, name) => { unresolvedDriversObj[name] = candidates; });
+      const unresolvedTeamsObj: Record<string, Array<{ id: string; full_name: string }>> = {};
+      unresolvedTeams.forEach((candidates, name) => { unresolvedTeamsObj[name] = candidates; });
+
+      const hasUnresolved = unresolvedDrivers.size > 0 || unresolvedTeams.size > 0;
+
+      return new Response(JSON.stringify({
+        success: true,
+        preview: true,
+        has_unresolved: hasUnresolved,
+        unresolved_drivers: unresolvedDriversObj,
+        unresolved_teams: unresolvedTeamsObj,
+        ...summary,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     return new Response(JSON.stringify({ success: true, ...summary }), {
       status: 200,
