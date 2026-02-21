@@ -155,9 +155,9 @@ const Header = () => {
             <Link to="/manage" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Manage
             </Link>
-            <Link to="/admin" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              <Shield className="h-3.5 w-3.5 inline mr-1" />Admin
-            </Link>
+            
+
+
           </>
           }
           {session ?
