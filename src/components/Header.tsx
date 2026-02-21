@@ -43,18 +43,23 @@ const Header = () => {
     const timer = setTimeout(async () => {
       const lower = `%${searchQuery}%`;
       const [drivers, teams, events, series, circuits] = await Promise.all([
-      supabase.from("driver_profiles").select("id, first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(4),
-      supabase.from("team_profiles").select("id, name").ilike("name", lower).limit(4),
-      supabase.from("race_events").select("id, event_name, series_name").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(4),
-      supabase.from("series").select("id, name").ilike("name", lower).limit(3),
-      supabase.from("circuits").select("id, name").ilike("name", lower).limit(3)]
+      supabase.from("v2_drivers").select("id, full_name, nationality").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
+      supabase.from("v2_teams").select("id, full_name, nationality, short_name").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
+      supabase.from("v2_events").select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").or(`name.ilike.${lower}`).eq("status", "published" as any).limit(5),
+      supabase.from("v2_series").select("id, name, short_name").or(`name.ilike.${lower},short_name.ilike.${lower}`).limit(4),
+      supabase.from("v2_circuits").select("id, name, country, location").or(`name.ilike.${lower},country.ilike.${lower},location.ilike.${lower}`).limit(4)]
       );
       const results: any[] = [];
-      (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: `${d.first_name} ${d.last_name}`, url: `/driver/${d.id}` }));
-      (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.name, url: `/team/${t.id}` }));
-      (events.data || []).forEach((e: any) => results.push({ type: "event", id: e.id, label: `${e.event_name} — ${e.series_name}`, url: `/event/${e.id}` }));
+      (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}` }));
+      (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}` }));
+      (events.data || []).forEach((e: any) => {
+        const seriesName = e.v2_seasons?.v2_series?.name || "";
+        const circuitName = e.v2_circuits?.name || "";
+        const subtitle = [seriesName, circuitName].filter(Boolean).join(" · ");
+        results.push({ type: "event", id: e.id, label: e.name, url: `/events/${e.id}`, subtitle });
+      });
       (series.data || []).forEach((s: any) => results.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}` }));
-      (circuits.data || []).forEach((c: any) => results.push({ type: "circuit", id: c.id, label: c.name, url: `/circuit/${c.id}` }));
+      (circuits.data || []).forEach((c: any) => results.push({ type: "circuit", id: c.id, label: c.country ? `${c.name}, ${c.country}` : c.name, url: `/circuit/${c.id}` }));
       setSearchResults(results);
     }, 300);
     return () => clearTimeout(timer);
@@ -120,7 +125,10 @@ const Header = () => {
                   className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors">
 
                         <span className="text-[10px] uppercase font-medium text-muted-foreground w-12 shrink-0">{r.type}</span>
-                        <span className="text-card-foreground truncate">{r.label}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-card-foreground truncate block">{r.label}</span>
+                          {r.subtitle && <span className="text-[10px] text-muted-foreground truncate block">{r.subtitle}</span>}
+                        </div>
                       </Link>
                 )}
                     {searchQuery.trim() &&

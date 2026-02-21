@@ -53,26 +53,26 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
       const q = query.trim() ? `%${query}%` : "%";
 
       if (entityType === "driver") {
-        const res = await supabase.from("v2_drivers").select("id, full_name, nationality").ilike("full_name", q).limit(8);
-        data = (res.data || []).map(d => ({ id: d.id, label: d.full_name }));
+        const res = await supabase.from("v2_drivers").select("id, full_name, nationality")
+          .or(`full_name.ilike.${q},nationality.ilike.${q},short_name.ilike.${q}`).limit(10);
+        data = (res.data || []).map(d => ({ id: d.id, label: d.nationality ? `${d.full_name} (${d.nationality})` : d.full_name }));
       } else if (entityType === "team") {
-        const res = await supabase.from("v2_teams").select("id, full_name").ilike("full_name", q).limit(8);
+        const res = await supabase.from("v2_teams").select("id, full_name, short_name, nationality")
+          .or(`full_name.ilike.${q},short_name.ilike.${q},nationality.ilike.${q}`).limit(10);
         data = (res.data || []).map(d => ({ id: d.id, label: d.full_name }));
       } else if (entityType === "car") {
         // Search by model_name OR manufacturer
-        const res1 = await supabase.from("v2_cars").select("id, model_name, manufacturer").ilike("model_name", q).limit(8);
-        const res2 = await supabase.from("v2_cars").select("id, model_name, manufacturer").ilike("manufacturer", q).limit(8);
-        const merged = new Map<string, any>();
-        for (const d of [...(res1.data || []), ...(res2.data || [])]) {
-          if (!merged.has(d.id)) merged.set(d.id, d);
-        }
-        data = Array.from(merged.values()).slice(0, 10).map(d => ({ id: d.id, label: [d.manufacturer, d.model_name].filter(Boolean).join(" ") }));
+        const res = await supabase.from("v2_cars").select("id, model_name, manufacturer")
+          .or(`model_name.ilike.${q},manufacturer.ilike.${q}`).limit(10);
+        data = (res.data || []).map(d => ({ id: d.id, label: [d.manufacturer, d.model_name].filter(Boolean).join(" ") }));
       } else if (entityType === "series") {
-        const res = await supabase.from("v2_series").select("id, name").ilike("name", q).order("name").limit(10);
+        const res = await supabase.from("v2_series").select("id, name, short_name")
+          .or(`name.ilike.${q},short_name.ilike.${q}`).order("name").limit(10);
         data = (res.data || []).map(s => ({ id: s.id, label: s.name }));
       } else if (entityType === "circuit") {
-        const res = await supabase.from("v2_circuits").select("id, name, country").ilike("name", q).order("name").limit(10);
-        data = (res.data || []).map(c => ({ id: c.id, label: c.country ? `${c.name}, ${c.country}` : c.name }));
+        const res = await supabase.from("v2_circuits").select("id, name, country, location")
+          .or(`name.ilike.${q},country.ilike.${q},location.ilike.${q}`).order("name").limit(10);
+        data = (res.data || []).map(c => ({ id: c.id, label: [c.name, c.location, c.country].filter(Boolean).join(", ") }));
       } else if (entityType === "season") {
         if (!filterSeriesId) { setResults([]); return; }
         let qb = supabase.from("v2_seasons").select("id, year").eq("series_id", filterSeriesId).order("year", { ascending: false }).limit(10);
