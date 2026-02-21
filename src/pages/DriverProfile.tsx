@@ -166,37 +166,53 @@ const DriverProfilePage = () => {
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl font-semibold text-foreground">Statistics</h2>
-              {seasonYears.length > 1 && (
-                <Select value={selectedSeason} onValueChange={setSelectedSeason}>
-                  <SelectTrigger className="w-[140px] h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Seasons</SelectItem>
-                    {seasonYears.map(y => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <Select value={selectedSeason} onValueChange={setSelectedSeason}>
+                <SelectTrigger className="w-[140px] h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Seasons</SelectItem>
+                  {seasonYears.map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground mb-1">Avg. Qualifying Position</p>
-                  <p className="text-3xl font-display font-bold text-foreground">
-                    {stats.avgQual !== null ? stats.avgQual.toFixed(1) : "—"}
+                  <p className="text-4xl font-accent font-bold text-foreground">
+                    {stats.avgQual !== null ? Math.round(stats.avgQual) : "—"}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">across {stats.qualCount} result{stats.qualCount !== 1 ? "s" : ""}</p>
+                  {stats.avgQual !== null && (
+                    <p className="text-xs text-muted-foreground mt-1">{stats.avgQual.toFixed(2)} across {stats.qualCount} result{stats.qualCount !== 1 ? "s" : ""}</p>
+                  )}
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-sm text-muted-foreground mb-1">Avg. Race Finish</p>
-                  <p className="text-3xl font-display font-bold text-foreground">
-                    {stats.avgRace !== null ? stats.avgRace.toFixed(1) : "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">across {stats.raceCount} result{stats.raceCount !== 1 ? "s" : ""}</p>
+                  <div className="flex items-center gap-3">
+                    <p className="text-4xl font-accent font-bold text-foreground">
+                      {stats.avgRace !== null ? Math.round(stats.avgRace) : "—"}
+                    </p>
+                    {stats.avgRace !== null && stats.avgQual !== null && (() => {
+                      const diff = stats.avgQual - stats.avgRace;
+                      const rounded = Math.round(diff * 10) / 10;
+                      if (rounded === 0) return null;
+                      const isGain = rounded > 0;
+                      return (
+                        <span className={`inline-flex items-center gap-0.5 text-sm font-medium ${isGain ? "text-green-500" : "text-destructive"}`}>
+                          <span className={`text-xs ${isGain ? "" : "rotate-180 inline-block"}`}>▲</span>
+                          {Math.abs(rounded)}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  {stats.avgRace !== null && (
+                    <p className="text-xs text-muted-foreground mt-1">{stats.avgRace.toFixed(2)} across {stats.raceCount} result{stats.raceCount !== 1 ? "s" : ""}</p>
+                  )}
                 </CardContent>
               </Card>
             </div>
