@@ -59,11 +59,25 @@ export default function ManageEventDetail() {
   const { data: event, isLoading } = useQuery({
     queryKey: ["v2_event", id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, v2_series(name)), v2_circuits(id, name)").eq("id", id!).single();
+      const { data, error } = await supabase.from("v2_events").select("*, v2_seasons(year, series_id, v2_series(id, name)), v2_circuits(id, name)").eq("id", id!).single();
       if (error) throw error;
       return data;
     },
   });
+
+  const seriesId = (event?.v2_seasons as any)?.series_id || (event?.v2_seasons as any)?.v2_series?.id;
+
+  const { data: seriesAliases = [] } = useQuery({
+    queryKey: ["v2_series_aliases", seriesId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("v2_series_aliases" as any).select("alias").eq("series_id", seriesId!);
+      if (error) throw error;
+      return (data as any[]).map((a: any) => a.alias.toUpperCase());
+    },
+    enabled: !!seriesId,
+  });
+
+  const hasAlias = (alias: string) => seriesAliases.includes(alias.toUpperCase());
 
   const { data: sessions = [] } = useQuery({
     queryKey: ["v2_sessions", id],
@@ -372,9 +386,16 @@ export default function ManageEventDetail() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Sessions</h2>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => { setImportOpen(true); setImportUrl(""); setImportResult(null); }}>
-              <Download className="h-4 w-4 mr-1" />Import from F1.com
-            </Button>
+            {hasAlias("F1") && (
+              <Button size="sm" variant="outline" onClick={() => { setImportOpen(true); setImportUrl(""); setImportResult(null); }}>
+                <Download className="h-4 w-4 mr-1" />Import from F1.com
+              </Button>
+            )}
+            {hasAlias("IMSA") && (
+              <Button size="sm" variant="outline" onClick={() => { /* TODO: IMSA import */ toast.info("IMSA import coming soon"); }}>
+                <Download className="h-4 w-4 mr-1" />Import from IMSA
+              </Button>
+            )}
             <Button size="sm" onClick={openNewSession}>
               <Plus className="h-4 w-4 mr-1" />Add Session
             </Button>

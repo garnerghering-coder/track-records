@@ -1671,6 +1671,35 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_series_aliases: {
+        Row: {
+          alias: string
+          created_at: string
+          id: string
+          series_id: string
+        }
+        Insert: {
+          alias: string
+          created_at?: string
+          id?: string
+          series_id: string
+        }
+        Update: {
+          alias?: string
+          created_at?: string
+          id?: string
+          series_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_series_aliases_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "v2_series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_session_weather: {
         Row: {
           air_temp_max: number | null
