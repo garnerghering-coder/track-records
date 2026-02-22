@@ -179,8 +179,7 @@ const Index = () => {
       }
 
       {/* CTA */}
-      <section className="py-16">
-        
+      
 
 
 
@@ -202,7 +201,8 @@ const Index = () => {
 
 
 
-      </section>
+
+
 
       <Footer />
     </div>);
