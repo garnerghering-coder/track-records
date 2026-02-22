@@ -132,9 +132,13 @@ export async function exportEventPdf(params: EventExportParams) {
 
   let logoData: string | null = null;
   try {
-    logoData = await loadImageAsBase64(trackRecordsLogo);
+    // Use a short timeout so a slow/broken image doesn't hang the export
+    logoData = await Promise.race([
+      loadImageAsBase64(trackRecordsLogo),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("Logo load timeout")), 3000)),
+    ]) as string;
   } catch (e) {
-    console.warn("Logo load failed:", e);
+    console.warn("Logo load skipped:", e);
   }
 
   onProgress?.(10);
