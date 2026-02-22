@@ -10,6 +10,7 @@ export interface SessionExportData {
   incidents: any[];
   customColumns?: { key: string; name: string }[];
   hasInt?: boolean;
+  teamNameMap?: Record<string, string>;
   weather?: {
     condition_summary?: string | null;
     condition_emoji?: string | null;
@@ -65,7 +66,7 @@ function anyHasExtra(results: any[], key: string): boolean {
 }
 
 function buildSessionTable(s: SessionExportData) {
-  const { sessionType, results, customColumns = [], hasInt = false } = s;
+  const { sessionType, results, customColumns = [], hasInt = false, teamNameMap = {} } = s;
   const isRace = sessionType === "race" || sessionType === "sprint_race";
   const isQual = sessionType === "qualifying" || sessionType === "sprint_qualifying";
   const isPractice = sessionType === "practice" || sessionType === "warmup";
@@ -82,11 +83,11 @@ function buildSessionTable(s: SessionExportData) {
   addCol("Pos", (r) => String(r.position || ""));
   if (anyHas(results, "car_number")) addCol("No.", (r) => r.car_number || "");
   addCol("Driver", (r) => r.v2_drivers?.full_name || "");
-  if (anyHas(results, "v2_drivers")) {
-    const hasNat = results.some((r) => r.v2_drivers?.nationality);
-    if (hasNat) addCol("Nat", (r) => r.v2_drivers?.nationality || "");
-  }
-  if (results.some((r) => r.v2_teams)) addCol("Team", (r) => r.v2_teams?.short_name || r.v2_teams?.full_name || "");
+  if (results.some((r) => r.v2_teams)) addCol("Team", (r) => {
+    const teamId = r.v2_teams?.id;
+    if (teamId && teamNameMap[teamId]) return teamNameMap[teamId];
+    return r.v2_teams?.short_name || r.v2_teams?.full_name || "";
+  });
   if (results.some((r) => r.v2_cars)) addCol("Car", (r) => r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "");
 
   if (isPractice || sessionType === "other") {
@@ -155,7 +156,11 @@ export async function exportEventPdf(params: EventExportParams) {
 
     // Logo
     if (logoData) {
-      doc.addImage(logoData, "PNG", 14, 8, 40, 12);
+      // Preserve aspect ratio: load image to get natural dimensions
+      const imgProps = doc.getImageProperties(logoData);
+      const logoHeight = 12;
+      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
+      doc.addImage(logoData, "PNG", 14, 8, logoWidth, logoHeight);
       y = 24;
     } else {
       doc.setFontSize(10);
@@ -193,7 +198,7 @@ export async function exportEventPdf(params: EventExportParams) {
     if (s.weather) {
       const w = s.weather;
       const parts: string[] = [];
-      if (w.condition_emoji || w.condition_summary) parts.push([w.condition_emoji, w.condition_summary].filter(Boolean).join(" "));
+      if (w.condition_summary) parts.push(w.condition_summary);
       if (w.air_temp_min != null || w.air_temp_max != null) {
         const temps = [w.air_temp_min, w.air_temp_max].filter((t) => t != null);
         parts.push(`Air: ${temps.join("–")}°C`);
