@@ -162,27 +162,79 @@ serve(async (req) => {
     }
 
     // Filter for .JSON classification files from alkamelcloud
-    const jsonLinks = allLinks.filter(
+    let jsonLinks = allLinks.filter(
       (l) => /\.JSON$/i.test(l) && /classification/i.test(l)
     );
 
+    // If no direct JSON links found, try to construct them from folder links
     if (jsonLinks.length === 0) {
-      // Try to build JSON URLs from the page structure
-      // alkamelcloud URLs follow: .../Results/{year}/{event}/{series}/{session}/Classification.JSON
-      // Let's try to find folder-style links and build classification URLs
-      const folderLinks = allLinks.filter(l => /results.*\/$/i.test(l) || /alkamel/i.test(l));
-      console.log("No direct JSON links found. Found folder links:", folderLinks.length);
+      console.log("No direct JSON links found. Trying to construct from folder structure...");
+      
+      // Find session-like folder links (Practice, Qualifying, Race, Warm Up, etc.)
+      const sessionPattern = /\/(Practice\s*\d*|Qualifying|Race|Warm\s*Up|Sprint|Hour\s*\d+)\/?/i;
+      const candidateFolders = allLinks.filter(l => sessionPattern.test(decodeURIComponent(l)));
+      
+      // Also look for "Official" or "Unofficial" sub-folders
+      const officialPattern = /(Official|Unofficial)\/?$/i;
+      const officialFolders = allLinks.filter(l => officialPattern.test(decodeURIComponent(l)));
+      
+      // Build candidate JSON URLs
+      const candidateUrls = new Set<string>();
+      
+      // From official/unofficial folders, append Classification.JSON
+      for (const folder of officialFolders) {
+        const base = folder.endsWith("/") ? folder : folder + "/";
+        candidateUrls.add(base + "Classification.JSON");
+      }
+      
+      // From session folders, try both Official and direct Classification.JSON
+      for (const folder of candidateFolders) {
+        const base = folder.endsWith("/") ? folder : folder + "/";
+        candidateUrls.add(base + "Official/Classification.JSON");
+        candidateUrls.add(base + "Unofficial/Classification.JSON");
+        candidateUrls.add(base + "Classification.JSON");
+      }
+      
+      console.log(`Constructed ${candidateUrls.size} candidate URLs from ${candidateFolders.length} session folders and ${officialFolders.length} official folders`);
+      
+      // Try to fetch each candidate to see which ones exist (HEAD request first)
+      const validUrls: string[] = [];
+      const checks = Array.from(candidateUrls).map(async (candidateUrl) => {
+        try {
+          const headResp = await fetch(candidateUrl, { method: "HEAD" });
+          if (headResp.ok) {
+            validUrls.push(candidateUrl);
+          }
+        } catch {}
+      });
+      await Promise.all(checks);
+      
+      // Prefer "Official" over "Unofficial" for the same session
+      const sessionUrlMap = new Map<string, string>();
+      for (const validUrl of validUrls) {
+        // Extract session path (everything before Official/Unofficial/Classification)
+        const sessionKey = validUrl.replace(/\/(Official|Unofficial)\/Classification\.JSON$/i, "").replace(/\/Classification\.JSON$/i, "");
+        const existing = sessionUrlMap.get(sessionKey);
+        if (!existing || /Official/i.test(validUrl)) {
+          sessionUrlMap.set(sessionKey, validUrl);
+        }
+      }
+      
+      jsonLinks = Array.from(sessionUrlMap.values());
+      console.log(`Found ${jsonLinks.length} valid Classification.JSON file(s) after probing`);
+    }
 
+    if (jsonLinks.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "No classification JSON files found on this page. Make sure you're linking to an IMSA results page on alkamelcloud.com that has session results.",
+          error: "No classification JSON files found. Make sure you're linking to an IMSA event results page on alkamelcloud.com that has session results (not a season overview page).",
           debug_links_found: allLinks.length,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Found ${jsonLinks.length} JSON classification file(s):`, jsonLinks);
+    console.log(`Processing ${jsonLinks.length} JSON classification file(s):`, jsonLinks);
 
     // ── Step 2: Load reference data for matching ──
     const seasonId = event.season_id;
