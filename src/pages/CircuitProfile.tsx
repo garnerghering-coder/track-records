@@ -167,7 +167,7 @@ const CircuitProfile = () => {
                               <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-[240px] text-xs">
-                              These characteristics are calculated using mathematical formulas derived from track layout data.
+                              These characteristics are calculated using mathematical formulas derived from track layout data — no AI is used.
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
