@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FileDown, TriangleIcon } from "lucide-react";
-import { exportSessionPdf } from "@/lib/pdf-export";
+import { exportEventPdf, type SessionExportData } from "@/lib/pdf-export";
+import PdfExportDialog from "@/components/PdfExportDialog";
 import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
 import WeatherBubble from "@/components/WeatherBubble";
@@ -163,6 +164,7 @@ function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: 
 }
 
 function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }: { session: any; event: any; teamNameMap: Record<string, string>; allSessions: any[]; weatherMap: Record<string, any> }) {
+  const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
   const isRace = type === "race" || type === "sprint_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
@@ -281,22 +283,73 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
     }
   }
 
-  const handleExport = async () => {
-    try {
-      await exportSessionPdf({
+  const buildSessionData = (s: any, res: any[], inc: any[]): SessionExportData => {
+    // Compute custom columns for this session's results
+    const customCols: { key: string; name: string }[] = [];
+    const seenKeys = new Set<string>();
+    for (const r of res) {
+      const ed = r.extra_data;
+      if (ed && typeof ed === "object") {
+        for (const k of Object.keys(ed)) {
+          if (k === "Int" || k === "avg_kmh" || seenKeys.has(k)) continue;
+          seenKeys.add(k);
+          customCols.push({ key: k, name: k });
+        }
+      }
+    }
+    return {
+      sessionName: s.name,
+      sessionDate: s.date,
+      sessionType: s.session_type,
+      results: res,
+      incidents: inc,
+      customColumns: customCols,
+      hasInt: res.some((r: any) => r.extra_data?.Int),
+      weather: weatherMap[s.id] || null,
+    };
+  };
+
+  const handleExportClick = () => setExportOpen(true);
+
+  const handleExport = async (mode: "single" | "all", onProgress: (pct: number) => void) => {
+    if (mode === "single") {
+      await exportEventPdf({
         eventName: event.name,
         seriesName: event.v2_seasons?.v2_series?.name || "",
         circuitName: event.v2_circuits?.name || "",
-        sessionName: session.name,
-        sessionDate: session.date,
-        sessionType: type,
-        results,
-        incidents,
-        customColumns: extraDataKeys,
-        hasInt,
+        circuitCountry: event.v2_circuits?.country || "",
+        sessions: [buildSessionData(session, results, incidents)],
+        onProgress,
       });
-    } catch (e: any) {
-      console.error("PDF export failed:", e);
+    } else {
+      // Fetch results for ALL sessions
+      const allSessionData: SessionExportData[] = [];
+      for (let idx = 0; idx < allSessions.length; idx++) {
+        const s = allSessions[idx];
+        const sType = s.session_type;
+        const tbl = (sType === "race" || sType === "sprint_race") ? "v2_race_results"
+          : (sType === "qualifying" || sType === "sprint_qualifying") ? "v2_qualifying_results"
+          : "v2_practice_results";
+        const { data: sResults } = await supabase.from(tbl as any)
+          .select("*, v2_drivers(full_name, nationality), v2_teams(id, full_name, short_name), v2_cars(model_name, manufacturer)")
+          .eq("session_id", s.id)
+          .order("position");
+        let sIncidents: any[] = [];
+        if (sType === "race" || sType === "sprint_race") {
+          const { data: inc } = await supabase.from("v2_incidents").select("*").eq("session_id", s.id).order("lap_number");
+          sIncidents = inc || [];
+        }
+        allSessionData.push(buildSessionData(s, sResults || [], sIncidents));
+        onProgress(10 + ((idx + 1) / allSessions.length) * 40);
+      }
+      await exportEventPdf({
+        eventName: event.name,
+        seriesName: event.v2_seasons?.v2_series?.name || "",
+        circuitName: event.v2_circuits?.name || "",
+        circuitCountry: event.v2_circuits?.country || "",
+        sessions: allSessionData,
+        onProgress,
+      });
     }
   };
 
@@ -318,9 +371,16 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
           )}
           {session.date && <span className="text-xs text-muted-foreground">{session.date.split("T")[0]}</span>}
         </div>
-        <Button variant="outline" size="sm" onClick={handleExport}>
+        <Button variant="outline" size="sm" onClick={handleExportClick}>
           <FileDown className="h-3.5 w-3.5 mr-1" />Export PDF
         </Button>
+        <PdfExportDialog
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          sessionName={session.name}
+          hasMultipleSessions={allSessions.length > 1}
+          onExport={handleExport}
+        />
       </div>
 
       <div className="overflow-x-auto border border-border rounded-lg">

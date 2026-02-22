@@ -2,10 +2,7 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import trackRecordsLogo from "@/assets/track-records-logo.png";
 
-interface ExportParams {
-  eventName: string;
-  seriesName: string;
-  circuitName: string;
+export interface SessionExportData {
   sessionName: string;
   sessionDate: string | null;
   sessionType: string;
@@ -13,6 +10,25 @@ interface ExportParams {
   incidents: any[];
   customColumns?: { key: string; name: string }[];
   hasInt?: boolean;
+  weather?: {
+    condition_summary?: string | null;
+    condition_emoji?: string | null;
+    air_temp_min?: number | null;
+    air_temp_max?: number | null;
+    track_temp_min?: number | null;
+    track_temp_max?: number | null;
+    rain_mm?: number | null;
+    wind_speed_max?: number | null;
+  } | null;
+}
+
+export interface EventExportParams {
+  eventName: string;
+  seriesName: string;
+  circuitName: string;
+  circuitCountry?: string;
+  sessions: SessionExportData[];
+  onProgress?: (pct: number) => void;
 }
 
 function loadImageAsBase64(url: string): Promise<string> {
@@ -36,156 +52,259 @@ function loadImageAsBase64(url: string): Promise<string> {
   });
 }
 
-export async function exportSessionPdf(params: ExportParams) {
-  const { eventName, seriesName, circuitName, sessionName, sessionDate, sessionType, results, incidents, customColumns = [], hasInt = false } = params;
+/** Check if any result has a truthy value for a given field */
+function anyHas(results: any[], field: string): boolean {
+  return results.some((r) => {
+    const v = r[field];
+    return v !== null && v !== undefined && v !== "" && v !== 0;
+  });
+}
+
+function anyHasExtra(results: any[], key: string): boolean {
+  return results.some((r) => r.extra_data?.[key]);
+}
+
+function buildSessionTable(s: SessionExportData) {
+  const { sessionType, results, customColumns = [], hasInt = false } = s;
   const isRace = sessionType === "race" || sessionType === "sprint_race";
   const isQual = sessionType === "qualifying" || sessionType === "sprint_qualifying";
   const isPractice = sessionType === "practice" || sessionType === "warmup";
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const head: string[] = [];
+  const colExtractors: ((r: any) => string)[] = [];
 
-  let startY = 10;
-  try {
-    const logoData = await loadImageAsBase64(trackRecordsLogo);
-    doc.addImage(logoData, "PNG", 14, 8, 40, 12);
-    startY = 24;
-  } catch (e) {
-    console.warn("Logo load failed, using text fallback:", e);
-    doc.setFontSize(10);
-    doc.setTextColor(30);
-    doc.text("TRACK RECORDS", 14, 14);
-    startY = 20;
+  const addCol = (label: string, extractor: (r: any) => string) => {
+    head.push(label);
+    colExtractors.push(extractor);
+  };
+
+  // Common leading columns
+  addCol("Pos", (r) => String(r.position || ""));
+  if (anyHas(results, "car_number")) addCol("No.", (r) => r.car_number || "");
+  addCol("Driver", (r) => r.v2_drivers?.full_name || "");
+  if (anyHas(results, "v2_drivers")) {
+    const hasNat = results.some((r) => r.v2_drivers?.nationality);
+    if (hasNat) addCol("Nat", (r) => r.v2_drivers?.nationality || "");
   }
-
-  doc.setFontSize(7);
-  doc.setTextColor(150);
-  doc.text(new Date().toLocaleDateString(), pageWidth - 14, 12, { align: "right" });
-
-  doc.setFontSize(16);
-  doc.setTextColor(30);
-  doc.text(eventName, 14, startY + 2);
-
-  doc.setFontSize(10);
-  doc.setTextColor(100);
-  const subtitle = [seriesName, circuitName, sessionName].filter(Boolean).join(" • ");
-  doc.text(subtitle, 14, startY + 9);
-
-  let tableStartY = startY + 13;
-
-  if (sessionDate) {
-    doc.text(new Date(sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }), 14, startY + 15);
-    tableStartY = startY + 19;
-  }
-
-  let head: string[] = [];
-  let body: string[][] = [];
-  const customNames = customColumns.map(c => c.name);
+  if (results.some((r) => r.v2_teams)) addCol("Team", (r) => r.v2_teams?.short_name || r.v2_teams?.full_name || "");
+  if (results.some((r) => r.v2_cars)) addCol("Car", (r) => r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "");
 
   if (isPractice || sessionType === "other") {
-    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Best Lap", "Gap"];
-    if (hasInt) head.push("Int");
-    head.push("Laps", ...customNames);
-    body = results.map(r => {
-      const row = [
-        String(r.position || ""),
-        r.car_number || "",
-        r.v2_drivers?.full_name || "",
-        r.v2_drivers?.nationality || "",
-        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-        r.best_lap_time || "",
-        r.gap_to_p1 || "",
-      ];
-      if (hasInt) row.push(r.extra_data?.Int || "");
-      row.push(String(r.laps_run || ""), ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")));
-      return row;
-    });
+    if (anyHas(results, "best_lap_time")) addCol("Best Lap", (r) => r.best_lap_time || "");
+    if (anyHas(results, "gap_to_p1")) addCol("Gap", (r) => r.gap_to_p1 || "");
+    if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
+    if (anyHas(results, "laps_run")) addCol("Laps", (r) => String(r.laps_run || ""));
   } else if (isQual) {
-    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Q1", "Q2", "Q3", "Best", "Gap"];
-    if (hasInt) head.push("Int");
-    head.push("Laps", ...customNames);
-    body = results.map(r => {
-      const row = [
-        String(r.position || ""),
-        r.car_number || "",
-        r.v2_drivers?.full_name || "",
-        r.v2_drivers?.nationality || "",
-        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-        r.q1_time || "", r.q2_time || "", r.q3_time || "",
-        r.best_time || "", r.gap_to_pole || "",
-      ];
-      if (hasInt) row.push(r.extra_data?.Int || "");
-      row.push(String(r.laps_run || ""), ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")));
-      return row;
-    });
+    if (anyHas(results, "q1_time")) addCol("Q1", (r) => r.q1_time || "");
+    if (anyHas(results, "q2_time")) addCol("Q2", (r) => r.q2_time || "");
+    if (anyHas(results, "q3_time")) addCol("Q3", (r) => r.q3_time || "");
+    if (anyHas(results, "best_time")) addCol("Best", (r) => r.best_time || "");
+    if (anyHas(results, "gap_to_pole")) addCol("Gap", (r) => r.gap_to_pole || "");
+    if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
+    if (anyHas(results, "laps_run")) addCol("Laps", (r) => String(r.laps_run || ""));
   } else {
-    head = ["Pos", "No.", "Driver", "Nat", "Team", "Car", "Laps", "Time/Gap", "FL"];
-    if (hasInt) head.push("Int");
-    head.push("Pits", "Pts", "Status", ...customNames);
-    body = results.map(r => {
-      const row = [
-        String(r.position || ""),
-        r.car_number || "",
-        r.v2_drivers?.full_name || "",
-        r.v2_drivers?.nationality || "",
-        r.v2_teams?.short_name || r.v2_teams?.full_name || "",
-        r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "",
-        String(r.laps_completed || ""),
-        r.total_time || r.gap_to_leader || "",
-        r.fastest_lap_time || "",
-      ];
-      if (hasInt) row.push(r.extra_data?.Int || "");
-      row.push(
-        String(r.pit_stops ?? ""),
-        String(r.points ?? ""),
-        r.status && r.status !== "finished" ? r.status.toUpperCase() : "",
-        ...customColumns.map(c => String(r.extra_data?.[c.key] ?? "")),
-      );
-      return row;
-    });
+    // Race
+    if (anyHas(results, "laps_completed")) addCol("Laps", (r) => String(r.laps_completed || ""));
+    if (anyHas(results, "total_time")) addCol("Time", (r) => r.total_time || "");
+    if (anyHas(results, "gap_to_leader")) addCol("Gap", (r) => r.gap_to_leader || "");
+    if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
+    if (anyHas(results, "fastest_lap_time")) addCol("FL", (r) => r.fastest_lap_time || "");
+    if (anyHas(results, "average_lap_time")) addCol("Avg Lap", (r) => r.average_lap_time || "");
+    if (results.some((r) => r.pit_stops != null)) addCol("Pits", (r) => String(r.pit_stops ?? ""));
+    if (results.some((r) => r.points != null && r.points !== 0)) addCol("Pts", (r) => String(r.points ?? ""));
+    if (results.some((r) => r.status && r.status !== "finished")) addCol("Status", (r) => r.status && r.status !== "finished" ? r.status.toUpperCase() : "");
   }
 
-  (doc as any).autoTable({
-    startY: tableStartY,
-    head: [head],
-    body,
-    styles: { fontSize: 7, cellPadding: 1.5, font: "courier" },
-    headStyles: { fillColor: [30, 30, 35], textColor: [255, 255, 255], fontStyle: "bold", font: "helvetica" },
-    alternateRowStyles: { fillColor: [245, 245, 248] },
-    columnStyles: { 0: { halign: "center", cellWidth: 10 }, 1: { halign: "center", cellWidth: 12 } },
-  });
-
-  if (isRace && incidents.length > 0) {
-    const finalY = (doc as any).lastAutoTable.finalY + 8;
-    doc.setFontSize(10);
-    doc.setTextColor(30);
-    doc.text("Incidents", 14, finalY);
-
-    let y = finalY + 5;
-    doc.setFontSize(7);
-    doc.setTextColor(80);
-    incidents.forEach(inc => {
-      const text = `${inc.lap_number ? `Lap ${inc.lap_number}: ` : ""}${inc.description || ""}${inc.penalty_type ? ` — ${inc.penalty_type}` : ""}${inc.outcome ? ` (${inc.outcome})` : ""}`;
-      doc.text(text, 16, y);
-      y += 4;
-    });
-  }
-
-  if (isRace && results.length > 0) {
-    const fastest = results.reduce((best: any, r: any) => {
-      if (!r.fastest_lap_time) return best;
-      if (!best || r.fastest_lap_time < best.fastest_lap_time) return r;
-      return best;
-    }, null);
-    if (fastest) {
-      const y = (doc as any).lastAutoTable.finalY + (incidents.length > 0 ? incidents.length * 4 + 14 : 8);
-      doc.setFontSize(8);
-      doc.setTextColor(200, 120, 0);
-      doc.text(`Fastest Lap: ${fastest.v2_drivers?.full_name || "Unknown"} — ${fastest.fastest_lap_time}`, 14, y);
+  // Custom extra_data columns (only if they have data)
+  for (const col of customColumns) {
+    if (anyHasExtra(results, col.key)) {
+      addCol(col.name, (r) => String(r.extra_data?.[col.key] ?? ""));
     }
   }
 
-  doc.save(`${eventName.replace(/\s+/g, "-").toLowerCase()}_${sessionName.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+  const body = results.map((r) => colExtractors.map((fn) => fn(r)));
+
+  return { head, body };
+}
+
+export async function exportEventPdf(params: EventExportParams) {
+  const { eventName, seriesName, circuitName, circuitCountry, sessions, onProgress } = params;
+
+  let logoData: string | null = null;
+  try {
+    logoData = await loadImageAsBase64(trackRecordsLogo);
+  } catch (e) {
+    console.warn("Logo load failed:", e);
+  }
+
+  onProgress?.(10);
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  for (let i = 0; i < sessions.length; i++) {
+    if (i > 0) doc.addPage();
+
+    const s = sessions[i];
+    let y = 10;
+
+    // Logo
+    if (logoData) {
+      doc.addImage(logoData, "PNG", 14, 8, 40, 12);
+      y = 24;
+    } else {
+      doc.setFontSize(10);
+      doc.setTextColor(30);
+      doc.text("TRACK RECORDS", 14, 14);
+      y = 20;
+    }
+
+    // Export date
+    doc.setFontSize(7);
+    doc.setTextColor(150);
+    doc.text(new Date().toLocaleDateString(), pageWidth - 14, 12, { align: "right" });
+
+    // Event name
+    doc.setFontSize(16);
+    doc.setTextColor(30);
+    doc.text(eventName, 14, y + 2);
+
+    // Subtitle
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
+    const subtitle = [seriesName, locationStr].filter(Boolean).join(" • ");
+    doc.text(subtitle, 14, y + 9);
+
+    // Session name & date
+    doc.setFontSize(11);
+    doc.setTextColor(50);
+    const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}` : "");
+    doc.text(sessionLabel, 14, y + 16);
+
+    let tableStartY = y + 20;
+
+    // Weather snippet
+    if (s.weather) {
+      const w = s.weather;
+      const parts: string[] = [];
+      if (w.condition_emoji || w.condition_summary) parts.push([w.condition_emoji, w.condition_summary].filter(Boolean).join(" "));
+      if (w.air_temp_min != null || w.air_temp_max != null) {
+        const temps = [w.air_temp_min, w.air_temp_max].filter((t) => t != null);
+        parts.push(`Air: ${temps.join("–")}°C`);
+      }
+      if (w.track_temp_min != null || w.track_temp_max != null) {
+        const temps = [w.track_temp_min, w.track_temp_max].filter((t) => t != null);
+        parts.push(`Track: ${temps.join("–")}°C`);
+      }
+      if (w.rain_mm != null && w.rain_mm > 0) parts.push(`Rain: ${w.rain_mm}mm`);
+      if (w.wind_speed_max != null) parts.push(`Wind: ${w.wind_speed_max} km/h`);
+
+      if (parts.length > 0) {
+        doc.setFontSize(7);
+        doc.setTextColor(120);
+        doc.text("Weather: " + parts.join("  |  "), 14, tableStartY);
+        tableStartY += 5;
+      }
+    }
+
+    // Table
+    const { head, body } = buildSessionTable(s);
+
+    (doc as any).autoTable({
+      startY: tableStartY,
+      head: [head],
+      body,
+      styles: { fontSize: 7, cellPadding: 1.5, font: "courier" },
+      headStyles: { fillColor: [30, 30, 35], textColor: [255, 255, 255], fontStyle: "bold", font: "helvetica" },
+      alternateRowStyles: { fillColor: [245, 245, 248] },
+      columnStyles: { 0: { halign: "center", cellWidth: 10 } },
+    });
+
+    const isRace = s.sessionType === "race" || s.sessionType === "sprint_race";
+
+    // Incidents
+    if (isRace && s.incidents.length > 0) {
+      let incY = (doc as any).lastAutoTable.finalY + 8;
+      if (incY > pageHeight - 20) {
+        doc.addPage();
+        incY = 14;
+      }
+      doc.setFontSize(10);
+      doc.setTextColor(30);
+      doc.text("Incidents", 14, incY);
+
+      let iy = incY + 5;
+      doc.setFontSize(7);
+      doc.setTextColor(80);
+      for (const inc of s.incidents) {
+        if (iy > pageHeight - 10) {
+          doc.addPage();
+          iy = 14;
+        }
+        const text = `${inc.lap_number ? `Lap ${inc.lap_number}: ` : ""}${inc.description || ""}${inc.penalty_type ? ` — ${inc.penalty_type}` : ""}${inc.outcome ? ` (${inc.outcome})` : ""}`;
+        doc.text(text, 16, iy);
+        iy += 4;
+      }
+    }
+
+    // Fastest lap highlight for races
+    if (isRace && s.results.length > 0) {
+      const fastest = s.results.reduce((best: any, r: any) => {
+        if (!r.fastest_lap_time) return best;
+        if (!best || r.fastest_lap_time < best.fastest_lap_time) return r;
+        return best;
+      }, null);
+      if (fastest) {
+        let flY = (doc as any).lastAutoTable.finalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
+        if (flY > pageHeight - 10) {
+          doc.addPage();
+          flY = 14;
+        }
+        doc.setFontSize(8);
+        doc.setTextColor(200, 120, 0);
+        doc.text(`Fastest Lap: ${fastest.v2_drivers?.full_name || "Unknown"} — ${fastest.fastest_lap_time}`, 14, flY);
+      }
+    }
+
+    // Footer
+    doc.setFontSize(6);
+    doc.setTextColor(180);
+    doc.text(`Page ${i + 1} of ${sessions.length}`, pageWidth - 14, pageHeight - 6, { align: "right" });
+
+    onProgress?.(10 + ((i + 1) / sessions.length) * 85);
+  }
+
+  doc.save(`${eventName.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+  onProgress?.(100);
+}
+
+// Legacy single-session wrapper (kept for backward compat)
+export async function exportSessionPdf(params: {
+  eventName: string;
+  seriesName: string;
+  circuitName: string;
+  sessionName: string;
+  sessionDate: string | null;
+  sessionType: string;
+  results: any[];
+  incidents: any[];
+  customColumns?: { key: string; name: string }[];
+  hasInt?: boolean;
+}) {
+  await exportEventPdf({
+    eventName: params.eventName,
+    seriesName: params.seriesName,
+    circuitName: params.circuitName,
+    sessions: [{
+      sessionName: params.sessionName,
+      sessionDate: params.sessionDate,
+      sessionType: params.sessionType,
+      results: params.results,
+      incidents: params.incidents,
+      customColumns: params.customColumns,
+      hasInt: params.hasInt,
+    }],
+  });
 }
