@@ -579,7 +579,14 @@ serve(async (req) => {
       allTimeCardLinks.push(match[1]);
     }
 
-    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links in HTML`);
+    // Collect Weather JSON links (pattern: 26_Weather_*.JSON)
+    const weatherJsonRegex = /href="([^"]+26_Weather[^"]*\.JSON)"/gi;
+    const allWeatherJsonLinks: string[] = [];
+    while ((match = weatherJsonRegex.exec(html)) !== null) {
+      allWeatherJsonLinks.push(match[1]);
+    }
+
+    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links in HTML`);
 
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
     const season = event.v2_seasons as any;
@@ -856,6 +863,157 @@ serve(async (req) => {
       await Promise.all(inserts);
     };
 
+    // ── Weather processing from IMSA Weather JSON ─────────────────────
+    // Map session folder prefixes to weather JSON links
+    const weatherLinksByFolder = new Map<string, string>();
+    for (const wl of allWeatherJsonLinks) {
+      if (matchesSeriesFolder(wl)) {
+        // Extract session folder: e.g. "202601221005_Practice 1"
+        const decoded = decodeURIComponent(wl);
+        const folderMatch = decoded.match(/\/(\d+_[^/]+)\//g);
+        if (folderMatch && folderMatch.length > 0) {
+          const sessionFolder = folderMatch[folderMatch.length - 1].replace(/\//g, "");
+          weatherLinksByFolder.set(sessionFolder, wl);
+        }
+      }
+    }
+
+    function timeOfDayEmoji(hourUtc: number, isNight: boolean, isDusk: boolean, isDawn: boolean): string {
+      if (isNight) return "🌙";
+      if (isDusk) return "🌇";
+      if (isDawn) return "🌅";
+      return "☀️";
+    }
+
+    function imWeatherEmoji(trackStatus: string, hourUtc?: number): string {
+      const isNight = hourUtc !== undefined && (hourUtc >= 1 || hourUtc < 11); // UTC approx for EST nighttime
+      const isDusk = hourUtc !== undefined && (hourUtc >= 23 || hourUtc === 0);
+      const isDawn = hourUtc !== undefined && (hourUtc >= 11 && hourUtc < 13);
+
+      const s = (trackStatus || "").toLowerCase();
+      if (s.includes("rain") || s.includes("wet")) return "🌧️";
+      if (s.includes("damp")) return "🌦️";
+      if (s.includes("fog")) return "🌫️";
+      if (s === "dry") return isNight ? "🌙" : isDusk ? "🌇" : isDawn ? "🌅" : "☀️";
+      return isNight ? "🌙" : "🌤️";
+    }
+
+    const processImWeather = async (sessionId: string, weatherJsonUrl: string) => {
+      try {
+        const fullUrl = (() => { try { return new URL(weatherJsonUrl, baseUrl).href; } catch { return null; } })();
+        if (!fullUrl) return;
+
+        const resp = await fetchWithRetry(fullUrl);
+        if (!resp.ok) return;
+        const weatherData = await resp.json();
+
+        const sessionWeather = weatherData.session?.weather;
+        const samples = weatherData.meteoSamples || [];
+        const units = weatherData.units || {};
+
+        if (samples.length === 0 && !sessionWeather) return;
+
+        const isF = (units.AirTemperature || "").includes("F");
+        const toC = (f: number) => isF ? Math.round(((f - 32) * 5 / 9) * 10) / 10 : f;
+
+        const isMph = (units.WindSpeed || "").includes("MPH");
+        const toKmh = (mph: number) => isMph ? Math.round(mph * 1.60934) : mph;
+
+        let airTemps: number[] = [];
+        let trackTemps: number[] = [];
+        let windSpeeds: number[] = [];
+        let windDirs: number[] = [];
+        let totalRainSamples = 0;
+        const trackStatuses = new Set<string>();
+
+        for (const s of samples) {
+          if (s.air_temp != null) airTemps.push(toC(s.air_temp));
+          if (s.track_temp != null) trackTemps.push(toC(s.track_temp));
+          if (s.wind_speed != null) windSpeeds.push(toKmh(s.wind_speed));
+          if (s.wind_direction != null) windDirs.push(s.wind_direction);
+          if (s.rain != null && s.rain > 0) totalRainSamples++;
+        }
+
+        // Track status from session summary  
+        const trackStatus = sessionWeather?.track_status || "Dry";
+        trackStatuses.add(trackStatus);
+
+        // Build emojis based on time of day and conditions
+        const emojiSet = new Set<string>();
+        if (samples.length > 0) {
+          const firstHour = parseInt(samples[0].time_utc_str?.split(" ")[1]?.split(":")[0] || "12");
+          const lastHour = parseInt(samples[samples.length - 1].time_utc_str?.split(" ")[1]?.split(":")[0] || "12");
+          // Check a few sample points for time-of-day emojis
+          for (const hr of [firstHour, Math.floor((firstHour + lastHour) / 2), lastHour]) {
+            emojiSet.add(imWeatherEmoji(trackStatus, hr));
+          }
+        } else {
+          emojiSet.add(imWeatherEmoji(trackStatus));
+        }
+
+        const conditionEmoji = Array.from(emojiSet).join("");
+
+        // Build summary
+        let conditionSummary = trackStatus;
+        if (totalRainSamples > 0) {
+          const rainPct = Math.round((totalRainSamples / samples.length) * 100);
+          conditionSummary = `${trackStatus} (rain ${rainPct}% of session)`;
+        }
+
+        const avgWindDir = windDirs.length > 0 ? Math.round(windDirs.reduce((a, b) => a + b, 0) / windDirs.length) : 0;
+        const windDirStr = (() => {
+          const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+          return dirs[Math.round(avgWindDir / 22.5) % 16];
+        })();
+
+        const windMin = windSpeeds.length > 0 ? Math.round(Math.min(...windSpeeds)) : null;
+        const windMax = windSpeeds.length > 0 ? Math.round(Math.max(...windSpeeds)) : null;
+        let windSummary: string | null = null;
+        if (windMin !== null && windMax !== null) {
+          if (windMax < 15) windSummary = "Light winds";
+          else windSummary = `${windMin}–${windMax} km/h ${windDirStr}`;
+        }
+
+        const weatherRecord = {
+          session_id: sessionId,
+          condition_summary: conditionSummary,
+          condition_emoji: conditionEmoji,
+          air_temp_min: airTemps.length > 0 ? Math.round(Math.min(...airTemps) * 10) / 10 : null,
+          air_temp_max: airTemps.length > 0 ? Math.round(Math.max(...airTemps) * 10) / 10 : null,
+          track_temp_min: trackTemps.length > 0 ? Math.round(Math.min(...trackTemps) * 10) / 10 : null,
+          track_temp_max: trackTemps.length > 0 ? Math.round(Math.max(...trackTemps) * 10) / 10 : null,
+          rain_mm: totalRainSamples > 0 ? totalRainSamples : 0,
+          rain_detail: null,
+          wind_summary: windSummary,
+          wind_speed_min: windMin,
+          wind_speed_max: windMax,
+          wind_direction: windDirStr,
+          hourly_data: samples.slice(0, 50), // Store a subset to avoid huge payloads
+          fetched_at: new Date().toISOString(),
+        };
+
+        await adminClient
+          .from("v2_session_weather")
+          .upsert(weatherRecord, { onConflict: "session_id" });
+        console.log(`Weather upserted for session ${sessionId}`);
+      } catch (err) {
+        console.error(`Failed to process weather for session ${sessionId}:`, err);
+      }
+    };
+
+    // Build a map from session name to weather URL by extracting session name from JSON result data
+    const weatherUrlForSession = (jsonUrl: string): string | null => {
+      // Weather JSON lives in the same folder as results JSON, just with 26_Weather prefix
+      // Extract the session folder from the results URL
+      const decoded = decodeURIComponent(jsonUrl);
+      for (const [folder, weatherUrl] of weatherLinksByFolder) {
+        if (decoded.includes(folder.replace(/\s/g, "%20")) || decoded.includes(folder)) {
+          return weatherUrl;
+        }
+      }
+      return null;
+    };
+
     if (isEndurance) {
       // 1. Non-race sessions
       for (const f of fetchedResults.filter(f => f.kind === "nonrace")) {
@@ -869,6 +1027,9 @@ serve(async (req) => {
         const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, null);
         if (!sessionId) continue;
         await insertResults(sessionId, entries, sessionInfo.type, false);
+        // Process weather for this session
+        const weatherUrl = weatherUrlForSession(f.url);
+        if (weatherUrl) await processImWeather(sessionId, weatherUrl);
       }
 
       // 2. Fetch Time Card CSV for driver detection in hour sub-sessions
@@ -942,6 +1103,9 @@ serve(async (req) => {
         const childSessionId = await createSession(hourSessionName, "race", f.url, sessionDate, parentSessionId);
         if (!childSessionId) continue;
         await insertResults(childSessionId, entries, "race", false, f.hour, timeCardMap.size > 0 ? timeCardMap : undefined);
+        // Process weather for this hour session
+        const hourWeatherUrl = weatherUrlForSession(f.url);
+        if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
       }
     } else {
       // Standard flow - use all fetched results
@@ -957,6 +1121,9 @@ serve(async (req) => {
         const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, null);
         if (!sessionId) continue;
         await insertResults(sessionId, entries, sessionInfo.type, false);
+        // Process weather for this session
+        const weatherUrl = weatherUrlForSession(f.url);
+        if (weatherUrl) await processImWeather(sessionId, weatherUrl);
       }
     }
 

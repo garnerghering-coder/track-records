@@ -15,9 +15,23 @@ interface HourlyWeather {
 }
 
 // WMO Weather Codes to emoji/description
-function wmoToEmoji(code: number): string {
-  if (code === 0) return "☀️";
-  if (code <= 3) return "🌤️";
+function wmoToEmoji(code: number, hour?: number): string {
+  const isNight = hour !== undefined && (hour >= 20 || hour < 6);
+  const isDusk = hour !== undefined && (hour >= 18 && hour < 20);
+  const isDawn = hour !== undefined && (hour >= 6 && hour < 8);
+
+  if (code === 0) {
+    if (isNight) return "🌙";
+    if (isDusk) return "🌇";
+    if (isDawn) return "🌅";
+    return "☀️";
+  }
+  if (code <= 3) {
+    if (isNight) return "🌙";
+    if (isDusk) return "🌇";
+    if (isDawn) return "🌅";
+    return "🌤️";
+  }
   if (code <= 48) return "🌫️";
   if (code <= 55) return "🌦️";
   if (code <= 57) return "🌧️";
@@ -27,6 +41,7 @@ function wmoToEmoji(code: number): string {
   if (code <= 82) return "🌧️";
   if (code <= 86) return "🌨️";
   if (code >= 95) return "⛈️";
+  if (isNight) return "🌙";
   return "🌤️";
 }
 
@@ -155,11 +170,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build condition summary and emoji sequence
-    const uniqueCodes = [...new Set(sessionHours.map(h => h.weathercode))];
-    const emojis = uniqueCodes.map(c => wmoToEmoji(c));
-    const conditionEmoji = emojis.join("");
+    // Build condition summary and emoji sequence (with day/night awareness)
+    // Use unique code+timeOfDay combos for more representative emojis
+    const emojiSet: string[] = [];
+    const seenEmojis = new Set<string>();
+    for (const h of sessionHours) {
+      const hour = parseInt(h.time.split("T")[1]?.split(":")[0] ?? "12");
+      const emoji = wmoToEmoji(h.weathercode, hour);
+      if (!seenEmojis.has(emoji)) {
+        seenEmojis.add(emoji);
+        emojiSet.push(emoji);
+      }
+    }
+    const conditionEmoji = emojiSet.join("");
 
+    const uniqueCodes = [...new Set(sessionHours.map(h => h.weathercode))];
     let conditionSummary: string;
     if (uniqueCodes.length === 1) {
       conditionSummary = wmoToDescription(uniqueCodes[0]);
@@ -168,7 +193,7 @@ Deno.serve(async (req) => {
       const hasRain = uniqueCodes.some(c => c >= 51);
       const hasDry = uniqueCodes.some(c => c < 51);
       if (hasRain && hasDry) {
-        conditionSummary = `Variable: ${descriptions.filter((d, i) => uniqueCodes[i] < 51)[0] || "Dry"} → ${descriptions.filter((d, i) => uniqueCodes[i] >= 51)[0] || "Wet"}`;
+        conditionSummary = `Variable: ${descriptions.filter((_d, i) => uniqueCodes[i] < 51)[0] || "Dry"} → ${descriptions.filter((_d, i) => uniqueCodes[i] >= 51)[0] || "Wet"}`;
       } else {
         conditionSummary = descriptions.join(", ");
       }
