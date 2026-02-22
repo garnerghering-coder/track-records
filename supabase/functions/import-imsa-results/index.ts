@@ -15,14 +15,11 @@ function matchDriver(
   aliasMap: Map<string, string>
 ): string | null {
   const normalized = fullName.toLowerCase().trim();
-
   const aliasId = aliasMap.get(normalized);
   if (aliasId) return aliasId;
-
   for (const d of existingDrivers) {
     if (d.full_name.toLowerCase() === normalized) return d.id;
   }
-
   const parts = normalized.split(/\s+/);
   if (parts.length >= 2) {
     const first = parts[0];
@@ -32,7 +29,6 @@ function matchDriver(
       if (dp.length >= 2 && dp[0] === first && dp[dp.length - 1] === last) return d.id;
     }
   }
-
   return null;
 }
 
@@ -43,28 +39,22 @@ function matchTeam(
   aliasMap: Map<string, string>
 ): string | null {
   const normalized = teamName.toLowerCase().trim();
-
   const aliasId = aliasMap.get(normalized);
   if (aliasId) return aliasId;
-
   for (const t of existingTeams) {
     if (t.full_name.toLowerCase() === normalized) return t.id;
     if (t.short_name && t.short_name.toLowerCase() === normalized) return t.id;
   }
-
   for (const a of seasonAliases) {
     if (a.display_name.toLowerCase() === normalized) return a.team_id;
     if (a.display_name.toLowerCase().includes(normalized) || normalized.includes(a.display_name.toLowerCase())) return a.team_id;
   }
-
   for (const t of existingTeams) {
     if (t.full_name.toLowerCase().includes(normalized) || normalized.includes(t.full_name.toLowerCase())) return t.id;
   }
-
   return null;
 }
 
-/** Detect session type from the JSON session data or folder name */
 function detectSessionType(sessionName: string, sessionType?: string): { type: string; name: string } {
   const lower = (sessionType || sessionName).toLowerCase();
   if (/qualifying/i.test(lower)) return { type: "qualifying", name: sessionName };
@@ -75,7 +65,6 @@ function detectSessionType(sessionName: string, sessionType?: string): { type: s
   return { type: "other", name: sessionName };
 }
 
-/** Parse IMSA status string to our enum */
 function parseStatus(status: string, notFinished: boolean, cause: string): string {
   if (!notFinished && (status === "Classified" || status === "Not Classified" || !status)) return "finished";
   if (notFinished) {
@@ -89,6 +78,139 @@ function parseStatus(status: string, notFinished: boolean, cause: string): strin
   if (s === "DNS") return "dns";
   if (s === "DSQ" || s === "DISQUALIFIED") return "dsq";
   return "finished";
+}
+
+/** Extract hour number from a URL path like ".../04_HOUR 3/..." */
+function extractHourNumber(url: string): number | null {
+  const decoded = decodeURIComponent(url);
+  const m = decoded.match(/HOUR\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Check if a URL is the overall race result (not an hour sub-result) */
+function isOverallRaceResult(url: string): boolean {
+  const decoded = decodeURIComponent(url).toLowerCase();
+  // Overall race results live directly in the Race folder, not in an Hour subfolder
+  return !(/hour\s*\d+/i.test(decoded));
+}
+
+// ── Process entries into results ─────────────────────────────────────
+
+async function processEntries(
+  adminClient: any,
+  sessionId: string,
+  entries: any[],
+  sessionType: string,
+  existingDrivers: Array<{ id: string; full_name: string }>,
+  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
+  seasonAliases: Array<{ team_id: string; display_name: string }>,
+  driverAliasMap: Map<string, string>,
+  teamAliasMap: Map<string, string>,
+  seasonCarMap: Map<string, string>,
+  summary: any
+) {
+  const isRace = sessionType === "race" || sessionType === "sprint_race" || sessionType === "endurance_race";
+
+  for (const entry of entries) {
+    const drivers = entry.drivers || [];
+    const primaryDriver = drivers[0];
+    if (!primaryDriver) continue;
+
+    const primaryDriverName = `${primaryDriver.firstname} ${primaryDriver.surname}`.trim();
+    if (!primaryDriverName) continue;
+
+    let driverId = matchDriver(primaryDriverName, existingDrivers, driverAliasMap);
+    if (!driverId) {
+      const { data: newDriver } = await adminClient
+        .from("v2_drivers")
+        .insert({
+          full_name: primaryDriverName,
+          ...(primaryDriver.country ? { nationality: primaryDriver.country } : {}),
+        })
+        .select("id")
+        .single();
+      if (newDriver) {
+        driverId = newDriver.id;
+        existingDrivers.push({ id: newDriver.id, full_name: primaryDriverName });
+        summary.drivers_created++;
+      }
+    } else {
+      summary.drivers_matched++;
+    }
+
+    const teamName = entry.team || null;
+    let teamId: string | null = null;
+    if (teamName) {
+      teamId = matchTeam(teamName, existingTeams, seasonAliases, teamAliasMap);
+      if (!teamId) {
+        const { data: newTeam } = await adminClient
+          .from("v2_teams")
+          .insert({ full_name: teamName.trim() })
+          .select("id")
+          .single();
+        if (newTeam) {
+          teamId = newTeam.id;
+          existingTeams.push({ id: newTeam.id, full_name: teamName.trim(), short_name: null });
+          summary.teams_created++;
+        }
+      } else {
+        summary.teams_matched++;
+      }
+    }
+
+    const carId = teamId ? (seasonCarMap.get(teamId) || null) : null;
+    const position = typeof entry.position === "number" ? entry.position : null;
+    const carNumber = entry.number || null;
+    const laps = entry.laps ? parseInt(entry.laps, 10) : null;
+    const gapToLeader = entry.gap_first && entry.gap_first !== "-" ? entry.gap_first : null;
+    const pitStops = entry.pit_stops ? parseInt(entry.pit_stops, 10) : null;
+    const bestLap = entry.time || null;
+    const totalTime = entry.total_time || null;
+    const status = parseStatus(entry.status || "", entry.not_finished || false, entry.not_finished_cause || "");
+
+    if (isRace) {
+      await adminClient.from("v2_race_results").insert({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        status: status as any,
+        laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
+        gap_to_leader: gapToLeader ? String(gapToLeader) : null,
+        pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
+        fastest_lap_time: bestLap ? String(bestLap) : null,
+        total_time: totalTime ? String(totalTime) : null,
+      } as any);
+    } else if (sessionType === "qualifying") {
+      await adminClient.from("v2_qualifying_results").insert({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        best_time: bestLap ? String(bestLap) : null,
+        gap_to_pole: gapToLeader ? String(gapToLeader) : null,
+        laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
+      } as any);
+    } else {
+      await adminClient.from("v2_practice_results").insert({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        best_lap_time: bestLap ? String(bestLap) : null,
+        gap_to_p1: gapToLeader ? String(gapToLeader) : null,
+        laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
+      } as any);
+    }
+
+    summary.total_entries++;
+  }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
@@ -127,8 +249,7 @@ serve(async (req) => {
       );
     }
 
-    // ── Step 1: Fetch the IMSA results page HTML directly (no Firecrawl needed) ──
-    // The alkamelcloud site is server-rendered HTML with all links embedded
+    // ── Step 1: Fetch the IMSA results page HTML ──
     console.log("Fetching IMSA page:", url);
     const pageResponse = await fetch(url);
     if (!pageResponse.ok) {
@@ -149,11 +270,10 @@ serve(async (req) => {
 
     console.log(`Found ${allJsonLinks.length} total .JSON links in HTML`);
 
-    // Filter for results JSON files (prefixed with 03_Results_)
-    // Resolve relative URLs against the IMSA base URL
+    // Filter for results JSON files
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
 
-    // Build series name matchers from the event's series name + aliases
+    // Build series name matchers
     const season = event.v2_seasons as any;
     const seriesObj = season?.v2_series;
     const seriesName: string = seriesObj?.name || "";
@@ -165,8 +285,6 @@ serve(async (req) => {
     const resultsJsonLinks = allJsonLinks
       .filter(l => /03_Results_/i.test(l))
       .filter(l => {
-        // The URL path contains the series name in a folder like "01_IMSA WeatherTech SportsCar Championship"
-        // Decode and check if any series name/alias is a substring of the path
         const decoded = decodeURIComponent(l).toLowerCase();
         return allSeriesNames.some(sn => decoded.includes(sn.toLowerCase()));
       })
@@ -179,19 +297,34 @@ serve(async (req) => {
       })
       .filter(Boolean) as string[];
 
-    console.log(`Found ${resultsJsonLinks.length} series-filtered results JSON links (from ${allJsonLinks.length} total):`, resultsJsonLinks.slice(0, 5));
+    console.log(`Found ${resultsJsonLinks.length} series-filtered results JSON links`);
 
     if (resultsJsonLinks.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "No results JSON files found on this page. Make sure you're linking to an IMSA event results page on alkamelcloud.com that has session results.",
+          error: "No results JSON files found for this series on this page.",
           debug_json_links_found: allJsonLinks.length,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Step 2: Load reference data for matching ──
+    // ── Step 1.5: Detect endurance race pattern ──
+    // Check if any links contain "Hour" subfolders — that means endurance
+    const hourLinks = resultsJsonLinks.filter(l => extractHourNumber(l) !== null);
+    const overallRaceLinks = resultsJsonLinks.filter(l => {
+      const decoded = decodeURIComponent(l).toLowerCase();
+      return /race/i.test(decoded) && isOverallRaceResult(l);
+    });
+    const nonRaceLinks = resultsJsonLinks.filter(l => {
+      const decoded = decodeURIComponent(l).toLowerCase();
+      return !/race/i.test(decoded) && extractHourNumber(l) === null;
+    });
+
+    const isEndurance = hourLinks.length > 0;
+    console.log(`Endurance detection: ${isEndurance} (${hourLinks.length} hour links, ${overallRaceLinks.length} overall race links, ${nonRaceLinks.length} non-race links)`);
+
+    // ── Step 2: Load reference data ──
     const seasonId = event.season_id;
     const [driversRes, teamsRes, existingSessionsRes, aliasesRes, seasonCarsRes, driverAliasesRes, teamAliasesRes] = await Promise.all([
       adminClient.from("v2_drivers").select("id, full_name"),
@@ -215,7 +348,7 @@ serve(async (req) => {
     const teamAliasMap = new Map<string, string>();
     for (const a of (teamAliasesRes.data || []) as any[]) teamAliasMap.set(a.alias.toLowerCase(), a.canonical);
 
-    // ── Step 3: Fetch each JSON file and process ──
+    // ── Step 3: Process results ──
     const summary = {
       sessions_created: 0,
       sessions_skipped: 0,
@@ -224,6 +357,7 @@ serve(async (req) => {
       drivers_created: 0,
       teams_matched: 0,
       teams_created: 0,
+      is_endurance: isEndurance,
       errors: [] as string[],
     };
 
@@ -236,197 +370,190 @@ serve(async (req) => {
       .limit(1);
     let sortOrder = (allSessions?.[0]?.sort_order ?? -1) + 1;
 
-    for (const jsonUrl of resultsJsonLinks) {
-      try {
-        console.log("Fetching JSON:", jsonUrl);
-        const jsonResponse = await fetch(jsonUrl);
-        if (!jsonResponse.ok) {
-          summary.errors.push(`Failed to fetch ${jsonUrl}: ${jsonResponse.status}`);
-          continue;
-        }
-
-        const data = await jsonResponse.json();
-
-        // The IMSA JSON has: { session: {...}, classification: [...] }
-        const sessionData = data.session || {};
-        const sessionName = sessionData.session_name || "Unknown Session";
-        const sessionType = sessionData.session_type || "";
-        const sessionInfo = detectSessionType(sessionName, sessionType);
-
-        // Skip if session already exists
-        if (existingSessionNames.has(sessionInfo.name)) {
-          console.log(`Skipping duplicate session: ${sessionInfo.name}`);
-          summary.sessions_skipped++;
-          continue;
-        }
-
-        const entries: any[] = data.classification || [];
-
-        if (entries.length === 0) {
-          summary.errors.push(`No entries found in ${sessionInfo.name}`);
-          continue;
-        }
-
-        if (isPreview) {
-          summary.sessions_created++;
-          summary.total_entries += entries.length;
-          continue;
-        }
-
-        // Extract session date from the JSON if available
-        let sessionDate: string | null = null;
-        if (sessionData.session_date) {
-          // Format: "22/01/2026 10:05" → "2026-01-22"
-          const dateParts = sessionData.session_date.split(" ")[0]?.split("/");
-          if (dateParts && dateParts.length === 3) {
-            sessionDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-          }
-        }
-
-        // Create session
-        const { data: newSession, error: sessionErr } = await adminClient
-          .from("v2_sessions")
-          .insert({
-            event_id,
-            name: sessionInfo.name,
-            session_type: sessionInfo.type as any,
-            status: "draft" as any,
-            sort_order: sortOrder++,
-            source_document_url: jsonUrl,
-            ...(sessionDate ? { date: sessionDate } : {}),
-          } as any)
+    // Auto-assign layout helper
+    const autoAssignLayout = async (sessionId: string) => {
+      if (event.circuit_id) {
+        const { data: layouts } = await adminClient
+          .from("v2_circuit_layouts")
           .select("id")
-          .single();
-
-        if (sessionErr || !newSession) {
-          summary.errors.push(`Failed to create session ${sessionInfo.name}: ${sessionErr?.message}`);
-          continue;
+          .eq("circuit_id", event.circuit_id);
+        if (layouts && layouts.length === 1) {
+          await adminClient.from("v2_sessions").update({ layout_id: layouts[0].id } as any).eq("id", sessionId);
         }
-        existingSessionNames.add(sessionInfo.name);
+      }
+    };
 
-        // Auto-assign layout if the event's circuit has exactly one layout
-        if (event.circuit_id) {
-          const { data: layouts } = await adminClient
-            .from("v2_circuit_layouts")
-            .select("id")
-            .eq("circuit_id", event.circuit_id);
-          if (layouts && layouts.length === 1) {
-            await adminClient.from("v2_sessions").update({ layout_id: layouts[0].id } as any).eq("id", newSession.id);
-          }
+    // Helper to parse session date from JSON
+    const parseSessionDate = (sessionData: any): string | null => {
+      if (sessionData.session_date) {
+        const dateParts = sessionData.session_date.split(" ")[0]?.split("/");
+        if (dateParts && dateParts.length === 3) {
+          return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
         }
+      }
+      return null;
+    };
 
-        summary.sessions_created++;
+    // Helper to create a session and return its id
+    const createSession = async (
+      name: string,
+      sessionType: string,
+      jsonUrl: string,
+      sessionDate: string | null,
+      parentSessionId: string | null
+    ): Promise<string | null> => {
+      const { data: newSession, error: sessionErr } = await adminClient
+        .from("v2_sessions")
+        .insert({
+          event_id,
+          name,
+          session_type: sessionType as any,
+          status: "draft" as any,
+          sort_order: sortOrder++,
+          source_document_url: jsonUrl,
+          ...(sessionDate ? { date: sessionDate } : {}),
+          ...(parentSessionId ? { parent_session_id: parentSessionId } : {}),
+        } as any)
+        .select("id")
+        .single();
+      if (sessionErr || !newSession) {
+        summary.errors.push(`Failed to create session ${name}: ${sessionErr?.message}`);
+        return null;
+      }
+      existingSessionNames.add(name);
+      await autoAssignLayout(newSession.id);
+      summary.sessions_created++;
+      return newSession.id;
+    };
 
-        // Process each entry
-        const isRace = sessionInfo.type === "race" || sessionInfo.type === "sprint_race";
+    if (isEndurance) {
+      // ── Endurance Race Flow ──
+      // 1. Process non-race sessions (practice, qualifying, etc.)
+      for (const jsonUrl of nonRaceLinks) {
+        try {
+          console.log("Fetching non-race JSON:", jsonUrl);
+          const jsonResponse = await fetch(jsonUrl);
+          if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${jsonUrl}: ${jsonResponse.status}`); continue; }
+          const data = await jsonResponse.json();
+          const sessionData = data.session || {};
+          const sessionName = sessionData.session_name || "Unknown Session";
+          const sessionInfo = detectSessionType(sessionName, sessionData.session_type || "");
 
-        for (const entry of entries) {
-          // IMSA JSON uses: drivers: [{ firstname, surname, country, ... }]
-          const drivers = entry.drivers || [];
-          const primaryDriver = drivers[0];
-          if (!primaryDriver) continue;
+          if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
+          const entries: any[] = data.classification || [];
+          if (entries.length === 0) { summary.errors.push(`No entries in ${sessionInfo.name}`); continue; }
+          if (isPreview) { summary.sessions_created++; summary.total_entries += entries.length; continue; }
 
-          const primaryDriverName = `${primaryDriver.firstname} ${primaryDriver.surname}`.trim();
-          if (!primaryDriverName) continue;
+          const sessionDate = parseSessionDate(sessionData);
+          const sessionId = await createSession(sessionInfo.name, sessionInfo.type, jsonUrl, sessionDate, null);
+          if (!sessionId) continue;
 
-          // Match or create driver
-          let driverId = matchDriver(primaryDriverName, existingDrivers, driverAliasMap);
-          if (!driverId) {
-            const { data: newDriver } = await adminClient
-              .from("v2_drivers")
-              .insert({
-                full_name: primaryDriverName,
-                ...(primaryDriver.country ? { nationality: primaryDriver.country } : {}),
-              })
-              .select("id")
-              .single();
-            if (newDriver) {
-              driverId = newDriver.id;
-              existingDrivers.push({ id: newDriver.id, full_name: primaryDriverName });
-              summary.drivers_created++;
+          await processEntries(adminClient, sessionId, entries, sessionInfo.type, existingDrivers, existingTeams, seasonAliases, driverAliasMap, teamAliasMap, seasonCarMap, summary);
+        } catch (err) {
+          summary.errors.push(`Error processing ${jsonUrl}: ${err instanceof Error ? err.message : "Unknown"}`);
+        }
+      }
+
+      // 2. Create parent endurance_race session
+      const raceSessionName = "Race";
+      let parentSessionId: string | null = null;
+
+      if (!existingSessionNames.has(raceSessionName) && !isPreview) {
+        // Try to get date from first overall race or hour link
+        let raceDate: string | null = null;
+        const firstRaceUrl = overallRaceLinks[0] || hourLinks[0];
+        if (firstRaceUrl) {
+          try {
+            const resp = await fetch(firstRaceUrl);
+            if (resp.ok) {
+              const d = await resp.json();
+              raceDate = parseSessionDate(d.session || {});
             }
-          } else {
-            summary.drivers_matched++;
-          }
-
-          // Match or create team
-          const teamName = entry.team || null;
-          let teamId: string | null = null;
-          if (teamName) {
-            teamId = matchTeam(teamName, existingTeams, seasonAliases, teamAliasMap);
-            if (!teamId) {
-              const { data: newTeam } = await adminClient
-                .from("v2_teams")
-                .insert({ full_name: teamName.trim() })
-                .select("id")
-                .single();
-              if (newTeam) {
-                teamId = newTeam.id;
-                existingTeams.push({ id: newTeam.id, full_name: teamName.trim(), short_name: null });
-                summary.teams_created++;
-              }
-            } else {
-              summary.teams_matched++;
-            }
-          }
-
-          const carId = teamId ? (seasonCarMap.get(teamId) || null) : null;
-
-          const position = typeof entry.position === "number" ? entry.position : null;
-          const carNumber = entry.number || null;
-          const laps = entry.laps ? parseInt(entry.laps, 10) : null;
-          const gapToLeader = entry.gap_first && entry.gap_first !== "-" ? entry.gap_first : null;
-          const pitStops = entry.pit_stops ? parseInt(entry.pit_stops, 10) : null;
-          const bestLap = entry.time || null;
-          const totalTime = entry.total_time || null;
-          const status = parseStatus(entry.status || "", entry.not_finished || false, entry.not_finished_cause || "");
-
-          if (isRace) {
-            await adminClient.from("v2_race_results").insert({
-              session_id: newSession.id,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              car_number: carNumber ? String(carNumber) : null,
-              position,
-              status: status as any,
-              laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
-              gap_to_leader: gapToLeader ? String(gapToLeader) : null,
-              pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
-              fastest_lap_time: bestLap ? String(bestLap) : null,
-              total_time: totalTime ? String(totalTime) : null,
-            } as any);
-          } else if (sessionInfo.type === "qualifying") {
-            await adminClient.from("v2_qualifying_results").insert({
-              session_id: newSession.id,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              car_number: carNumber ? String(carNumber) : null,
-              position,
-              best_time: bestLap ? String(bestLap) : null,
-              gap_to_pole: gapToLeader ? String(gapToLeader) : null,
-              laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
-            } as any);
-          } else {
-            await adminClient.from("v2_practice_results").insert({
-              session_id: newSession.id,
-              driver_id: driverId,
-              team_id: teamId,
-              car_id: carId,
-              car_number: carNumber ? String(carNumber) : null,
-              position,
-              best_lap_time: bestLap ? String(bestLap) : null,
-              gap_to_p1: gapToLeader ? String(gapToLeader) : null,
-              laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
-            } as any);
-          }
-
-          summary.total_entries++;
+          } catch { /* ignore */ }
         }
-      } catch (err) {
-        console.error(`Error processing ${jsonUrl}:`, err);
-        summary.errors.push(`Error processing ${jsonUrl}: ${err instanceof Error ? err.message : "Unknown"}`);
+
+        parentSessionId = await createSession(raceSessionName, "endurance_race", url, raceDate, null);
+      } else if (existingSessionNames.has(raceSessionName)) {
+        summary.sessions_skipped++;
+      }
+
+      // 3. Import overall race results into parent session
+      if (parentSessionId && overallRaceLinks.length > 0) {
+        // Use the last overall race link (usually the final classification)
+        const overallUrl = overallRaceLinks[overallRaceLinks.length - 1];
+        try {
+          console.log("Fetching overall race results:", overallUrl);
+          const jsonResponse = await fetch(overallUrl);
+          if (jsonResponse.ok) {
+            const data = await jsonResponse.json();
+            const entries: any[] = data.classification || [];
+            await processEntries(adminClient, parentSessionId, entries, "endurance_race", existingDrivers, existingTeams, seasonAliases, driverAliasMap, teamAliasMap, seasonCarMap, summary);
+          }
+        } catch (err) {
+          summary.errors.push(`Error processing overall race: ${err instanceof Error ? err.message : "Unknown"}`);
+        }
+      }
+
+      // 4. Import hour-by-hour results as child sessions
+      // Sort hours by hour number
+      const sortedHourLinks = hourLinks
+        .map(l => ({ url: l, hour: extractHourNumber(l)! }))
+        .sort((a, b) => a.hour - b.hour);
+
+      for (const { url: hourUrl, hour } of sortedHourLinks) {
+        const hourSessionName = `Hour ${hour}`;
+        if (existingSessionNames.has(hourSessionName)) { summary.sessions_skipped++; continue; }
+
+        try {
+          console.log(`Fetching Hour ${hour} results:`, hourUrl);
+          const jsonResponse = await fetch(hourUrl);
+          if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${hourUrl}: ${jsonResponse.status}`); continue; }
+          const data = await jsonResponse.json();
+          const entries: any[] = data.classification || [];
+          if (entries.length === 0) { summary.errors.push(`No entries in Hour ${hour}`); continue; }
+
+          if (isPreview) { summary.sessions_created++; summary.total_entries += entries.length; continue; }
+
+          const sessionDate = parseSessionDate(data.session || {});
+          // Child sessions use "race" type so results go into v2_race_results
+          const childSessionId = await createSession(hourSessionName, "race", hourUrl, sessionDate, parentSessionId);
+          if (!childSessionId) continue;
+
+          await processEntries(adminClient, childSessionId, entries, "race", existingDrivers, existingTeams, seasonAliases, driverAliasMap, teamAliasMap, seasonCarMap, summary);
+        } catch (err) {
+          summary.errors.push(`Error processing Hour ${hour}: ${err instanceof Error ? err.message : "Unknown"}`);
+        }
+      }
+
+      if (isPreview && !existingSessionNames.has(raceSessionName)) {
+        summary.sessions_created++; // count parent
+        summary.sessions_created += sortedHourLinks.length; // count hours
+      }
+    } else {
+      // ── Standard (non-endurance) flow ──
+      for (const jsonUrl of resultsJsonLinks) {
+        try {
+          console.log("Fetching JSON:", jsonUrl);
+          const jsonResponse = await fetch(jsonUrl);
+          if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${jsonUrl}: ${jsonResponse.status}`); continue; }
+          const data = await jsonResponse.json();
+          const sessionData = data.session || {};
+          const sessionName = sessionData.session_name || "Unknown Session";
+          const sessionInfo = detectSessionType(sessionName, sessionData.session_type || "");
+
+          if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
+          const entries: any[] = data.classification || [];
+          if (entries.length === 0) { summary.errors.push(`No entries in ${sessionInfo.name}`); continue; }
+          if (isPreview) { summary.sessions_created++; summary.total_entries += entries.length; continue; }
+
+          const sessionDate = parseSessionDate(sessionData);
+          const sessionId = await createSession(sessionInfo.name, sessionInfo.type, jsonUrl, sessionDate, null);
+          if (!sessionId) continue;
+
+          await processEntries(adminClient, sessionId, entries, sessionInfo.type, existingDrivers, existingTeams, seasonAliases, driverAliasMap, teamAliasMap, seasonCarMap, summary);
+        } catch (err) {
+          summary.errors.push(`Error processing ${jsonUrl}: ${err instanceof Error ? err.message : "Unknown"}`);
+        }
       }
     }
 
