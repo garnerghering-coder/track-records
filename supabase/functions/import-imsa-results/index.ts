@@ -314,9 +314,24 @@ serve(async (req) => {
       });
     }
 
-    const resultsJsonLinks = allJsonLinks
-      .filter(l => /03_Results_/i.test(l))
-      .filter(l => matchesSeriesFolder(l))
+    // Collect both Official (03_) and Unofficial (02_) results, preferring Official
+    const seriesMatchedLinks = allJsonLinks
+      .filter(l => /0[23]_Results_/i.test(l))
+      .filter(l => matchesSeriesFolder(l));
+
+    // Group by session path (everything before the results file) to deduplicate
+    const sessionGrouped = new Map<string, string>();
+    for (const l of seriesMatchedLinks) {
+      // Key = path up to the results file, e.g. ".../01_Hour 1/"
+      const key = l.replace(/0[23]_Results_[^/]+$/i, "");
+      const existing = sessionGrouped.get(key);
+      if (!existing || l.includes("03_Results_")) {
+        // Prefer 03_ (Official) over 02_ (Unofficial)
+        sessionGrouped.set(key, l);
+      }
+    }
+
+    const resultsJsonLinks = Array.from(sessionGrouped.values())
       .map(l => {
         try {
           return new URL(l, baseUrl).href;
@@ -514,28 +529,31 @@ serve(async (req) => {
         summary.sessions_skipped++;
       }
 
-      // 3. Import overall race results into parent session
-      if (parentSessionId && overallRaceLinks.length > 0) {
-        // Use the last overall race link (usually the final classification)
-        const overallUrl = overallRaceLinks[overallRaceLinks.length - 1];
+      // 3. Import race results into parent session
+      // Use overall race link if available, otherwise use the LAST hour's data as final results
+      const sortedHourLinks = hourLinks
+        .map(l => ({ url: l, hour: extractHourNumber(l)! }))
+        .sort((a, b) => a.hour - b.hour);
+
+      const raceDataUrl = overallRaceLinks.length > 0
+        ? overallRaceLinks[overallRaceLinks.length - 1]
+        : (sortedHourLinks.length > 0 ? sortedHourLinks[sortedHourLinks.length - 1].url : null);
+
+      if (parentSessionId && raceDataUrl) {
         try {
-          console.log("Fetching overall race results:", overallUrl);
-          const jsonResponse = await fetch(overallUrl);
+          console.log("Fetching final race results for parent session:", raceDataUrl);
+          const jsonResponse = await fetch(raceDataUrl);
           if (jsonResponse.ok) {
             const data = await jsonResponse.json();
             const entries: any[] = data.classification || [];
             await processEntries(adminClient, parentSessionId, entries, "endurance_race", existingDrivers, existingTeams, seasonAliases, driverAliasMap, teamAliasMap, seasonCarMap, summary);
           }
         } catch (err) {
-          summary.errors.push(`Error processing overall race: ${err instanceof Error ? err.message : "Unknown"}`);
+          summary.errors.push(`Error processing final race results: ${err instanceof Error ? err.message : "Unknown"}`);
         }
       }
 
       // 4. Import hour-by-hour results as child sessions
-      // Sort hours by hour number
-      const sortedHourLinks = hourLinks
-        .map(l => ({ url: l, hour: extractHourNumber(l)! }))
-        .sort((a, b) => a.hour - b.hour);
 
       for (const { url: hourUrl, hour } of sortedHourLinks) {
         const hourSessionName = `Hour ${hour}`;
