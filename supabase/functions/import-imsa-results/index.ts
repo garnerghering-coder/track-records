@@ -487,8 +487,8 @@ function buildResultRows(
     if (raceClass) extraData["Class"] = raceClass;
     if (raceClass) extraData["PIC"] = pic;
 
-    // For overall endurance race results, store all drivers
-    if (isOverallEndurance && drivers.length > 1) {
+    // Store all drivers for any race with multiple drivers per car
+    if (drivers.length > 1) {
       const allDrivers: Array<{ id: string | null; name: string; nationality: string | null }> = [];
       for (const d of drivers) {
         const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
