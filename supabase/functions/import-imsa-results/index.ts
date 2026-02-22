@@ -314,19 +314,24 @@ serve(async (req) => {
       });
     }
 
-    // Collect both Official (03_) and Unofficial (02_) results, preferring Official
+    // Collect results JSON files:
+    // - Practice/Qualifying/Race: 02_Results_ or 03_Results_ (prefer 03_ Official)
+    // - Hourly race results: 04_Results by Hour_ or 04_Results%20by%20Hour_ 
+    const resultsFilePattern = /0[234]_Results[_%\s]/i;
     const seriesMatchedLinks = allJsonLinks
-      .filter(l => /0[23]_Results_/i.test(l))
+      .filter(l => resultsFilePattern.test(l))
+      // Exclude "Results by Class" and "Results by Hour & Class" — we want plain results only
+      .filter(l => !/Results[_%\s]+by[_%\s]+Class/i.test(l) && !/Results[_%\s]+by[_%\s]+Hour[_%\s]+(&|%26)/i.test(l))
       .filter(l => matchesSeriesFolder(l));
 
     // Group by session path (everything before the results file) to deduplicate
     const sessionGrouped = new Map<string, string>();
     for (const l of seriesMatchedLinks) {
-      // Key = path up to the results file, e.g. ".../01_Hour 1/"
-      const key = l.replace(/0[23]_Results_[^/]+$/i, "");
+      // Key = path up to the results file
+      const key = l.replace(/0[234]_Results[^/]*$/i, "");
       const existing = sessionGrouped.get(key);
-      if (!existing || l.includes("03_Results_")) {
-        // Prefer 03_ (Official) over 02_ (Unofficial)
+      if (!existing || /03_Results/i.test(l)) {
+        // Prefer 03_ (Official) over others
         sessionGrouped.set(key, l);
       }
     }
