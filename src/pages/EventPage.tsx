@@ -566,9 +566,9 @@ function SessionResults({
                     const allDrivers = (r as any).extra_data?.all_drivers;
                     if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
                       return (
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col">
                           {allDrivers.map((d: any, idx: number) => (
-                            <span key={idx}>
+                            <span key={idx} className="leading-[22px]">
                               {d.id ? (
                                 <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
                               ) : d.name}
@@ -585,9 +585,11 @@ function SessionResults({
                     const allDrivers = (r as any).extra_data?.all_drivers;
                     if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
                       return (
-                        <div className="flex flex-col gap-0.5">
+                        <div className="flex flex-col">
                           {allDrivers.map((d: any, idx: number) => (
-                            <FlagImage key={idx} nationality={d.nationality} size={18} />
+                            <div key={idx} className="flex items-center leading-[22px] h-[22px]">
+                              <FlagImage nationality={d.nationality} size={18} />
+                            </div>
                           ))}
                         </div>
                       );
