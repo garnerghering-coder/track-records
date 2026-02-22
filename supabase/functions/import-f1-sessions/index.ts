@@ -568,6 +568,7 @@ serve(async (req) => {
           continue;
         }
 
+        const rows = parseMarkdownTable(pageMarkdown);
         const headerRow = rows[0];
         const dataRows = rows.slice(1);
         const tableType = detectTableType(headerRow);
