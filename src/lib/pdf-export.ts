@@ -67,7 +67,7 @@ function anyHasExtra(results: any[], key: string): boolean {
 
 function buildSessionTable(s: SessionExportData) {
   const { sessionType, results, customColumns = [], hasInt = false, teamNameMap = {} } = s;
-  const isRace = sessionType === "race" || sessionType === "sprint_race";
+  const isRace = sessionType === "race" || sessionType === "sprint_race" || sessionType === "endurance_race";
   const isQual = sessionType === "qualifying" || sessionType === "sprint_qualifying";
   const isPractice = sessionType === "practice" || sessionType === "warmup";
 
@@ -229,7 +229,7 @@ export async function exportEventPdf(params: EventExportParams) {
       columnStyles: { 0: { halign: "center", cellWidth: 10 } },
     });
 
-    const isRace = s.sessionType === "race" || s.sessionType === "sprint_race";
+    const isRace = s.sessionType === "race" || s.sessionType === "sprint_race" || s.sessionType === "endurance_race";
 
     // Incidents
     const tableFinalY = (doc as any).previousAutoTable?.finalY ?? tableStartY + 20;

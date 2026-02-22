@@ -18,6 +18,7 @@ import WeatherBubble from "@/components/WeatherBubble";
 export default function EventPage() {
   const { slug } = useParams();
   const [activeTab, setActiveTab] = useState<string>("");
+  const [activeSubTab, setActiveSubTab] = useState<string>("race-results");
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["public_event", slug],
@@ -33,23 +34,31 @@ export default function EventPage() {
     },
   });
 
-  const { data: sessions = [] } = useQuery({
+  const { data: allSessions = [] } = useQuery({
     queryKey: ["public_sessions", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v2_sessions")
         .select("*")
-      .eq("event_id", slug!)
-      .eq("status", "published" as any)
-      .order("sort_order", { ascending: true });
+        .eq("event_id", slug!)
+        .eq("status", "published" as any)
+        .order("sort_order", { ascending: true });
       if (error) throw error;
-      if (data.length > 0 && !activeTab) setActiveTab(data[0].id);
       return data;
     },
     enabled: !!event,
   });
 
-  // Fetch team season display names for this event's season
+  // Split into top-level sessions (no parent) and child sessions
+  const sessions = allSessions.filter((s: any) => !(s as any).parent_session_id);
+  const childSessions = allSessions.filter((s: any) => !!(s as any).parent_session_id);
+
+  // Set initial active tab
+  if (sessions.length > 0 && !activeTab) {
+    setActiveTab(sessions[0].id);
+  }
+
+  // Fetch team season display names
   const seasonId = (event as any)?.v2_seasons?.id;
   const { data: teamSeasonNames = [] } = useQuery({
     queryKey: ["team_season_names", seasonId],
@@ -60,14 +69,13 @@ export default function EventPage() {
     enabled: !!seasonId,
   });
 
-  // Build a lookup map: team_id -> display_name
   const teamNameMap: Record<string, string> = {};
   for (const tsn of teamSeasonNames) {
     teamNameMap[tsn.team_id] = tsn.display_name;
   }
 
-  // Fetch weather data for all sessions
-  const sessionIds = sessions.map((s: any) => s.id);
+  // Fetch weather data
+  const sessionIds = allSessions.map((s: any) => s.id);
   const { data: weatherData = [] } = useQuery({
     queryKey: ["public_weather", slug],
     queryFn: async () => {
@@ -88,6 +96,15 @@ export default function EventPage() {
 
   const seriesName = event.v2_seasons?.v2_series?.name;
   const year = event.v2_seasons?.year;
+
+  // Get child sessions for active tab (endurance race)
+  const activeSession = sessions.find((s: any) => s.id === activeTab);
+  const isEndurance = activeSession?.session_type === "endurance_race";
+  const hourSessions = isEndurance
+    ? childSessions
+        .filter((s: any) => (s as any).parent_session_id === activeTab)
+        .sort((a: any, b: any) => a.sort_order - b.sort_order)
+    : [];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -120,7 +137,7 @@ export default function EventPage() {
           {sessions.length === 0 ? (
             <p className="text-muted-foreground text-sm">No published sessions yet.</p>
           ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveSubTab("race-results"); }}>
               <TabsList className="mb-4">
                 {sessions.map((s: any) => (
                   <TabsTrigger key={s.id} value={s.id} className="text-xs sm:text-sm">
@@ -130,7 +147,20 @@ export default function EventPage() {
               </TabsList>
               {sessions.map((s: any) => (
                 <TabsContent key={s.id} value={s.id}>
-                  <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} />
+                  {s.session_type === "endurance_race" ? (
+                    <EnduranceRaceView
+                      parentSession={s}
+                      hourSessions={hourSessions}
+                      event={event}
+                      teamNameMap={teamNameMap}
+                      allSessions={sessions}
+                      weatherMap={weatherMap}
+                      activeSubTab={activeSubTab}
+                      setActiveSubTab={setActiveSubTab}
+                    />
+                  ) : (
+                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} />
+                  )}
                 </TabsContent>
               ))}
             </Tabs>
@@ -142,10 +172,87 @@ export default function EventPage() {
   );
 }
 
-// Position change indicator component
+// ── Endurance Race View ──────────────────────────────────────────────
+
+function EnduranceRaceView({
+  parentSession,
+  hourSessions,
+  event,
+  teamNameMap,
+  allSessions,
+  weatherMap,
+  activeSubTab,
+  setActiveSubTab,
+}: {
+  parentSession: any;
+  hourSessions: any[];
+  event: any;
+  teamNameMap: Record<string, string>;
+  allSessions: any[];
+  weatherMap: Record<string, any>;
+  activeSubTab: string;
+  setActiveSubTab: (v: string) => void;
+}) {
+  // The sub-tabs: "Race Results" + each hour
+  const subTabs = [
+    { id: "race-results", label: "Race Results", sessionId: parentSession.id },
+    ...hourSessions.map((hs: any) => ({ id: hs.id, label: hs.name, sessionId: hs.id })),
+  ];
+
+  // Determine which session to show
+  const currentSubTab = subTabs.find(t => t.id === activeSubTab) || subTabs[0];
+  const displaySessionId = currentSubTab?.sessionId || parentSession.id;
+  const displaySession = displaySessionId === parentSession.id
+    ? parentSession
+    : hourSessions.find((h: any) => h.id === displaySessionId) || parentSession;
+
+  // For +/- calculation, we need to know the "reference" session
+  // - "Race Results" and "Hour 1": compare to qualifying
+  // - "Hour N" (N>1): compare to "Hour N-1"
+  const currentHourIndex = hourSessions.findIndex((h: any) => h.id === displaySessionId);
+  const isHourView = currentHourIndex >= 0;
+  const isFirstHour = isHourView && currentHourIndex === 0;
+  const useQualifyingRef = !isHourView || isFirstHour; // Race Results or Hour 1
+  const prevHourSession = isHourView && currentHourIndex > 0 ? hourSessions[currentHourIndex - 1] : null;
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab bar */}
+      <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-lg">
+        {subTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
+              activeSubTab === tab.id
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Results for the selected sub-tab */}
+      <SessionResults
+        session={displaySession}
+        event={event}
+        teamNameMap={teamNameMap}
+        allSessions={allSessions}
+        weatherMap={weatherMap}
+        positionRefMode={useQualifyingRef ? "qualifying" : "previous-hour"}
+        prevHourSessionId={prevHourSession?.id || null}
+      />
+    </div>
+  );
+}
+
+// ── Position change indicator ────────────────────────────────────────
+
 function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: number | null }) {
   if (racePos === null || qualPos === null) return null;
-  const delta = qualPos - racePos; // positive = gained positions
+  const delta = qualPos - racePos;
   if (delta === 0) return <span className="text-xs text-muted-foreground">—</span>;
   if (delta > 0) {
     return (
@@ -163,10 +270,28 @@ function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: 
   );
 }
 
-function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }: { session: any; event: any; teamNameMap: Record<string, string>; allSessions: any[]; weatherMap: Record<string, any> }) {
+// ── Session Results ──────────────────────────────────────────────────
+
+function SessionResults({
+  session,
+  event,
+  teamNameMap,
+  allSessions,
+  weatherMap,
+  positionRefMode,
+  prevHourSessionId,
+}: {
+  session: any;
+  event: any;
+  teamNameMap: Record<string, string>;
+  allSessions: any[];
+  weatherMap: Record<string, any>;
+  positionRefMode?: "qualifying" | "previous-hour";
+  prevHourSessionId?: string | null;
+}) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
-  const isRace = type === "race" || type === "sprint_race";
+  const isRace = type === "race" || type === "sprint_race" || type === "endurance_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
   const isPractice = type === "practice" || type === "warmup";
 
@@ -204,8 +329,15 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
     },
   });
 
-  // For race sessions, fetch qualifying results to compute position delta
-  const qualSession = isRace ? allSessions.find((s: any) => s.session_type === "qualifying" || s.session_type === "sprint_qualifying") : null;
+  // Determine position reference source
+  const refMode = positionRefMode || "qualifying";
+  const useQualifying = refMode === "qualifying";
+
+  // For qualifying reference: find the qualifying session
+  const qualSession = isRace && useQualifying
+    ? allSessions.find((s: any) => s.session_type === "qualifying" || s.session_type === "sprint_qualifying")
+    : null;
+
   const { data: qualResults = [] } = useQuery({
     queryKey: ["public_qual_for_race", qualSession?.id],
     queryFn: async () => {
@@ -213,16 +345,35 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
       const { data } = await supabase.from("v2_qualifying_results" as any).select("driver_id, position").eq("session_id", qualSession.id).order("position");
       return (data || []) as any[];
     },
-    enabled: isRace && !!qualSession,
+    enabled: isRace && useQualifying && !!qualSession,
   });
 
-  // Build qualifying position lookup: driver_id -> qualifying position
-  const qualPosMap: Record<string, number> = {};
-  for (const qr of qualResults) {
-    if (qr.driver_id && qr.position) qualPosMap[qr.driver_id] = qr.position;
+  // For previous hour reference: fetch that hour's race results
+  const { data: prevHourResults = [] } = useQuery({
+    queryKey: ["public_prev_hour", prevHourSessionId],
+    queryFn: async () => {
+      if (!prevHourSessionId) return [];
+      const { data } = await supabase.from("v2_race_results" as any).select("driver_id, position").eq("session_id", prevHourSessionId).order("position");
+      return (data || []) as any[];
+    },
+    enabled: isRace && !useQualifying && !!prevHourSessionId,
+  });
+
+  // Build position lookup map
+  const refPosMap: Record<string, number> = {};
+  if (useQualifying) {
+    for (const qr of qualResults) {
+      if (qr.driver_id && qr.position) refPosMap[qr.driver_id] = qr.position;
+    }
+  } else {
+    for (const pr of prevHourResults) {
+      if (pr.driver_id && pr.position) refPosMap[pr.driver_id] = pr.position;
+    }
   }
 
-  // Extract custom columns from extra_data (excluding "Int" which is built-in)
+  const hasRefData = Object.keys(refPosMap).length > 0;
+
+  // Extract custom columns from extra_data
   const extraDataKeys: { key: string; name: string }[] = [];
   if (results.length > 0) {
     const seenKeys = new Set<string>();
@@ -242,17 +393,15 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
 
   const hasInt = results.some((r: any) => r.extra_data?.Int);
 
-  // Determine which columns have data (to hide empty ones)
+  // Column visibility
   const hasCarNumber = results.some((r: any) => r.car_number);
   const hasCar = results.some((r: any) => r.v2_cars);
   const hasTeam = results.some((r: any) => r.v2_teams);
 
-  // Practice columns
   const hasBestLap = isPractice && results.some((r: any) => r.best_lap_time);
   const hasGapP1 = isPractice && results.some((r: any) => r.gap_to_p1);
   const hasPracticeLaps = isPractice && results.some((r: any) => r.laps_run);
 
-  // Qualifying columns
   const hasQ1 = isQual && results.some((r: any) => r.q1_time);
   const hasQ2 = isQual && results.some((r: any) => r.q2_time);
   const hasQ3 = isQual && results.some((r: any) => r.q3_time);
@@ -260,7 +409,6 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
   const hasGapPole = isQual && results.some((r: any) => r.gap_to_pole);
   const hasQualLaps = isQual && results.some((r: any) => r.laps_run);
 
-  // Race columns
   const hasRaceLaps = isRace && results.some((r: any) => r.laps_completed);
   const hasTotalTime = isRace && results.some((r: any) => r.total_time);
   const hasGapLeader = isRace && results.some((r: any) => r.gap_to_leader);
@@ -284,7 +432,6 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
   }
 
   const buildSessionData = (s: any, res: any[], inc: any[]): SessionExportData => {
-    // Compute custom columns for this session's results
     const customCols: { key: string; name: string }[] = [];
     const seenKeys = new Set<string>();
     for (const r of res) {
@@ -323,12 +470,11 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
         onProgress,
       });
     } else {
-      // Fetch results for ALL sessions
       const allSessionData: SessionExportData[] = [];
       for (let idx = 0; idx < allSessions.length; idx++) {
         const s = allSessions[idx];
         const sType = s.session_type;
-        const tbl = (sType === "race" || sType === "sprint_race") ? "v2_race_results"
+        const tbl = (sType === "race" || sType === "sprint_race" || sType === "endurance_race") ? "v2_race_results"
           : (sType === "qualifying" || sType === "sprint_qualifying") ? "v2_qualifying_results"
           : "v2_practice_results";
         const { data: sResults } = await supabase.from(tbl as any)
@@ -336,7 +482,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
           .eq("session_id", s.id)
           .order("position");
         let sIncidents: any[] = [];
-        if (sType === "race" || sType === "sprint_race") {
+        if (sType === "race" || sType === "sprint_race" || sType === "endurance_race") {
           const { data: inc } = await supabase.from("v2_incidents").select("*").eq("session_id", s.id).order("lap_number");
           sIncidents = inc || [];
         }
@@ -354,7 +500,6 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
     }
   };
 
-  // Helper to get team display name (season alias or fallback)
   const getTeamName = (r: any) => {
     const teamId = r.v2_teams?.id;
     if (teamId && teamNameMap[teamId]) return teamNameMap[teamId];
@@ -389,7 +534,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
           <TableHeader>
            <TableRow className="bg-muted/50">
               <TableHead className="w-12">Pos</TableHead>
-              {isRace && <TableHead className="w-12">+/-</TableHead>}
+              {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
               {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
               <TableHead>Driver</TableHead>
               <TableHead className="w-10">Nat</TableHead>
@@ -407,9 +552,9 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
             {results.map((r: any, i: number) => (
               <TableRow key={r.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
-                {isRace && (
+                {isRace && hasRefData && (
                   <TableCell className="text-center">
-                    <PositionDelta racePos={r.position} qualPos={r.driver_id ? qualPosMap[r.driver_id] ?? null : null} />
+                    <PositionDelta racePos={r.position} qualPos={r.driver_id ? refPosMap[r.driver_id] ?? null : null} />
                   </TableCell>
                 )}
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
@@ -463,7 +608,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
         </Table>
       </div>
 
-      {/* Built-in incidents for race sessions */}
+      {/* Incidents */}
       {isRace && incidents.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">Incidents</h4>
@@ -480,7 +625,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
         </div>
       )}
 
-      {/* Custom annotation sections */}
+      {/* Annotation sections */}
       {annotationSections.map((section: any) => {
         const items = (section.v2_annotation_items || []).sort((a: any, b: any) => a.sort_order - b.sort_order);
         if (items.length === 0) return null;

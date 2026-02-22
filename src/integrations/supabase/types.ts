@@ -1778,6 +1778,7 @@ export type Database = {
           id: string
           layout_id: string | null
           name: string
+          parent_session_id: string | null
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order: number
           source_document_url: string | null
@@ -1794,6 +1795,7 @@ export type Database = {
           id?: string
           layout_id?: string | null
           name: string
+          parent_session_id?: string | null
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
@@ -1810,6 +1812,7 @@ export type Database = {
           id?: string
           layout_id?: string | null
           name?: string
+          parent_session_id?: string | null
           session_type?: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
@@ -1830,6 +1833,13 @@ export type Database = {
             columns: ["layout_id"]
             isOneToOne: false
             referencedRelation: "v2_circuit_layouts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_sessions_parent_session_id_fkey"
+            columns: ["parent_session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1985,6 +1995,7 @@ export type Database = {
         | "race"
         | "warmup"
         | "other"
+        | "endurance_race"
       verification_status: "pending" | "verified" | "rejected"
     }
     CompositeTypes: {
@@ -2137,6 +2148,7 @@ export const Constants = {
         "race",
         "warmup",
         "other",
+        "endurance_race",
       ],
       verification_status: ["pending", "verified", "rejected"],
     },

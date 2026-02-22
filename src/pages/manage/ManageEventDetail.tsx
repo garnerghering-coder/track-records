@@ -21,6 +21,7 @@ const SESSION_TYPES = [
   { value: "sprint_qualifying", label: "Sprint Qualifying" },
   { value: "sprint_race", label: "Sprint Race" },
   { value: "race", label: "Race" },
+  { value: "endurance_race", label: "Endurance Race" },
   { value: "warmup", label: "Warmup" },
   { value: "other", label: "Other" },
 ];
