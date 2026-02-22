@@ -368,16 +368,22 @@ function SessionResults({
   const refMode = positionRefMode || "qualifying";
   const useQualifying = refMode === "qualifying";
 
-  // For qualifying reference: find the qualifying session
+  // For qualifying reference: use override if set, otherwise auto-detect
   const qualSession = isRace && useQualifying
-    ? allSessions.find((s: any) => s.session_type === "qualifying" || s.session_type === "sprint_qualifying")
+    ? ((session as any).qualifying_session_id
+        ? allSessions.find((s: any) => s.id === (session as any).qualifying_session_id)
+        : allSessions.find((s: any) => s.session_type === "qualifying" || s.session_type === "sprint_qualifying"))
     : null;
 
+  // The override might point to a race/sprint_race session, so we need to fetch from the right table
+  const qualIsRaceType = qualSession && (qualSession.session_type === "race" || qualSession.session_type === "sprint_race");
+  const qualTable = qualIsRaceType ? "v2_race_results" : "v2_qualifying_results";
+
   const { data: qualResults = [] } = useQuery({
-    queryKey: ["public_qual_for_race", qualSession?.id],
+    queryKey: ["public_qual_for_race", qualSession?.id, qualTable],
     queryFn: async () => {
       if (!qualSession) return [];
-      const { data } = await supabase.from("v2_qualifying_results" as any).select("driver_id, position").eq("session_id", qualSession.id).order("position");
+      const { data } = await supabase.from(qualTable as any).select("driver_id, position").eq("session_id", qualSession.id).order("position");
       return (data || []) as any[];
     },
     enabled: isRace && useQualifying && !!qualSession,

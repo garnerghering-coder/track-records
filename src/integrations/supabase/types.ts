@@ -1779,6 +1779,7 @@ export type Database = {
           layout_id: string | null
           name: string
           parent_session_id: string | null
+          qualifying_session_id: string | null
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order: number
           source_document_url: string | null
@@ -1796,6 +1797,7 @@ export type Database = {
           layout_id?: string | null
           name: string
           parent_session_id?: string | null
+          qualifying_session_id?: string | null
           session_type: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
@@ -1813,6 +1815,7 @@ export type Database = {
           layout_id?: string | null
           name?: string
           parent_session_id?: string | null
+          qualifying_session_id?: string | null
           session_type?: Database["public"]["Enums"]["session_type_enum"]
           sort_order?: number
           source_document_url?: string | null
@@ -1838,6 +1841,13 @@ export type Database = {
           {
             foreignKeyName: "v2_sessions_parent_session_id_fkey"
             columns: ["parent_session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_sessions_qualifying_session_id_fkey"
+            columns: ["qualifying_session_id"]
             isOneToOne: false
             referencedRelation: "v2_sessions"
             referencedColumns: ["id"]
