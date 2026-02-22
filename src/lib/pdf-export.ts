@@ -152,47 +152,47 @@ export async function exportEventPdf(params: EventExportParams) {
     if (i > 0) doc.addPage();
 
     const s = sessions[i];
-    let y = 10;
 
-    // Logo
+    // --- Header band: logo left, event info right-aligned ---
+    const headerY = 12;
+
+    // Logo (left)
     if (logoData) {
-      // Preserve aspect ratio: load image to get natural dimensions
       const imgProps = doc.getImageProperties(logoData);
-      const logoHeight = 12;
+      const logoHeight = 10;
       const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      doc.addImage(logoData, "PNG", 14, 8, logoWidth, logoHeight);
-      y = 24;
+      doc.addImage(logoData, "PNG", 14, 7, logoWidth, logoHeight);
     } else {
       doc.setFontSize(10);
       doc.setTextColor(30);
-      doc.text("TRACK RECORDS", 14, 14);
-      y = 20;
+      doc.text("TRACK RECORDS", 14, headerY);
     }
 
-    // Export date
-    doc.setFontSize(7);
-    doc.setTextColor(150);
-    doc.text(new Date().toLocaleDateString(), pageWidth - 14, 12, { align: "right" });
-
-    // Event name
-    doc.setFontSize(16);
+    // Event name (right-aligned, bold)
+    doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text(eventName, 14, y + 2);
+    doc.text(eventName, pageWidth - 14, headerY - 1, { align: "right" });
 
-    // Subtitle
-    doc.setFontSize(10);
+    // Series • Circuit, Country (right-aligned, smaller)
+    doc.setFontSize(8);
     doc.setTextColor(100);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
-    const subtitle = [seriesName, locationStr].filter(Boolean).join(" • ");
-    doc.text(subtitle, 14, y + 9);
+    const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
+    doc.text(subtitle, pageWidth - 14, headerY + 5, { align: "right" });
+
+    // Export date (right, small, below subtitle)
+    doc.setFontSize(6);
+    doc.setTextColor(160);
+    doc.text(new Date().toLocaleDateString(), pageWidth - 14, headerY + 9, { align: "right" });
 
     // Session name & date
+    let y = 24;
     doc.setFontSize(11);
     doc.setTextColor(50);
     const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}` : "");
-    doc.text(sessionLabel, 14, y + 16);
+    doc.text(sessionLabel, 14, y);
 
-    let tableStartY = y + 20;
+    let tableStartY = y + 5;
 
     // Weather snippet
     if (s.weather) {
