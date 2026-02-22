@@ -821,17 +821,19 @@ serve(async (req) => {
       }
     };
 
-    const parseSessionDate = (sessionData: any): string | null => {
-      if (sessionData.session_date) {
-        const dateParts = sessionData.session_date.split(" ")[0]?.split("/");
-        if (dateParts && dateParts.length === 3) return `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-      }
-      return null;
+    /** Parse session_date "22/01/2026 10:05" → { date: "2026-01-22", startTime: "10:05" } */
+    const parseSessionDateTime = (sessionData: any): { date: string | null; startTime: string | null } => {
+      if (!sessionData.session_date) return { date: null, startTime: null };
+      const parts = sessionData.session_date.split(" ");
+      const dateParts = parts[0]?.split("/");
+      const date = dateParts && dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : null;
+      const startTime = parts[1] || null; // "10:05" (24h local time)
+      return { date, startTime };
     };
 
     const createSession = async (
       name: string, sessionType: string, jsonUrl: string,
-      sessionDate: string | null, parentSessionId: string | null
+      sessionDate: string | null, startTime: string | null, parentSessionId: string | null
     ): Promise<string | null> => {
       const { data: newSession, error: sessionErr } = await adminClient
         .from("v2_sessions")
@@ -839,6 +841,7 @@ serve(async (req) => {
           event_id, name, session_type: sessionType as any, status: "draft" as any,
           sort_order: sortOrder++, source_document_url: jsonUrl,
           ...(sessionDate ? { date: sessionDate } : {}),
+          ...(startTime ? { start_time: startTime } : {}),
           ...(parentSessionId ? { parent_session_id: parentSessionId } : {}),
         } as any)
         .select("id")
@@ -871,21 +874,21 @@ serve(async (req) => {
 
     // ── Weather processing from IMSA Weather JSON ─────────────────────
     
-    // Build a map: extract the session folder path from each weather link
-    // The folder path is like ".../202601221005_Practice%201/26_Weather_..."
-    // We want to map the session timestamp prefix (e.g. "202601221005") to the weather URL
-    const weatherByTimestamp = new Map<string, string>();
+    // Build a map using a composite key: timestamp + optional HOUR N
+    // E.g. "202601241340" for session-level, "202601241340_HOUR 1" for hour sub-sessions
+    const weatherByKey = new Map<string, string>();
     for (const wl of allWeatherJsonLinks) {
       if (matchesSeriesFolder(wl)) {
         const decoded = decodeURIComponent(wl);
-        // Extract timestamp prefix from the session folder, e.g. "202601221005"
         const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
         if (tsMatch) {
-          weatherByTimestamp.set(tsMatch[1], wl);
+          const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+          const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+          weatherByKey.set(key, wl);
         }
       }
     }
-    console.log(`Weather JSON mapped: ${weatherByTimestamp.size} sessions`, Array.from(weatherByTimestamp.keys()));
+    console.log(`Weather JSON mapped: ${weatherByKey.size} sessions`, Array.from(weatherByKey.keys()));
 
     // Estimate local hour from UTC timestamp string
     // Daytona is UTC-5, but we'll derive offset from the session_date vs UTC time
@@ -936,7 +939,7 @@ serve(async (req) => {
 
         if (samples.length === 0 && !sessionWeather) return;
 
-        const isF = (units.AirTemperature || "").includes("F") || (units.AirTemperature || "").includes("º");
+        const isF = (units.AirTemperature || "").includes("F");
         const toC = (f: number) => isF ? Math.round(((f - 32) * 5 / 9) * 10) / 10 : f;
 
         const isMph = (units.WindSpeed || "").includes("MPH");
@@ -956,28 +959,34 @@ serve(async (req) => {
           if (s.rain != null && s.rain > 0) totalRainSamples++;
         }
 
-        // Determine UTC offset from session date
-        // session_date format: "22/01/2026 10:05" (local) vs first sample UTC time
-        // Daytona is EST (UTC-5), but let's try to compute it
+        // Determine UTC offset: session_date is local (24h), time_utc_str is UTC (12h AM/PM)
+        // session_date "22/01/2026 10:05" = local 10:05
+        // time_utc_str "1/22/2026 3:05:20 PM" = UTC 15:05
+        // offset = local - UTC = 10 - 15 = -5
         let utcOffset = -5; // Default EST
         const sessionDateStr = weatherData.session?.session_date;
         if (sessionDateStr && samples.length > 0) {
-          const localHourMatch = sessionDateStr.match(/\d+\/\d+\/\d+\s+(\d+):(\d+)/);
-          if (localHourMatch) {
-            const localH = parseInt(localHourMatch[1], 10);
-            const firstUtcStr = samples[0].time_utc_str || "";
-            const utcParts = firstUtcStr.split(" ");
-            if (utcParts.length >= 2) {
-              const utcH = parseInt(utcParts[1].split(":")[0], 10);
-              const isPM = firstUtcStr.toUpperCase().includes("PM");
-              let utcHour24 = utcH;
-              if (isPM && utcH !== 12) utcHour24 += 12;
-              if (!isPM && utcH === 12) utcHour24 = 0;
-              utcOffset = ((localH - utcHour24) + 24) % 24;
-              if (utcOffset > 12) utcOffset -= 24;
+          const localTimeMatch = sessionDateStr.match(/\d+\/\d+\/\d+\s+(\d+):(\d+)/);
+          if (localTimeMatch) {
+            const localH = parseInt(localTimeMatch[1], 10);
+            const localM = parseInt(localTimeMatch[2], 10);
+            const firstSample = samples[0];
+            if (firstSample.time_utc_secconds) {
+              // Use UTC epoch to get UTC hour directly
+              const utcDate = new Date(firstSample.time_utc_secconds * 1000);
+              const utcH = utcDate.getUTCHours();
+              const utcM = utcDate.getUTCMinutes();
+              // Compute offset in hours (local - UTC)
+              const localMinutes = localH * 60 + localM;
+              const utcMinutes = utcH * 60 + utcM;
+              let diffMinutes = localMinutes - utcMinutes;
+              if (diffMinutes > 720) diffMinutes -= 1440;
+              if (diffMinutes < -720) diffMinutes += 1440;
+              utcOffset = Math.round(diffMinutes / 60);
             }
           }
         }
+        console.log(`UTC offset computed: ${utcOffset}`);
 
         // Track status from session summary  
         const trackStatus = sessionWeather?.track_status || "Dry";
@@ -1068,12 +1077,18 @@ serve(async (req) => {
     };
 
     // Match a results JSON URL to its corresponding weather JSON URL
-    // Both live in the same session folder (same timestamp prefix)
-    const weatherUrlForSession = (jsonUrl: string): string | null => {
+    // Use composite key: timestamp + optional HOUR N
+    const weatherUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
       const decoded = decodeURIComponent(jsonUrl);
       const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
       if (tsMatch) {
-        return weatherByTimestamp.get(tsMatch[1]) || null;
+        // Try hour-specific key first, then fall back to session-level
+        if (hourNumber) {
+          const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+          const hourUrl = weatherByKey.get(hourKey);
+          if (hourUrl) return hourUrl;
+        }
+        return weatherByKey.get(tsMatch[1]) || null;
       }
       return null;
     };
@@ -1087,8 +1102,8 @@ serve(async (req) => {
         if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
         const entries = f.data.classification || [];
         if (entries.length === 0) continue;
-        const sessionDate = parseSessionDate(sessionData);
-        const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, null);
+        const { date: sessionDate, startTime } = parseSessionDateTime(sessionData);
+        const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
         if (!sessionId) continue;
         await insertResults(sessionId, entries, sessionInfo.type, false);
         // Process weather for this session
@@ -1142,9 +1157,14 @@ serve(async (req) => {
         const overallData = fetchedResults.find(f => f.kind === "overall");
         const raceDataSource = overallData || (sortedHourLinks.length > 0 ? sortedHourLinks[sortedHourLinks.length - 1] : null);
         let raceDate: string | null = null;
-        if (raceDataSource) raceDate = parseSessionDate(raceDataSource.data.session || {});
+        let raceStartTime: string | null = null;
+        if (raceDataSource) {
+          const parsed = parseSessionDateTime(raceDataSource.data.session || {});
+          raceDate = parsed.date;
+          raceStartTime = parsed.startTime;
+        }
 
-        parentSessionId = await createSession(raceSessionName, "endurance_race", url, raceDate, null);
+        parentSessionId = await createSession(raceSessionName, "endurance_race", url, raceDate, raceStartTime, null);
         if (parentSessionId && raceDataSource) {
           const entries = raceDataSource.data.classification || [];
           await insertResults(parentSessionId, entries, "endurance_race", true);
@@ -1163,12 +1183,12 @@ serve(async (req) => {
         if (existingSessionNames.has(hourSessionName)) { summary.sessions_skipped++; continue; }
         const entries = f.data.classification || [];
         if (entries.length === 0) continue;
-        const sessionDate = parseSessionDate(f.data.session || {});
-        const childSessionId = await createSession(hourSessionName, "race", f.url, sessionDate, parentSessionId);
+        const { date: sessionDate, startTime: hourStartTime } = parseSessionDateTime(f.data.session || {});
+        const childSessionId = await createSession(hourSessionName, "race", f.url, sessionDate, hourStartTime, parentSessionId);
         if (!childSessionId) continue;
         await insertResults(childSessionId, entries, "race", false, f.hour, timeCardMap.size > 0 ? timeCardMap : undefined);
-        // Process weather for this hour session
-        const hourWeatherUrl = weatherUrlForSession(f.url);
+        // Process weather for this hour session (use hour-specific weather)
+        const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
         if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
       }
     } else {
@@ -1181,8 +1201,8 @@ serve(async (req) => {
         if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
         const entries = f.data.classification || [];
         if (entries.length === 0) continue;
-        const sessionDate = parseSessionDate(sessionData);
-        const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, null);
+        const { date: sessionDate, startTime } = parseSessionDateTime(sessionData);
+        const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
         if (!sessionId) continue;
         await insertResults(sessionId, entries, sessionInfo.type, false);
         // Process weather for this session
