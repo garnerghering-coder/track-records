@@ -198,12 +198,12 @@ export default function ManageTeams() {
 
       {/* Season Aliases & Cars Dialog */}
       <Dialog open={aliasOpen} onOpenChange={setAliasOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Season Config — {aliasTeam?.full_name}</DialogTitle>
             <p className="text-xs text-muted-foreground">Manage display names and car assignments per season.</p>
           </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
             {/* Existing aliases */}
             <div>
               <Label className="text-xs font-semibold">Season Names</Label>
