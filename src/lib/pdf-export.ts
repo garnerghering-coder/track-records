@@ -153,11 +153,11 @@ export async function exportEventPdf(params: EventExportParams) {
 
     const s = sessions[i];
 
-    // --- Header: Event (left) | Session (middle) | Logo (right) ---
+    // --- Header: Event (left) | Logo (center) | Session (right) ---
     const topY = 10;
-    const midX = 120;
+    const centerX = pageWidth / 2;
 
-    // Col 1: Event info
+    // Col 1: Event info (left)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(30);
@@ -170,15 +170,15 @@ export async function exportEventPdf(params: EventExportParams) {
     const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
     doc.text(subtitle, 14, topY + 5);
 
-    // Col 2: Session info
+    // Col 3: Session info (right-aligned)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(50);
     const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}` : "");
-    doc.text(sessionLabel, midX, topY);
+    doc.text(sessionLabel, pageWidth - 14, topY, { align: "right" });
     doc.setFont("helvetica", "normal");
 
-    // Weather below session name
+    // Weather below session name (right-aligned)
     let bottomY = topY + 5;
     if (s.weather) {
       const w = s.weather;
@@ -197,21 +197,21 @@ export async function exportEventPdf(params: EventExportParams) {
       if (parts.length > 0) {
         doc.setFontSize(7);
         doc.setTextColor(120);
-        doc.text(parts.join("  |  "), midX, topY + 5);
+        doc.text(parts.join("  |  "), pageWidth - 14, topY + 5, { align: "right" });
       }
     }
 
-    // Col 3: Logo (right-aligned, vertically centered)
+    // Col 2: Logo (horizontally centered, vertically centered in header)
     if (logoData) {
       const imgProps = doc.getImageProperties(logoData);
       const logoHeight = 12;
       const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
       const logoCenterY = (topY - 3 + bottomY) / 2 - logoHeight / 2;
-      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, logoCenterY, logoWidth, logoHeight);
+      doc.addImage(logoData, "PNG", centerX - logoWidth / 2, logoCenterY, logoWidth, logoHeight);
     } else {
       doc.setFontSize(12);
       doc.setTextColor(30);
-      doc.text("TRACK RECORDS", pageWidth - 14, topY + 2, { align: "right" });
+      doc.text("TRACK RECORDS", centerX, topY + 2, { align: "center" });
     }
 
     let tableStartY = bottomY + 5;
@@ -232,8 +232,10 @@ export async function exportEventPdf(params: EventExportParams) {
     const isRace = s.sessionType === "race" || s.sessionType === "sprint_race";
 
     // Incidents
+    const tableFinalY = (doc as any).previousAutoTable?.finalY ?? tableStartY + 20;
+
     if (isRace && s.incidents.length > 0) {
-      let incY = (doc as any).previousAutoTable.finalY + 8;
+      let incY = tableFinalY + 8;
       if (incY > pageHeight - 20) {
         doc.addPage();
         incY = 14;
@@ -264,7 +266,7 @@ export async function exportEventPdf(params: EventExportParams) {
         return best;
       }, null);
       if (fastest) {
-        let flY = (doc as any).previousAutoTable.finalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
+        let flY = tableFinalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
         if (flY > pageHeight - 10) {
           doc.addPage();
           flY = 14;
