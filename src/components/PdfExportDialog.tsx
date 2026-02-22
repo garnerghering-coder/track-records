@@ -33,15 +33,16 @@ export default function PdfExportDialog({
     setProgress(5);
     try {
       await onExport(mode, setProgress);
-    } catch (e) {
-      console.error("PDF export failed:", e);
-    } finally {
       setProgress(100);
       setTimeout(() => {
         setExporting(false);
         setProgress(0);
         onOpenChange(false);
-      }, 600);
+      }, 800);
+    } catch (e) {
+      console.error("PDF export failed:", e);
+      setExporting(false);
+      setProgress(0);
     }
   };
 
