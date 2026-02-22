@@ -39,10 +39,12 @@ export default function PdfExportDialog({
         setProgress(0);
         onOpenChange(false);
       }, 800);
-    } catch (e) {
+    } catch (e: any) {
       console.error("PDF export failed:", e);
       setExporting(false);
       setProgress(0);
+      // Show the error to the user via an alert so it's not silent
+      alert("PDF export failed: " + (e?.message || "Unknown error. Check console for details."));
     }
   };
 
