@@ -585,6 +585,12 @@ serve(async (req) => {
     while ((match = weatherJsonRegex.exec(html)) !== null) {
       allWeatherJsonLinks.push(match[1]);
     }
+    // Also collect Weather CSV links as fallback
+    const weatherCsvRegex = /href="([^"]+26_Weather[^"]*\.CSV)"/gi;
+    const allWeatherCsvLinks: string[] = [];
+    while ((match = weatherCsvRegex.exec(html)) !== null) {
+      allWeatherCsvLinks.push(match[1]);
+    }
 
     console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links in HTML`);
 
@@ -864,38 +870,55 @@ serve(async (req) => {
     };
 
     // ── Weather processing from IMSA Weather JSON ─────────────────────
-    // Map session folder prefixes to weather JSON links
-    const weatherLinksByFolder = new Map<string, string>();
+    
+    // Build a map: extract the session folder path from each weather link
+    // The folder path is like ".../202601221005_Practice%201/26_Weather_..."
+    // We want to map the session timestamp prefix (e.g. "202601221005") to the weather URL
+    const weatherByTimestamp = new Map<string, string>();
     for (const wl of allWeatherJsonLinks) {
       if (matchesSeriesFolder(wl)) {
-        // Extract session folder: e.g. "202601221005_Practice 1"
         const decoded = decodeURIComponent(wl);
-        const folderMatch = decoded.match(/\/(\d+_[^/]+)\//g);
-        if (folderMatch && folderMatch.length > 0) {
-          const sessionFolder = folderMatch[folderMatch.length - 1].replace(/\//g, "");
-          weatherLinksByFolder.set(sessionFolder, wl);
+        // Extract timestamp prefix from the session folder, e.g. "202601221005"
+        const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+        if (tsMatch) {
+          weatherByTimestamp.set(tsMatch[1], wl);
         }
       }
     }
+    console.log(`Weather JSON mapped: ${weatherByTimestamp.size} sessions`, Array.from(weatherByTimestamp.keys()));
 
-    function timeOfDayEmoji(hourUtc: number, isNight: boolean, isDusk: boolean, isDawn: boolean): string {
+    // Estimate local hour from UTC timestamp string
+    // Daytona is UTC-5, but we'll derive offset from the session_date vs UTC time
+    function estimateLocalHour(utcTimeStr: string, utcOffset: number): number {
+      // utcTimeStr like "1/22/2026 3:05:20 PM"
+      const timePart = utcTimeStr.split(" ").slice(1).join(" "); // "3:05:20 PM"
+      const isPM = timePart.toUpperCase().includes("PM");
+      const hourStr = timePart.split(":")[0];
+      let hour = parseInt(hourStr, 10);
+      if (isPM && hour !== 12) hour += 12;
+      if (!isPM && hour === 12) hour = 0;
+      // Apply UTC offset to get local hour
+      let localHour = (hour + utcOffset + 24) % 24;
+      return localHour;
+    }
+
+    function imWeatherEmoji(trackStatus: string, localHour?: number): string {
+      const isNight = localHour !== undefined && (localHour >= 20 || localHour < 6);
+      const isDusk = localHour !== undefined && (localHour >= 18 && localHour < 20);
+      const isDawn = localHour !== undefined && (localHour >= 6 && localHour < 8);
+
+      const s = (trackStatus || "").toLowerCase();
+      if (s.includes("rain") || s.includes("wet")) {
+        if (isNight) return "🌧️";
+        return "🌧️";
+      }
+      if (s.includes("damp")) return "🌦️";
+      if (s.includes("fog")) return "🌫️";
       if (isNight) return "🌙";
       if (isDusk) return "🌇";
       if (isDawn) return "🌅";
-      return "☀️";
-    }
-
-    function imWeatherEmoji(trackStatus: string, hourUtc?: number): string {
-      const isNight = hourUtc !== undefined && (hourUtc >= 1 || hourUtc < 11); // UTC approx for EST nighttime
-      const isDusk = hourUtc !== undefined && (hourUtc >= 23 || hourUtc === 0);
-      const isDawn = hourUtc !== undefined && (hourUtc >= 11 && hourUtc < 13);
-
-      const s = (trackStatus || "").toLowerCase();
-      if (s.includes("rain") || s.includes("wet")) return "🌧️";
-      if (s.includes("damp")) return "🌦️";
-      if (s.includes("fog")) return "🌫️";
-      if (s === "dry") return isNight ? "🌙" : isDusk ? "🌇" : isDawn ? "🌅" : "☀️";
-      return isNight ? "🌙" : "🌤️";
+      if (s === "dry" || !s) return "☀️";
+      return "🌤️";
     }
 
     const processImWeather = async (sessionId: string, weatherJsonUrl: string) => {
@@ -913,7 +936,7 @@ serve(async (req) => {
 
         if (samples.length === 0 && !sessionWeather) return;
 
-        const isF = (units.AirTemperature || "").includes("F");
+        const isF = (units.AirTemperature || "").includes("F") || (units.AirTemperature || "").includes("º");
         const toC = (f: number) => isF ? Math.round(((f - 32) * 5 / 9) * 10) / 10 : f;
 
         const isMph = (units.WindSpeed || "").includes("MPH");
@@ -924,7 +947,6 @@ serve(async (req) => {
         let windSpeeds: number[] = [];
         let windDirs: number[] = [];
         let totalRainSamples = 0;
-        const trackStatuses = new Set<string>();
 
         for (const s of samples) {
           if (s.air_temp != null) airTemps.push(toC(s.air_temp));
@@ -934,28 +956,56 @@ serve(async (req) => {
           if (s.rain != null && s.rain > 0) totalRainSamples++;
         }
 
-        // Track status from session summary  
-        const trackStatus = sessionWeather?.track_status || "Dry";
-        trackStatuses.add(trackStatus);
-
-        // Build emojis based on time of day and conditions
-        const emojiSet = new Set<string>();
-        if (samples.length > 0) {
-          const firstHour = parseInt(samples[0].time_utc_str?.split(" ")[1]?.split(":")[0] || "12");
-          const lastHour = parseInt(samples[samples.length - 1].time_utc_str?.split(" ")[1]?.split(":")[0] || "12");
-          // Check a few sample points for time-of-day emojis
-          for (const hr of [firstHour, Math.floor((firstHour + lastHour) / 2), lastHour]) {
-            emojiSet.add(imWeatherEmoji(trackStatus, hr));
+        // Determine UTC offset from session date
+        // session_date format: "22/01/2026 10:05" (local) vs first sample UTC time
+        // Daytona is EST (UTC-5), but let's try to compute it
+        let utcOffset = -5; // Default EST
+        const sessionDateStr = weatherData.session?.session_date;
+        if (sessionDateStr && samples.length > 0) {
+          const localHourMatch = sessionDateStr.match(/\d+\/\d+\/\d+\s+(\d+):(\d+)/);
+          if (localHourMatch) {
+            const localH = parseInt(localHourMatch[1], 10);
+            const firstUtcStr = samples[0].time_utc_str || "";
+            const utcParts = firstUtcStr.split(" ");
+            if (utcParts.length >= 2) {
+              const utcH = parseInt(utcParts[1].split(":")[0], 10);
+              const isPM = firstUtcStr.toUpperCase().includes("PM");
+              let utcHour24 = utcH;
+              if (isPM && utcH !== 12) utcHour24 += 12;
+              if (!isPM && utcH === 12) utcHour24 = 0;
+              utcOffset = ((localH - utcHour24) + 24) % 24;
+              if (utcOffset > 12) utcOffset -= 24;
+            }
           }
-        } else {
-          emojiSet.add(imWeatherEmoji(trackStatus));
         }
 
-        const conditionEmoji = Array.from(emojiSet).join("");
+        // Track status from session summary  
+        const trackStatus = sessionWeather?.track_status || "Dry";
+
+        // Build emojis based on local time of day and conditions
+        const emojiSet: string[] = [];
+        const seenEmojis = new Set<string>();
+        if (samples.length > 0) {
+          // Sample a few points across the session for diverse emojis
+          const indices = [0, Math.floor(samples.length / 2), samples.length - 1];
+          for (const idx of indices) {
+            const s = samples[idx];
+            const localHour = estimateLocalHour(s.time_utc_str || "", utcOffset);
+            const emoji = imWeatherEmoji(trackStatus, localHour);
+            if (!seenEmojis.has(emoji)) {
+              seenEmojis.add(emoji);
+              emojiSet.push(emoji);
+            }
+          }
+        } else {
+          emojiSet.push(imWeatherEmoji(trackStatus));
+        }
+
+        const conditionEmoji = emojiSet.join("");
 
         // Build summary
         let conditionSummary = trackStatus;
-        if (totalRainSamples > 0) {
+        if (totalRainSamples > 0 && samples.length > 0) {
           const rainPct = Math.round((totalRainSamples / samples.length) * 100);
           conditionSummary = `${trackStatus} (rain ${rainPct}% of session)`;
         }
@@ -974,42 +1024,56 @@ serve(async (req) => {
           else windSummary = `${windMin}–${windMax} km/h ${windDirStr}`;
         }
 
+        // Use summary weather values as fallback if no samples
+        let airMin = airTemps.length > 0 ? Math.round(Math.min(...airTemps) * 10) / 10 : null;
+        let airMax = airTemps.length > 0 ? Math.round(Math.max(...airTemps) * 10) / 10 : null;
+        let trkMin = trackTemps.length > 0 ? Math.round(Math.min(...trackTemps) * 10) / 10 : null;
+        let trkMax = trackTemps.length > 0 ? Math.round(Math.max(...trackTemps) * 10) / 10 : null;
+
+        // If no samples but session summary has temps, parse those
+        if (airMin === null && sessionWeather?.air_temperature) {
+          const parsed = parseFloat(sessionWeather.air_temperature);
+          if (!isNaN(parsed)) { airMin = parsed; airMax = parsed; }
+        }
+        if (trkMin === null && sessionWeather?.track_temperature) {
+          const parsed = parseFloat(sessionWeather.track_temperature);
+          if (!isNaN(parsed)) { trkMin = parsed; trkMax = parsed; }
+        }
+
         const weatherRecord = {
           session_id: sessionId,
           condition_summary: conditionSummary,
           condition_emoji: conditionEmoji,
-          air_temp_min: airTemps.length > 0 ? Math.round(Math.min(...airTemps) * 10) / 10 : null,
-          air_temp_max: airTemps.length > 0 ? Math.round(Math.max(...airTemps) * 10) / 10 : null,
-          track_temp_min: trackTemps.length > 0 ? Math.round(Math.min(...trackTemps) * 10) / 10 : null,
-          track_temp_max: trackTemps.length > 0 ? Math.round(Math.max(...trackTemps) * 10) / 10 : null,
+          air_temp_min: airMin,
+          air_temp_max: airMax,
+          track_temp_min: trkMin,
+          track_temp_max: trkMax,
           rain_mm: totalRainSamples > 0 ? totalRainSamples : 0,
           rain_detail: null,
           wind_summary: windSummary,
           wind_speed_min: windMin,
           wind_speed_max: windMax,
           wind_direction: windDirStr,
-          hourly_data: samples.slice(0, 50), // Store a subset to avoid huge payloads
+          hourly_data: samples.slice(0, 50),
           fetched_at: new Date().toISOString(),
         };
 
         await adminClient
           .from("v2_session_weather")
           .upsert(weatherRecord, { onConflict: "session_id" });
-        console.log(`Weather upserted for session ${sessionId}`);
+        console.log(`Weather upserted for session ${sessionId}: ${conditionEmoji} ${conditionSummary}`);
       } catch (err) {
         console.error(`Failed to process weather for session ${sessionId}:`, err);
       }
     };
 
-    // Build a map from session name to weather URL by extracting session name from JSON result data
+    // Match a results JSON URL to its corresponding weather JSON URL
+    // Both live in the same session folder (same timestamp prefix)
     const weatherUrlForSession = (jsonUrl: string): string | null => {
-      // Weather JSON lives in the same folder as results JSON, just with 26_Weather prefix
-      // Extract the session folder from the results URL
       const decoded = decodeURIComponent(jsonUrl);
-      for (const [folder, weatherUrl] of weatherLinksByFolder) {
-        if (decoded.includes(folder.replace(/\s/g, "%20")) || decoded.includes(folder)) {
-          return weatherUrl;
-        }
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        return weatherByTimestamp.get(tsMatch[1]) || null;
       }
       return null;
     };

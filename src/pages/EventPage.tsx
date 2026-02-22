@@ -546,8 +546,8 @@ function SessionResults({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">{session.name}</h3>
-          <WeatherBubble weather={weatherMap[session.id] || null} />
-          {!weatherMap[session.id] && (
+          {!isOverallEnduranceView && <WeatherBubble weather={weatherMap[session.id] || null} />}
+          {!isOverallEnduranceView && !weatherMap[session.id] && (
             <Badge variant="outline" className="text-[10px]">{type.replace(/_/g, " ")}</Badge>
           )}
           {session.date && <span className="text-xs text-muted-foreground">{session.date.split("T")[0]}</span>}
