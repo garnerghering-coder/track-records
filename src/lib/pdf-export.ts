@@ -276,7 +276,34 @@ export async function exportEventPdf(params: EventExportParams) {
     onProgress?.(10 + ((i + 1) / sessions.length) * 85);
   }
 
-  doc.save(`${eventName.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+  const fileName = `${eventName.replace(/\s+/g, "-").toLowerCase()}.pdf`;
+  
+  // Generate blob and trigger download
+  const blob = doc.output("blob");
+  const blobUrl = URL.createObjectURL(blob);
+  
+  // Attempt 1: programmatic <a> click (works in most browsers)
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  
+  // Attempt 2: fallback for sandboxed iframes — open in new window
+  // Some environments block the <a> download silently; opening the blob URL
+  // in a new tab lets the user save the PDF from their browser's viewer.
+  try {
+    const newWin = window.open(blobUrl, "_blank");
+    if (!newWin) {
+      // popup blocked — the <a> click is our only option
+      console.info("PDF generated. If download didn't start, try opening the preview in a new tab.");
+    }
+  } catch {
+    // ignore — the <a> approach should have worked
+  }
+  
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
   onProgress?.(100);
 }
 
