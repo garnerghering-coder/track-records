@@ -535,7 +535,13 @@ serve(async (req) => {
         // Parse the markdown table
         const rows = parseMarkdownTable(pageMarkdown);
         if (rows.length < 2) {
-          summary.errors.push(`No table found on ${resultUrl}`);
+          // Check if page returned an error (F1 sometimes doesn't publish certain sessions)
+          if (pageMarkdown.includes("An error has occurred") || pageMarkdown.length < 200) {
+            console.log(`Session page not available (no data published): ${resultUrl}`);
+            // Not a real error — just skip silently
+          } else {
+            summary.errors.push(`No table found on ${resultUrl}`);
+          }
           continue;
         }
 
