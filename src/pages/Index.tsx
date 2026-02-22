@@ -20,28 +20,28 @@ const Index = () => {
   useEffect(() => {
     const fetchStats = async () => {
       const [d, t, e, s, c] = await Promise.all([
-        supabase.from("v2_drivers").select("id", { count: "exact", head: true }),
-        supabase.from("v2_teams").select("id", { count: "exact", head: true }),
-        supabase.from("v2_events").select("id", { count: "exact", head: true }),
-        supabase.from("v2_series").select("id", { count: "exact", head: true }),
-        supabase.from("v2_cars").select("id", { count: "exact", head: true }),
-      ]);
+      supabase.from("v2_drivers").select("id", { count: "exact", head: true }),
+      supabase.from("v2_teams").select("id", { count: "exact", head: true }),
+      supabase.from("v2_events").select("id", { count: "exact", head: true }),
+      supabase.from("v2_series").select("id", { count: "exact", head: true }),
+      supabase.from("v2_cars").select("id", { count: "exact", head: true })]
+      );
       setStats({
         drivers: d.count ?? 0,
         teams: t.count ?? 0,
         events: e.count ?? 0,
         series: s.count ?? 0,
-        cars: c.count ?? 0,
+        cars: c.count ?? 0
       });
     };
 
     const fetchRecent = async () => {
-      const { data } = await supabase
-        .from("v2_events")
-        .select("id, name, start_date, end_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
-        .eq("status", "published" as any)
-        .order("created_at", { ascending: false })
-        .limit(6);
+      const { data } = await supabase.
+      from("v2_events").
+      select("id, name, start_date, end_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").
+      eq("status", "published" as any).
+      order("created_at", { ascending: false }).
+      limit(6);
       setRecentEvents(data ?? []);
     };
 
@@ -72,8 +72,8 @@ const Index = () => {
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-          >
+            transition={{ duration: 0.7 }}>
+
             <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-foreground">
               The Motorsport
               <br />
@@ -91,8 +91,8 @@ const Index = () => {
                   placeholder="Search drivers, teams, series, circuits…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-14 pl-12 pr-32 text-base bg-card border-border"
-                />
+                  className="h-14 pl-12 pr-32 text-base bg-card border-border" />
+
                 <Button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 px-6">
                   Search
                 </Button>
@@ -117,19 +117,19 @@ const Index = () => {
         <div className="container">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-5">
             {[
-              { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
-              { label: "Teams", value: stats.teams, to: "/teams" },
-              { label: "Race Events", value: stats.events, to: "/results" },
-              { label: "Series", value: stats.series, to: "/series" },
-              { label: "Cars", value: stats.cars, to: "/cars" },
-            ].map((stat) => (
-              <Link key={stat.label} to={stat.to}>
+            { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
+            { label: "Teams", value: stats.teams, to: "/teams" },
+            { label: "Race Events", value: stats.events, to: "/results" },
+            { label: "Series", value: stats.series, to: "/series" },
+            { label: "Cars", value: stats.cars, to: "/cars" }].
+            map((stat) =>
+            <Link key={stat.label} to={stat.to}>
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  className="text-center group cursor-pointer"
-                >
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="text-center group cursor-pointer">
+
                   <div className="font-accent text-4xl font-bold text-primary group-hover:scale-110 transition-transform">
                     {stat.value.toLocaleString()}
                   </div>
@@ -138,14 +138,14 @@ const Index = () => {
                   </div>
                 </motion.div>
               </Link>
-            ))}
+            )}
           </div>
         </div>
       </section>
 
       {/* Recently Added */}
-      {recentEvents.length > 0 && (
-        <section className="py-16">
+      {recentEvents.length > 0 &&
+      <section className="py-16">
           <div className="container">
             <div className="flex items-center justify-between mb-8">
               <h2 className="font-display text-2xl font-semibold text-foreground">
@@ -156,12 +156,12 @@ const Index = () => {
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {recentEvents.map((ev: any) => (
-                <Link
-                  key={ev.id}
-                  to={`/events/${ev.id}`}
-                  className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all"
-                >
+              {recentEvents.map((ev: any) =>
+            <Link
+              key={ev.id}
+              to={`/events/${ev.id}`}
+              className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all">
+
                   <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
                     {ev.name}
                   </h3>
@@ -172,41 +172,41 @@ const Index = () => {
                     {ev.start_date && <span>{formatDateRange(ev.start_date, ev.end_date)}</span>}
                   </div>
                 </Link>
-              ))}
+            )}
             </div>
           </div>
         </section>
-      )}
+      }
 
       {/* CTA */}
       <section className="py-16">
-        <div className="container">
-          <div className="rounded-2xl border border-border bg-card p-12 text-center">
-            <h2 className="font-display text-3xl font-bold text-foreground">
-              Help Build the Database
-            </h2>
-            <p className="mt-4 max-w-lg mx-auto text-muted-foreground">
-              Contribute race results, add driver and team profiles, and help create the most complete motorsport database.
-            </p>
-            <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <Link to="/contribute">
-                <Button size="lg" className="gap-2 px-8 font-medium">
-                  Start Contributing <ChevronRight className="h-4 w-4" />
-                </Button>
-              </Link>
-              <Link to="/auth?signup=true">
-                <Button size="lg" variant="outline" className="px-8">
-                  Sign Up Free
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       </section>
 
       <Footer />
-    </div>
-  );
+    </div>);
+
 };
 
 export default Index;
