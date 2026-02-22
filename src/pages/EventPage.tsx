@@ -244,6 +244,7 @@ function EnduranceRaceView({
         positionRefMode={useQualifyingRef ? "qualifying" : "previous-hour"}
         prevHourSessionId={prevHourSession?.id || null}
         hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
+        isOverallEnduranceView={!isHourView}
       />
     </div>
   );
@@ -282,6 +283,7 @@ function SessionResults({
   positionRefMode,
   prevHourSessionId,
   hideStatus,
+  isOverallEnduranceView,
 }: {
   session: any;
   event: any;
@@ -291,6 +293,7 @@ function SessionResults({
   positionRefMode?: "qualifying" | "previous-hour";
   prevHourSessionId?: string | null;
   hideStatus?: boolean;
+  isOverallEnduranceView?: boolean;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -565,19 +568,22 @@ function SessionResults({
         <Table>
           <TableHeader>
            <TableRow className="bg-muted/50">
-              <TableHead className="w-12">Pos</TableHead>
-              {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
-              {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
-              <TableHead>Driver</TableHead>
-              <TableHead className="w-10">Nat</TableHead>
-              {hasTeam && <TableHead>Team</TableHead>}
-              {hasCar && <TableHead>Car</TableHead>}
-              {isPractice && <>{hasBestLap && <TableHead>Best Lap</TableHead>}{hasGapP1 && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasPracticeLaps && <TableHead>Laps</TableHead>}</>}
-              {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}</>}
-              {isRace && <>{hasRaceLaps && <TableHead>Laps</TableHead>}{hasTotalTime && <TableHead>Time</TableHead>}{hasGapLeader && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasFastestLap && <TableHead>Best Lap</TableHead>}{hasAvgLap && <TableHead>Avg Lap</TableHead>}{hasPits && <TableHead>Pits</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}{hasStatus && <TableHead>Status</TableHead>}</>}
-              {extraDataKeys.map(col => (
-                <TableHead key={col.key}>{col.name}</TableHead>
-              ))}
+               <TableHead className="w-12">Pos</TableHead>
+               {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
+               {extraDataKeys.some(c => c.key === "PIC") && <TableHead>PIC</TableHead>}
+               {extraDataKeys.some(c => c.key === "Class") && <TableHead>Class</TableHead>}
+               {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
+               <TableHead>Driver</TableHead>
+               <TableHead className="w-10">Nat</TableHead>
+               {hasTeam && <TableHead>Team</TableHead>}
+               {hasCar && <TableHead>Car</TableHead>}
+               {isPractice && <>{hasBestLap && <TableHead>Best Lap</TableHead>}{hasGapP1 && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasPracticeLaps && <TableHead>Laps</TableHead>}</>}
+               {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}</>}
+               {isRace && <>{hasRaceLaps && <TableHead>Laps</TableHead>}{hasTotalTime && <TableHead>Time</TableHead>}{hasGapLeader && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasFastestLap && <TableHead>Best Lap</TableHead>}{hasAvgLap && <TableHead>Avg Lap</TableHead>}{hasPits && <TableHead>Pits</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}{hasStatus && <TableHead>Status</TableHead>}</>}
+               {extraDataKeys.filter(c => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires").map(col => (
+                 <TableHead key={col.key}>{col.name}</TableHead>
+               ))}
+               {extraDataKeys.some(c => c.key === "Tires") && !isOverallEnduranceView && <TableHead>Tires</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -589,6 +595,8 @@ function SessionResults({
                     <PositionDelta racePos={r.position} qualPos={r.driver_id ? refPosMap[r.driver_id] ?? null : null} />
                   </TableCell>
                 )}
+                {extraDataKeys.some(c => c.key === "PIC") && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
+                {extraDataKeys.some(c => c.key === "Class") && <TableCell className="text-xs">{(r.extra_data as any)?.Class || "—"}</TableCell>}
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
                 <TableCell className="font-medium">
                   {(() => {
@@ -662,9 +670,10 @@ function SessionResults({
                     ) : null}
                   </TableCell>}
                 </>}
-                {extraDataKeys.map(col => (
+                {extraDataKeys.filter(c => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires").map(col => (
                   <TableCell key={col.key} className="text-xs">{(r.extra_data as any)?.[col.key] || "—"}</TableCell>
                 ))}
+                {extraDataKeys.some(c => c.key === "Tires") && !isOverallEnduranceView && <TableCell className="text-xs">{(r.extra_data as any)?.Tires || "—"}</TableCell>}
               </TableRow>
             ))}
             {results.length === 0 && <TableRow><TableCell colSpan={20} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
