@@ -250,7 +250,15 @@ const DEMONYM_MAP: Record<string, string> = {
 /** Get ISO country code from a nationality string, demonym, or country name */
 export function getCountryCode(nationality: string | null | undefined): string | null {
   if (!nationality) return null;
-  const lower = nationality.toLowerCase().trim();
+  const trimmed = nationality.trim();
+  const lower = trimmed.toLowerCase();
+
+  // If it's already a valid 2-letter ISO code, return it directly
+  if (trimmed.length === 2) {
+    const upper = trimmed.toUpperCase();
+    const directMatch = COUNTRIES.find(c => c.code === upper);
+    if (directMatch) return directMatch.code;
+  }
 
   // Try demonym first
   if (DEMONYM_MAP[lower]) return DEMONYM_MAP[lower];
@@ -259,9 +267,11 @@ export function getCountryCode(nationality: string | null | undefined): string |
   const match = COUNTRIES.find(c => c.name.toLowerCase() === lower);
   if (match) return match.code;
 
-  // Try partial match on country name
-  const partial = COUNTRIES.find(c => c.name.toLowerCase().includes(lower) || lower.includes(c.name.toLowerCase()));
-  if (partial) return partial.code;
+  // Try partial match on country name (only for longer strings to avoid false matches)
+  if (lower.length > 3) {
+    const partial = COUNTRIES.find(c => c.name.toLowerCase().includes(lower) || lower.includes(c.name.toLowerCase()));
+    if (partial) return partial.code;
+  }
 
   return null;
 }

@@ -381,7 +381,7 @@ function SessionResults({
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
         for (const [k] of Object.entries(ed)) {
-          if (k === "Int" || k === "avg_kmh") continue;
+          if (k === "Int" || k === "avg_kmh" || k === "all_drivers") continue;
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
             extraDataKeys.push({ key: k, name: k });
@@ -559,9 +559,39 @@ function SessionResults({
                 )}
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
                 <TableCell className="font-medium">
-                  {r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors">{r.v2_drivers?.full_name || "—"}</Link> : "—"}
+                  {(() => {
+                    const allDrivers = (r as any).extra_data?.all_drivers;
+                    if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          {allDrivers.map((d: any, idx: number) => (
+                            <span key={idx}>
+                              {d.id ? (
+                                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
+                              ) : d.name}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors">{r.v2_drivers?.full_name || "—"}</Link> : "—";
+                  })()}
                 </TableCell>
-                <TableCell><FlagImage nationality={r.v2_drivers?.nationality} size={18} /></TableCell>
+                <TableCell>
+                  {(() => {
+                    const allDrivers = (r as any).extra_data?.all_drivers;
+                    if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          {allDrivers.map((d: any, idx: number) => (
+                            <FlagImage key={idx} nationality={d.nationality} size={18} />
+                          ))}
+                        </div>
+                      );
+                    }
+                    return <FlagImage nationality={r.v2_drivers?.nationality} size={18} />;
+                  })()}
+                </TableCell>
                 {hasTeam && <TableCell className="text-muted-foreground">
                   {r.team_id ? <Link to={`/team/${r.team_id}`} className="hover:text-primary transition-colors">{getTeamName(r)}</Link> : getTeamName(r)}
                 </TableCell>}
