@@ -428,12 +428,7 @@ function buildResultRows(
     const drivers = entry.drivers || [];
     if (drivers.length === 0) continue;
 
-    // DEBUG: Log entry structure for car #7 in Hour 24 to understand available fields
-    if (hourNumber === 24 && String(entry.number) === "7") {
-      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} entry keys:`, Object.keys(entry));
-      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} driver_number:`, entry.driver_number, "fastest_lap_driver_number:", entry.fastest_lap_driver_number, "fastest_driver_number:", entry.fastest_driver_number, "current_driver:", entry.current_driver);
-      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} drivers:`, JSON.stringify(drivers.map((d: any) => ({ num: d.number, name: `${d.firstname} ${d.surname}`, keys: Object.keys(d) }))));
-    }
+
 
     let selectedDriver = drivers[0];
 
@@ -451,8 +446,12 @@ function buildResultRows(
           if (matched) selectedDriver = matched;
         }
       }
-    } else if (!isOverallEndurance && drivers.length > 1) {
-      // Fallback: use fastest lap driver number (for practice/qualifying/non-timecard hours)
+    } else if (hourNumber && !timeCardMap && drivers.length > 1) {
+      // For endurance hour sub-sessions WITHOUT Time Card data, use drivers[0]
+      // which is the current/active driver listed first in the hour results JSON
+      // Do nothing - selectedDriver is already drivers[0]
+    } else if (!isOverallEndurance && !hourNumber && drivers.length > 1) {
+      // For non-endurance sessions (practice/qualifying), use fastest lap driver
       const fastestLapNum = entry.fastest_lap_driver_number || entry.fastest_driver_number;
       if (fastestLapNum) {
         const matched = drivers.find((d: any) => String(d.number) === String(fastestLapNum));
