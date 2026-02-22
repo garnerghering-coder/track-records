@@ -192,7 +192,8 @@ function parseTimeCardCSV(csvText: string): Map<string, Map<number, string>> {
     if (!carNumber || !driverName || !elapsedStr) continue;
 
     const elapsedSec = parseElapsedToSeconds(elapsedStr);
-    const hourNum = Math.floor(elapsedSec / 3600) + 1;
+    // Use ceil so a lap completed at exactly the hour boundary (e.g. 3600s) stays in that hour
+    const hourNum = elapsedSec <= 0 ? 1 : Math.ceil(elapsedSec / 3600);
 
     if (!carHourDriver.has(carNumber)) carHourDriver.set(carNumber, new Map());
     const hourMap = carHourDriver.get(carNumber)!;
@@ -1188,6 +1189,35 @@ serve(async (req) => {
         // Process weather for this hour session (use hour-specific weather)
         const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
         if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
+      }
+
+      // 5. Update overall race driver_id from final hour's results (finishing driver)
+      if (parentSessionId && sortedHours.length > 0) {
+        const lastHourName = `Hour ${sortedHours[sortedHours.length - 1].hour}`;
+        const { data: lastHourSession } = await adminClient
+          .from("v2_sessions")
+          .select("id")
+          .eq("event_id", event_id)
+          .eq("name", lastHourName)
+          .single();
+        if (lastHourSession) {
+          const { data: lastHourResults } = await adminClient
+            .from("v2_race_results")
+            .select("car_number, driver_id")
+            .eq("session_id", lastHourSession.id);
+          if (lastHourResults && lastHourResults.length > 0) {
+            for (const lhr of lastHourResults) {
+              if (lhr.car_number && lhr.driver_id) {
+                await adminClient
+                  .from("v2_race_results")
+                  .update({ driver_id: lhr.driver_id })
+                  .eq("session_id", parentSessionId)
+                  .eq("car_number", lhr.car_number);
+              }
+            }
+            console.log(`Updated ${lastHourResults.length} overall race driver_ids from final hour`);
+          }
+        }
       }
     } else {
       // Standard flow - use all fetched results
