@@ -144,6 +144,82 @@ function extractHourNumber(url: string): number | null {
   return m ? parseInt(m[1], 10) : null;
 }
 
+// ── Time Card parsing ────────────────────────────────────────────────
+
+function parseElapsedToSeconds(elapsed: string): number {
+  // Formats: "2:55.481" (m:ss.ms), "1:02:30.000" (h:mm:ss.ms)
+  const parts = elapsed.split(":");
+  if (parts.length === 3) {
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const s = parseFloat(parts[2]);
+    return h * 3600 + m * 60 + s;
+  } else if (parts.length === 2) {
+    const m = parseInt(parts[0], 10);
+    const s = parseFloat(parts[1]);
+    return m * 60 + s;
+  }
+  return parseFloat(elapsed) || 0;
+}
+
+/**
+ * Parse Time Card CSV to build a map of car_number -> hour_number -> driver_name.
+ * For each car and hour, we pick the driver who drove the last lap in that hour.
+ */
+function parseTimeCardCSV(csvText: string): Map<string, Map<number, string>> {
+  const lines = csvText.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return new Map();
+
+  // Header: NUMBER; DRIVER_NUMBER; LAP_NUMBER; ... ELAPSED; ... DRIVER_NAME; ...
+  const header = lines[0].split(";").map(h => h.trim().replace(/\\/g, ""));
+  const numIdx = header.indexOf("NUMBER");
+  const driverNameIdx = header.indexOf("DRIVER_NAME");
+  const elapsedIdx = header.indexOf("ELAPSED");
+
+  if (numIdx === -1 || driverNameIdx === -1 || elapsedIdx === -1) {
+    console.log("Time Card CSV: could not find required columns", header);
+    return new Map();
+  }
+
+  // Collect: for each car + hour, track the latest (highest elapsed) lap's driver
+  const carHourDriver = new Map<string, Map<number, { elapsed: number; driver: string }>>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";").map(c => c.trim());
+    const carNumber = cols[numIdx];
+    const driverName = cols[driverNameIdx];
+    const elapsedStr = cols[elapsedIdx];
+    if (!carNumber || !driverName || !elapsedStr) continue;
+
+    const elapsedSec = parseElapsedToSeconds(elapsedStr);
+    const hourNum = Math.floor(elapsedSec / 3600) + 1;
+
+    if (!carHourDriver.has(carNumber)) carHourDriver.set(carNumber, new Map());
+    const hourMap = carHourDriver.get(carNumber)!;
+    const existing = hourMap.get(hourNum);
+    if (!existing || elapsedSec > existing.elapsed) {
+      hourMap.set(hourNum, { elapsed: elapsedSec, driver: driverName });
+    }
+  }
+
+  // Simplify to car_number -> hour_number -> driver_name
+  const result = new Map<string, Map<number, string>>();
+  for (const [car, hourMap] of carHourDriver) {
+    const simplified = new Map<number, string>();
+    for (const [hour, info] of hourMap) {
+      simplified.set(hour, info.driver);
+    }
+    result.set(car, simplified);
+  }
+
+  console.log(`Time Card parsed: ${result.size} cars, sample:`,
+    Array.from(result.entries()).slice(0, 2).map(([car, hours]) =>
+      `Car ${car}: ${Array.from(hours.entries()).slice(0, 3).map(([h, d]) => `H${h}=${d}`).join(", ")}`
+    )
+  );
+  return result;
+}
+
 // ── Bulk entity resolution ───────────────────────────────────────────
 // Pre-scan all JSON data to collect unique drivers/teams/cars, then resolve/create them all at once
 
@@ -312,7 +388,9 @@ function buildResultRows(
   teamMap: Map<string, string>,
   carMap: Map<string, string>,
   isOverallEndurance: boolean,
-  summary: any
+  summary: any,
+  hourNumber?: number,
+  timeCardMap?: Map<string, Map<number, string>>
 ): { raceRows: any[]; qualifyingRows: any[]; practiceRows: any[] } {
   const raceRows: any[] = [];
   const qualifyingRows: any[] = [];
@@ -325,7 +403,23 @@ function buildResultRows(
     if (drivers.length === 0) continue;
 
     let selectedDriver = drivers[0];
-    if (!isOverallEndurance && drivers.length > 1) {
+
+    // For hour sub-sessions with Time Card data, use the Time Card to determine the active driver
+    if (hourNumber && timeCardMap && drivers.length > 1) {
+      const carNum = String(entry.number || "");
+      const carTimeCard = timeCardMap.get(carNum);
+      if (carTimeCard) {
+        const activeDriverName = carTimeCard.get(hourNumber);
+        if (activeDriverName) {
+          const matched = drivers.find((d: any) => {
+            const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
+            return dn.toLowerCase() === activeDriverName.toLowerCase();
+          });
+          if (matched) selectedDriver = matched;
+        }
+      }
+    } else if (!isOverallEndurance && drivers.length > 1) {
+      // Fallback: use fastest lap driver number (for practice/qualifying/non-timecard hours)
       const fastestLapNum = entry.fastest_lap_driver_number || entry.fastest_driver_number;
       if (fastestLapNum) {
         const matched = drivers.find((d: any) => String(d.number) === String(fastestLapNum));
@@ -478,7 +572,14 @@ serve(async (req) => {
       allJsonLinks.push(match[1]);
     }
 
-    console.log(`Found ${allJsonLinks.length} total .JSON links in HTML`);
+    // Also collect Time Card CSV links for endurance driver detection
+    const timeCardRegex = /href="([^"]+23_Time[_%\s]Cards[^"]*\.CSV)"/gi;
+    const allTimeCardLinks: string[] = [];
+    while ((match = timeCardRegex.exec(html)) !== null) {
+      allTimeCardLinks.push(match[1]);
+    }
+
+    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links in HTML`);
 
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
     const season = event.v2_seasons as any;
@@ -739,9 +840,13 @@ serve(async (req) => {
       return newSession.id;
     };
 
-    const insertResults = async (sessionId: string, entries: any[], sessionType: string, isOverallEndurance: boolean) => {
+    const insertResults = async (
+      sessionId: string, entries: any[], sessionType: string, isOverallEndurance: boolean,
+      hourNumber?: number, timeCardMap?: Map<string, Map<number, string>>
+    ) => {
       const { raceRows, qualifyingRows, practiceRows } = buildResultRows(
-        sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary
+        sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary,
+        hourNumber, timeCardMap
       );
       // Batch insert all at once
       const inserts: Promise<any>[] = [];
@@ -766,7 +871,43 @@ serve(async (req) => {
         await insertResults(sessionId, entries, sessionInfo.type, false);
       }
 
-      // 2. Parent endurance_race session
+      // 2. Fetch Time Card CSV for driver detection in hour sub-sessions
+      let timeCardMap: Map<string, Map<number, string>> = new Map();
+      const raceTimeCardLinks = allTimeCardLinks
+        .filter(l => matchesSeriesFolder(l))
+        .filter(l => {
+          const decoded = decodeURIComponent(l).toLowerCase();
+          return /\d+_race\//i.test(decoded);
+        });
+
+      if (raceTimeCardLinks.length > 0) {
+        // Prefer the one in the highest hour folder (it covers the full race)
+        const sortedByHour = raceTimeCardLinks.sort((a, b) => {
+          const hourA = extractHourNumber(a) || 0;
+          const hourB = extractHourNumber(b) || 0;
+          return hourB - hourA;
+        });
+        const timeCardUrl = (() => { try { return new URL(sortedByHour[0], baseUrl).href; } catch { return null; } })();
+        if (timeCardUrl) {
+          console.log("Fetching Time Card CSV:", timeCardUrl);
+          try {
+            const tcResp = await fetchWithRetry(timeCardUrl);
+            if (tcResp.ok) {
+              const csvText = await tcResp.text();
+              timeCardMap = parseTimeCardCSV(csvText);
+              console.log(`Time Card data loaded for ${timeCardMap.size} cars`);
+            } else {
+              console.log(`Time Card CSV returned ${tcResp.status}`);
+            }
+          } catch (err) {
+            console.error("Failed to fetch Time Card CSV:", err);
+          }
+        }
+      } else {
+        console.log("No Time Card CSV links found for this race");
+      }
+
+      // 3. Parent endurance_race session
       const raceSessionName = "Race";
       let parentSessionId: string | null = null;
       if (!existingSessionNames.has(raceSessionName)) {
@@ -787,7 +928,7 @@ serve(async (req) => {
         summary.sessions_skipped++;
       }
 
-      // 3. Hour sub-sessions
+      // 4. Hour sub-sessions (using Time Card data for driver detection)
       const sortedHours = fetchedResults
         .filter(f => f.kind === "hour")
         .sort((a, b) => (a.hour || 0) - (b.hour || 0));
@@ -800,7 +941,7 @@ serve(async (req) => {
         const sessionDate = parseSessionDate(f.data.session || {});
         const childSessionId = await createSession(hourSessionName, "race", f.url, sessionDate, parentSessionId);
         if (!childSessionId) continue;
-        await insertResults(childSessionId, entries, "race", false);
+        await insertResults(childSessionId, entries, "race", false, f.hour, timeCardMap.size > 0 ? timeCardMap : undefined);
       }
     } else {
       // Standard flow - use all fetched results
