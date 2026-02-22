@@ -504,44 +504,67 @@ serve(async (req) => {
 
     for (const resultUrl of uniqueUrls) {
       try {
-        console.log("Scraping result page:", resultUrl);
-        const pageResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ url: resultUrl, formats: ["markdown"], onlyMainContent: false }),
-        });
-
-        if (!pageResponse.ok) {
-          summary.errors.push(`Failed to scrape ${resultUrl}`);
-          continue;
+        // Try scraping the URL, and if it fails or returns no table,
+        // retry with alternate URL format (old .html format <-> new format)
+        const urlsToTry = [resultUrl];
+        
+        // Generate alternate URL format
+        // Old: /results.html/2022/races/1124/bahrain/practice-2.html -> New: /results/2022/races/1124/bahrain/practice/2
+        // Old: /results.html/2022/races/1124/bahrain/qualifying.html -> New: /results/2022/races/1124/bahrain/qualifying
+        // Old: /results.html/2022/races/1124/bahrain/race-result.html -> New: /results/2022/races/1124/bahrain/race-result
+        const oldFormatMatch = resultUrl.match(/\/results\.html\/(.+?)\.html$/);
+        if (oldFormatMatch) {
+          let newPath = oldFormatMatch[1];
+          // Convert "practice-2" to "practice/2", "practice-1" to "practice/1", etc.
+          newPath = newPath.replace(/practice-(\d)/, "practice/$1");
+          urlsToTry.push(`https://www.formula1.com/en/results/${newPath}`);
+        }
+        // New format -> old format fallback
+        const newFormatMatch = resultUrl.match(/\/results\/(.+?)$/);
+        if (newFormatMatch && !resultUrl.includes(".html")) {
+          let oldPath = newFormatMatch[1];
+          oldPath = oldPath.replace(/practice\/(\d)/, "practice-$1");
+          urlsToTry.push(`https://www.formula1.com/en/results.html/${oldPath}.html`);
         }
 
-        const pageData = await pageResponse.json();
-        const pageMarkdown: string = pageData.data?.markdown || pageData.markdown || "";
+        let pageMarkdown = "";
+        let scrapedUrl = resultUrl;
 
-        // Extract title to help detect session type
-        const titleMatch = pageMarkdown.match(/^#\s+(.+)$/m);
-        const title = titleMatch?.[1] || "";
+        for (const tryUrl of urlsToTry) {
+          console.log("Scraping result page:", tryUrl);
+          const pageResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ url: tryUrl, formats: ["markdown"], onlyMainContent: false }),
+          });
 
-        const sessionInfo = detectSessionType(resultUrl, title);
-
-        // Check for duplicate sessions
-        if (existingSessionNames.has(sessionInfo.name)) {
-          console.log(`Skipping duplicate session: ${sessionInfo.name}`);
-          summary.sessions_skipped++;
-          continue;
-        }
-
-        // Parse the markdown table
-        const rows = parseMarkdownTable(pageMarkdown);
-        if (rows.length < 2) {
-          // Check if page returned an error (F1 sometimes doesn't publish certain sessions)
-          if (pageMarkdown.includes("An error has occurred") || pageMarkdown.length < 200) {
-            console.log(`Session page not available (no data published): ${resultUrl}`);
-            // Not a real error — just skip silently
-          } else {
-            summary.errors.push(`No table found on ${resultUrl}`);
+          if (!pageResponse.ok) {
+            console.log(`Failed to scrape ${tryUrl}, trying next format...`);
+            continue;
           }
+
+          const pageData = await pageResponse.json();
+          const md: string = pageData.data?.markdown || pageData.markdown || "";
+          
+          // Check if it's an error page
+          if (md.includes("An error has occurred") || md.length < 200) {
+            console.log(`Page not available at ${tryUrl}, trying next format...`);
+            continue;
+          }
+
+          // Check if it has a table
+          const testRows = parseMarkdownTable(md);
+          if (testRows.length >= 2) {
+            pageMarkdown = md;
+            scrapedUrl = tryUrl;
+            break;
+          }
+          
+          console.log(`No table found at ${tryUrl}, trying next format...`);
+        }
+
+        if (!pageMarkdown) {
+          console.log(`Session data not available for any URL format: ${resultUrl}`);
           continue;
         }
 
@@ -563,7 +586,7 @@ serve(async (req) => {
               session_type: sessionInfo.type as any,
               status: "draft" as any,
               sort_order: sortOrder++,
-              source_document_url: resultUrl,
+              source_document_url: scrapedUrl,
               date: scheduleInfo?.date || null,
               start_time: scheduleInfo?.start_time || null,
               end_time: scheduleInfo?.end_time || null,
