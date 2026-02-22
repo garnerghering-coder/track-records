@@ -442,7 +442,6 @@ function buildResultRows(
     classCounters[classKey]++;
     const pic = classCounters[classKey];
 
-    const tires = entry.tires || entry.tyres || null;
     const position = typeof entry.position === "number" ? entry.position : null;
     const carNumber = entry.number || null;
     const laps = entry.laps ? parseInt(entry.laps, 10) : null;
@@ -455,7 +454,6 @@ function buildResultRows(
     const extraData: Record<string, any> = {};
     if (raceClass) extraData["Class"] = raceClass;
     if (raceClass) extraData["PIC"] = pic;
-    if (tires) extraData["Tires"] = tires;
 
     // For overall endurance race results, store all drivers
     if (isOverallEndurance && drivers.length > 1) {
