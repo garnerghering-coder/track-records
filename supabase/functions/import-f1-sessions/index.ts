@@ -572,6 +572,7 @@ serve(async (req) => {
         const headerRow = rows[0];
         const dataRows = rows.slice(1);
         const tableType = detectTableType(headerRow);
+        const sessionInfo = detectSessionType(scrapedUrl, "");
 
         // In preview mode, skip session creation — just parse data
         let newSession: { id: string } | null = null;
