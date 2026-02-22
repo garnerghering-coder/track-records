@@ -156,65 +156,83 @@ export async function exportEventPdf(params: EventExportParams) {
     // --- Header: Event (left) | Logo (center) | Session (right) ---
     const topY = 10;
     const centerX = pageWidth / 2;
+    const margin = 14;
+    const colMaxWidth = (pageWidth - 28) / 3; // each column gets ~1/3 width
 
-    // Col 1: Event info (left)
+    // Col 1: Event info (left) — title + series on one line, circuit on next
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(30);
-    doc.text(eventName, 14, topY);
+    doc.text(eventName, margin, topY);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(100);
+    if (seriesName) doc.text(seriesName, margin, topY + 5);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
-    const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
-    doc.text(subtitle, 14, topY + 5);
+    if (locationStr) doc.text(locationStr, margin, topY + 9);
 
     // Col 3: Session info (right-aligned)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(50);
     const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}` : "");
-    doc.text(sessionLabel, pageWidth - 14, topY, { align: "right" });
+    doc.text(sessionLabel, pageWidth - margin, topY, { align: "right" });
     doc.setFont("helvetica", "normal");
 
-    // Weather below session name (right-aligned)
-    let bottomY = topY + 5;
+    // Weather below session name (right-aligned, split across lines)
+    let rightLineY = topY + 5;
     if (s.weather) {
       const w = s.weather;
-      const parts: string[] = [];
-      if (w.condition_summary) parts.push(w.condition_summary);
+      doc.setFontSize(7);
+      doc.setTextColor(120);
+
+      // Strip unicode emojis from condition summary
+      const cleanSummary = (w.condition_summary || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").trim();
+      if (cleanSummary) {
+        doc.text(cleanSummary, pageWidth - margin, rightLineY, { align: "right" });
+        rightLineY += 3.5;
+      }
+
+      const tempParts: string[] = [];
       if (w.air_temp_min != null || w.air_temp_max != null) {
         const temps = [w.air_temp_min, w.air_temp_max].filter((t) => t != null);
-        parts.push(`Air: ${temps.join("–")}°C`);
+        tempParts.push(`Air: ${temps.join("-")}°C`);
       }
       if (w.track_temp_min != null || w.track_temp_max != null) {
         const temps = [w.track_temp_min, w.track_temp_max].filter((t) => t != null);
-        parts.push(`Track: ${temps.join("–")}°C`);
+        tempParts.push(`Track: ${temps.join("-")}°C`);
       }
-      if (w.rain_mm != null && w.rain_mm > 0) parts.push(`Rain: ${w.rain_mm}mm`);
-      if (w.wind_speed_max != null) parts.push(`Wind: ${w.wind_speed_max} km/h`);
-      if (parts.length > 0) {
-        doc.setFontSize(7);
-        doc.setTextColor(120);
-        doc.text(parts.join("  |  "), pageWidth - 14, topY + 5, { align: "right" });
+      if (tempParts.length > 0) {
+        doc.text(tempParts.join("  |  "), pageWidth - margin, rightLineY, { align: "right" });
+        rightLineY += 3.5;
+      }
+
+      const extraParts: string[] = [];
+      if (w.rain_mm != null && w.rain_mm > 0) extraParts.push(`Rain: ${w.rain_mm}mm`);
+      if (w.wind_speed_max != null) extraParts.push(`Wind: ${w.wind_speed_max} km/h`);
+      if (extraParts.length > 0) {
+        doc.text(extraParts.join("  |  "), pageWidth - margin, rightLineY, { align: "right" });
+        rightLineY += 3.5;
       }
     }
+
+    const bottomY = Math.max(topY + 9, rightLineY);
 
     // Col 2: Logo (horizontally centered, vertically centered in header)
     if (logoData) {
       const imgProps = doc.getImageProperties(logoData);
       const logoHeight = 12;
       const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      const logoCenterY = (topY - 3 + bottomY) / 2 - logoHeight / 2;
+      const logoCenterY = topY + (bottomY - topY) / 2 - logoHeight / 2;
       doc.addImage(logoData, "PNG", centerX - logoWidth / 2, logoCenterY, logoWidth, logoHeight);
     } else {
       doc.setFontSize(12);
       doc.setTextColor(30);
-      doc.text("TRACK RECORDS", centerX, topY + 2, { align: "center" });
+      doc.text("TRACK RECORDS", centerX, topY + 4, { align: "center" });
     }
 
-    let tableStartY = bottomY + 5;
+    let tableStartY = bottomY + 4;
 
     // Table
     const { head, body } = buildSessionTable(s);
