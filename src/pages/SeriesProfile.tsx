@@ -75,13 +75,15 @@ const SeriesProfile = () => {
           // Fetch top 3 race finishers for all events
           const eventIds = mappedEvents.map(e => e.id);
           if (eventIds.length > 0) {
-            // Get race sessions for these events
+            // Get race sessions for these events — prefer parent (endurance_race) over child hour sessions
             const { data: raceSessions } = await supabase
               .from("v2_sessions")
-              .select("id, event_id")
+              .select("id, event_id, session_type, parent_session_id, sort_order")
               .in("event_id", eventIds)
-              .eq("session_type", "race" as any)
-              .eq("status", "published" as any);
+              .in("session_type", ["race", "endurance_race", "sprint_race"] as any)
+              .eq("status", "published" as any)
+              .is("parent_session_id", null)
+              .order("sort_order");
 
             if (raceSessions && raceSessions.length > 0) {
               const sessionIds = raceSessions.map(rs => rs.id);
