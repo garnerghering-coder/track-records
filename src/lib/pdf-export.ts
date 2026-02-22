@@ -153,43 +153,33 @@ export async function exportEventPdf(params: EventExportParams) {
 
     const s = sessions[i];
 
-    // --- Header band: logo left, event info right-aligned ---
-    const headerY = 12;
+    // --- Left side: event + session info ---
+    const topY = 10;
 
-    // Logo (right-aligned, larger, vertically centered with header text)
-    if (logoData) {
-      const imgProps = doc.getImageProperties(logoData);
-      const logoHeight = 14;
-      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, 6, logoWidth, logoHeight);
-    } else {
-      doc.setFontSize(12);
-      doc.setTextColor(30);
-      doc.text("TRACK RECORDS", pageWidth - 14, 14, { align: "right" });
-    }
-
-    // Event name (left-aligned)
+    // Event name (bold)
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text(eventName, 14, headerY - 1);
+    doc.text(eventName, 14, topY);
 
     // Series · Circuit, Country
+    doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(100);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
     const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
-    doc.text(subtitle, 14, headerY + 5);
+    doc.text(subtitle, 14, topY + 6);
 
     // Session name & date
-    let y = 24;
-    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
     doc.setTextColor(50);
     const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}` : "");
-    doc.text(sessionLabel, 14, y);
+    doc.text(sessionLabel, 14, topY + 13);
+    doc.setFont("helvetica", "normal");
 
-    let tableStartY = y + 5;
-
-    // Weather snippet
+    // Weather snippet (inline below session)
+    let bottomY = topY + 13;
     if (s.weather) {
       const w = s.weather;
       const parts: string[] = [];
@@ -204,14 +194,28 @@ export async function exportEventPdf(params: EventExportParams) {
       }
       if (w.rain_mm != null && w.rain_mm > 0) parts.push(`Rain: ${w.rain_mm}mm`);
       if (w.wind_speed_max != null) parts.push(`Wind: ${w.wind_speed_max} km/h`);
-
       if (parts.length > 0) {
         doc.setFontSize(7);
         doc.setTextColor(120);
-        doc.text("Weather: " + parts.join("  |  "), 14, tableStartY);
-        tableStartY += 5;
+        doc.text("Weather: " + parts.join("  |  "), 14, topY + 18);
+        bottomY = topY + 18;
       }
     }
+
+    // Logo (right-aligned, vertically centered between topY and bottomY)
+    if (logoData) {
+      const imgProps = doc.getImageProperties(logoData);
+      const logoHeight = 14;
+      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
+      const logoCenterY = (topY - 3 + bottomY) / 2 - logoHeight / 2;
+      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, logoCenterY, logoWidth, logoHeight);
+    } else {
+      doc.setFontSize(12);
+      doc.setTextColor(30);
+      doc.text("TRACK RECORDS", pageWidth - 14, (topY + bottomY) / 2, { align: "right" });
+    }
+
+    let tableStartY = bottomY + 5;
 
     // Table
     const { head, body } = buildSessionTable(s);
