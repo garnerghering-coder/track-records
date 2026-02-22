@@ -62,10 +62,11 @@ const CircuitProfile = () => {
         if (eventIds.length > 0) {
           const { data: raceSessions } = await supabase
             .from("v2_sessions")
-            .select("id, event_id")
+            .select("id, event_id, session_type, parent_session_id")
             .in("event_id", eventIds)
-            .eq("session_type", "race" as any)
-            .eq("status", "published" as any);
+            .in("session_type", ["race", "endurance_race", "sprint_race"] as any)
+            .eq("status", "published" as any)
+            .is("parent_session_id", null);
 
           if (raceSessions && raceSessions.length > 0) {
             const sIds = raceSessions.map(rs => rs.id);
