@@ -309,6 +309,35 @@ function SessionResults({
         .eq("session_id", session.id)
         .order("position");
       if (error) throw error;
+      
+      // Patch missing nationalities in extra_data.all_drivers from v2_drivers
+      const missingIds = new Set<string>();
+      for (const row of (data || [])) {
+        const allDrivers = (row as any).extra_data?.all_drivers;
+        if (Array.isArray(allDrivers)) {
+          for (const d of allDrivers) {
+            if (d.id && !d.nationality) missingIds.add(d.id);
+          }
+        }
+      }
+      if (missingIds.size > 0) {
+        const { data: driverRows } = await supabase
+          .from("v2_drivers")
+          .select("id, nationality")
+          .in("id", Array.from(missingIds));
+        if (driverRows) {
+          const natMap: Record<string, string> = {};
+          for (const dr of driverRows) { if (dr.nationality) natMap[dr.id] = dr.nationality; }
+          for (const row of (data || [])) {
+            const allDrivers = (row as any).extra_data?.all_drivers;
+            if (Array.isArray(allDrivers)) {
+              for (const d of allDrivers) {
+                if (d.id && !d.nationality && natMap[d.id]) d.nationality = natMap[d.id];
+              }
+            }
+          }
+        }
+      }
       return data;
     },
   });
