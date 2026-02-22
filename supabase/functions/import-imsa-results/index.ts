@@ -9,6 +9,23 @@ const corsHeaders = {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+async function fetchWithRetry(url: string, retries = 3, delayMs = 2000): Promise<Response> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const resp = await fetch(url);
+      return resp;
+    } catch (err) {
+      if (attempt < retries) {
+        console.log(`Fetch attempt ${attempt} failed for ${url}, retrying in ${delayMs}ms...`);
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("Unreachable");
+}
+
 function matchDriver(
   fullName: string,
   existingDrivers: Array<{ id: string; full_name: string }>,
@@ -251,7 +268,7 @@ serve(async (req) => {
 
     // ── Step 1: Fetch the IMSA results page HTML ──
     console.log("Fetching IMSA page:", url);
-    const pageResponse = await fetch(url);
+    const pageResponse = await fetchWithRetry(url);
     if (!pageResponse.ok) {
       return new Response(
         JSON.stringify({ error: `Failed to fetch IMSA page: ${pageResponse.status}` }),
@@ -489,7 +506,7 @@ serve(async (req) => {
       for (const jsonUrl of nonRaceLinks) {
         try {
           console.log("Fetching non-race JSON:", jsonUrl);
-          const jsonResponse = await fetch(jsonUrl);
+          const jsonResponse = await fetchWithRetry(jsonUrl);
           if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${jsonUrl}: ${jsonResponse.status}`); continue; }
           const data = await jsonResponse.json();
           const sessionData = data.session || {};
@@ -521,7 +538,7 @@ serve(async (req) => {
         const firstRaceUrl = overallRaceLinks[0] || hourLinks[0];
         if (firstRaceUrl) {
           try {
-            const resp = await fetch(firstRaceUrl);
+            const resp = await fetchWithRetry(firstRaceUrl);
             if (resp.ok) {
               const d = await resp.json();
               raceDate = parseSessionDate(d.session || {});
@@ -547,7 +564,7 @@ serve(async (req) => {
       if (parentSessionId && raceDataUrl) {
         try {
           console.log("Fetching final race results for parent session:", raceDataUrl);
-          const jsonResponse = await fetch(raceDataUrl);
+          const jsonResponse = await fetchWithRetry(raceDataUrl);
           if (jsonResponse.ok) {
             const data = await jsonResponse.json();
             const entries: any[] = data.classification || [];
@@ -566,7 +583,7 @@ serve(async (req) => {
 
         try {
           console.log(`Fetching Hour ${hour} results:`, hourUrl);
-          const jsonResponse = await fetch(hourUrl);
+          const jsonResponse = await fetchWithRetry(hourUrl);
           if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${hourUrl}: ${jsonResponse.status}`); continue; }
           const data = await jsonResponse.json();
           const entries: any[] = data.classification || [];
@@ -594,7 +611,7 @@ serve(async (req) => {
       for (const jsonUrl of resultsJsonLinks) {
         try {
           console.log("Fetching JSON:", jsonUrl);
-          const jsonResponse = await fetch(jsonUrl);
+          const jsonResponse = await fetchWithRetry(jsonUrl);
           if (!jsonResponse.ok) { summary.errors.push(`Failed to fetch ${jsonUrl}: ${jsonResponse.status}`); continue; }
           const data = await jsonResponse.json();
           const sessionData = data.session || {};
