@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.import-f1-sessions]
 verify_jwt = false
+
+[functions.import-imsa-results]
+verify_jwt = false
