@@ -282,12 +282,41 @@ serve(async (req) => {
 
     console.log("Series filter names:", allSeriesNames);
 
+    /**
+     * Extract the series folder name from an IMSA URL path.
+     * URL structure: /Results/26_2026/03_Venue/01_Series Name/...
+     * Returns the series folder name stripped of numeric prefix, lowercased.
+     */
+    function extractSeriesFolder(urlPath: string): string {
+      const decoded = decodeURIComponent(urlPath);
+      // Split path segments and find the series folder (4th segment after /Results/year/venue/)
+      const segments = decoded.split("/").filter(Boolean);
+      // Find the segment after the venue segment (which starts with a 2-digit number)
+      // Pattern: Results / year / venue / series / session / ...
+      for (let i = 0; i < segments.length - 1; i++) {
+        if (segments[i].toLowerCase() === "results" && i + 3 < segments.length) {
+          const seriesSegment = segments[i + 3];
+          // Strip numeric prefix like "01_"
+          return seriesSegment.replace(/^\d+_/, "").toLowerCase().trim();
+        }
+      }
+      return "";
+    }
+
+    function matchesSeriesFolder(urlPath: string): boolean {
+      const folder = extractSeriesFolder(urlPath);
+      if (!folder) return false;
+      return allSeriesNames.some(sn => {
+        // Full name match: folder equals or contains the full series name
+        if (sn.length > 5) return folder.includes(sn) || sn.includes(folder);
+        // Short alias (like "IMSA"): require exact folder match
+        return folder === sn;
+      });
+    }
+
     const resultsJsonLinks = allJsonLinks
       .filter(l => /03_Results_/i.test(l))
-      .filter(l => {
-        const decoded = decodeURIComponent(l).toLowerCase();
-        return allSeriesNames.some(sn => decoded.includes(sn.toLowerCase()));
-      })
+      .filter(l => matchesSeriesFolder(l))
       .map(l => {
         try {
           return new URL(l, baseUrl).href;
@@ -310,15 +339,23 @@ serve(async (req) => {
     }
 
     // ── Step 1.5: Detect endurance race pattern ──
-    // Check if any links contain "Hour" subfolders — that means endurance
+    // Hour links: URLs that contain an "Hour N" subfolder
     const hourLinks = resultsJsonLinks.filter(l => extractHourNumber(l) !== null);
+    // Overall race links: contain "Race" in session folder but NOT in an Hour subfolder
     const overallRaceLinks = resultsJsonLinks.filter(l => {
       const decoded = decodeURIComponent(l).toLowerCase();
-      return /race/i.test(decoded) && isOverallRaceResult(l);
+      // Must be in a Race session folder (e.g. "202601241340_Race/") 
+      const hasRaceFolder = /\d+_race\//i.test(decoded);
+      // Must NOT have an Hour subfolder
+      const hasHour = /hour\s*\d+/i.test(decoded);
+      return hasRaceFolder && !hasHour;
     });
+    // Non-race links: everything that isn't a race or hour link
     const nonRaceLinks = resultsJsonLinks.filter(l => {
       const decoded = decodeURIComponent(l).toLowerCase();
-      return !/race/i.test(decoded) && extractHourNumber(l) === null;
+      const hasRaceFolder = /\d+_race\//i.test(decoded);
+      const hasHour = extractHourNumber(l) !== null;
+      return !hasRaceFolder && !hasHour;
     });
 
     const isEndurance = hourLinks.length > 0;
