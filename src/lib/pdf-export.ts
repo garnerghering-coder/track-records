@@ -156,34 +156,29 @@ export async function exportEventPdf(params: EventExportParams) {
     // --- Header band: logo left, event info right-aligned ---
     const headerY = 12;
 
-    // Logo (right-aligned)
+    // Logo (right-aligned, larger, vertically centered with header text)
     if (logoData) {
       const imgProps = doc.getImageProperties(logoData);
-      const logoHeight = 10;
+      const logoHeight = 14;
       const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, 7, logoWidth, logoHeight);
+      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, 6, logoWidth, logoHeight);
     } else {
-      doc.setFontSize(10);
+      doc.setFontSize(12);
       doc.setTextColor(30);
-      doc.text("TRACK RECORDS", pageWidth - 14, headerY, { align: "right" });
+      doc.text("TRACK RECORDS", pageWidth - 14, 14, { align: "right" });
     }
 
-    // Event name (left-aligned, bold)
+    // Event name (left-aligned)
     doc.setFontSize(13);
     doc.setTextColor(30);
     doc.text(eventName, 14, headerY - 1);
 
-    // Series · Circuit, Country (left-aligned, smaller)
+    // Series · Circuit, Country
     doc.setFontSize(8);
     doc.setTextColor(100);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
     const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
     doc.text(subtitle, 14, headerY + 5);
-
-    // Export date (left, small, below subtitle)
-    doc.setFontSize(6);
-    doc.setTextColor(160);
-    doc.text(new Date().toLocaleDateString(), 14, headerY + 9);
 
     // Session name & date
     let y = 24;
@@ -280,6 +275,7 @@ export async function exportEventPdf(params: EventExportParams) {
     // Footer
     doc.setFontSize(6);
     doc.setTextColor(180);
+    doc.text(new Date().toLocaleDateString(), 14, pageHeight - 6);
     doc.text(`Page ${i + 1} of ${sessions.length}`, pageWidth - 14, pageHeight - 6, { align: "right" });
 
     onProgress?.(10 + ((i + 1) / sessions.length) * 85);
