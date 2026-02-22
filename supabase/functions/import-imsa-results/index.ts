@@ -150,9 +150,20 @@ serve(async (req) => {
     console.log(`Found ${allJsonLinks.length} total .JSON links in HTML`);
 
     // Filter for results JSON files (prefixed with 03_Results_)
-    const resultsJsonLinks = allJsonLinks.filter(l => /03_Results_/i.test(l));
+    // Resolve relative URLs against the IMSA base URL
+    const baseUrl = "https://imsa.results.alkamelcloud.com/";
+    const resultsJsonLinks = allJsonLinks
+      .filter(l => /03_Results_/i.test(l))
+      .map(l => {
+        try {
+          return new URL(l, baseUrl).href;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean) as string[];
 
-    console.log(`Found ${resultsJsonLinks.length} results JSON links:`, resultsJsonLinks);
+    console.log(`Found ${resultsJsonLinks.length} results JSON links:`, resultsJsonLinks.slice(0, 5));
 
     if (resultsJsonLinks.length === 0) {
       return new Response(
