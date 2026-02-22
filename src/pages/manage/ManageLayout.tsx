@@ -40,7 +40,9 @@ export default function ManageLayout() {
     <div className="flex min-h-screen w-full">
       <aside className={cn("border-r border-border bg-sidebar flex flex-col transition-all", collapsed ? "w-14" : "w-56")}>
         <div className="flex items-center justify-between p-3 border-b border-sidebar-border">
-          {!collapsed && <span className="text-sm font-semibold text-sidebar-foreground uppercase tracking-wider">Manage</span>}
+          <Link to="/" className={cn("text-xs text-sidebar-foreground hover:text-sidebar-primary transition-colors flex items-center gap-1", collapsed && "justify-center")}>
+            {collapsed ? "←" : "← Back to site"}
+          </Link>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-sidebar-foreground" onClick={() => setCollapsed(!collapsed)}>
             <Menu className="h-4 w-4" />
           </Button>
@@ -60,11 +62,11 @@ export default function ManageLayout() {
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t border-sidebar-border">
-          <Link to="/" className={cn("text-xs text-sidebar-foreground hover:text-sidebar-primary transition-colors", collapsed && "text-center block")}>
-            {collapsed ? "←" : "← Back to site"}
-          </Link>
-        </div>
+        {!collapsed && (
+          <div className="p-3 border-t border-sidebar-border">
+            <span className="text-xs text-sidebar-foreground uppercase tracking-wider font-semibold">Manage</span>
+          </div>
+        )}
       </aside>
       <main className="flex-1 overflow-auto">
         <Outlet />

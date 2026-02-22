@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Sparkles } from "lucide-react";
 
 interface Driver { id: string; full_name: string; short_name: string | null; nationality: string | null; date_of_birth: string | null; }
 
@@ -17,6 +17,7 @@ export default function ManageDrivers() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", nationality: "", date_of_birth: "" });
   const [search, setSearch] = useState("");
+  const [enriching, setEnriching] = useState(false);
 
   const { data: drivers = [], isLoading } = useQuery({
     queryKey: ["v2_drivers"],
@@ -51,11 +52,34 @@ export default function ManageDrivers() {
   const openNew = () => { setEditing(null); setForm({ full_name: "", nationality: "", date_of_birth: "" }); setOpen(true); };
   const openEdit = (d: Driver) => { setEditing(d); setForm({ full_name: d.full_name, nationality: d.nationality || "", date_of_birth: d.date_of_birth || "" }); setOpen(true); };
 
+  const missingCount = useMemo(() => drivers.filter(d => !d.nationality || !d.date_of_birth).length, [drivers]);
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("enrich-v2-drivers");
+      if (error) throw error;
+      toast.success(`Enriched ${data.enriched} of ${data.total} drivers`);
+      qc.invalidateQueries({ queryKey: ["v2_drivers"] });
+    } catch (e: any) {
+      toast.error(e.message || "Enrichment failed");
+    } finally {
+      setEnriching(false);
+    }
+  };
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Drivers</h1>
-        <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Driver</Button>
+        <div className="flex items-center gap-2">
+          {missingCount > 0 && (
+            <Button onClick={handleEnrich} size="sm" variant="outline" disabled={enriching}>
+              <Sparkles className="h-4 w-4 mr-1" />
+              {enriching ? "Enriching…" : `Enrich Missing (${missingCount})`}
+            </Button>
+          )}
+          <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Driver</Button>
+        </div>
       </div>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
