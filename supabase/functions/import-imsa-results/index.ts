@@ -428,6 +428,13 @@ function buildResultRows(
     const drivers = entry.drivers || [];
     if (drivers.length === 0) continue;
 
+    // DEBUG: Log entry structure for car #7 in Hour 24 to understand available fields
+    if (hourNumber === 24 && String(entry.number) === "7") {
+      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} entry keys:`, Object.keys(entry));
+      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} driver_number:`, entry.driver_number, "fastest_lap_driver_number:", entry.fastest_lap_driver_number, "fastest_driver_number:", entry.fastest_driver_number, "current_driver:", entry.current_driver);
+      console.log(`DEBUG Hour ${hourNumber} Car #${entry.number} drivers:`, JSON.stringify(drivers.map((d: any) => ({ num: d.number, name: `${d.firstname} ${d.surname}`, keys: Object.keys(d) }))));
+    }
+
     let selectedDriver = drivers[0];
 
     // For hour sub-sessions with Time Card data, use the Time Card to determine the active driver
