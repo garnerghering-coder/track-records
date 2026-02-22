@@ -243,6 +243,7 @@ function EnduranceRaceView({
         weatherMap={weatherMap}
         positionRefMode={useQualifyingRef ? "qualifying" : "previous-hour"}
         prevHourSessionId={prevHourSession?.id || null}
+        hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
       />
     </div>
   );
@@ -280,6 +281,7 @@ function SessionResults({
   weatherMap,
   positionRefMode,
   prevHourSessionId,
+  hideStatus,
 }: {
   session: any;
   event: any;
@@ -288,6 +290,7 @@ function SessionResults({
   weatherMap: Record<string, any>;
   positionRefMode?: "qualifying" | "previous-hour";
   prevHourSessionId?: string | null;
+  hideStatus?: boolean;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -416,7 +419,7 @@ function SessionResults({
   const hasAvgLap = isRace && results.some((r: any) => r.average_lap_time);
   const hasPits = isRace && results.some((r: any) => r.pit_stops != null);
   const hasPoints = isRace && results.some((r: any) => r.points != null && r.points !== 0);
-  const hasStatus = isRace && results.some((r: any) => r.status && r.status !== "finished");
+  const hasStatus = isRace && !hideStatus && results.some((r: any) => r.status && r.status !== "finished");
 
   const bestLapField = isPractice ? "best_lap_time" : isQual ? "best_time" : "fastest_lap_time";
   let fastestLapMs: number | null = null;
