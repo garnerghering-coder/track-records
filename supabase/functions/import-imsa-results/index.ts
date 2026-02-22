@@ -16,16 +16,13 @@ function matchDriver(
 ): string | null {
   const normalized = fullName.toLowerCase().trim();
 
-  // 1. Check alias map
   const aliasId = aliasMap.get(normalized);
   if (aliasId) return aliasId;
 
-  // 2. Exact match
   for (const d of existingDrivers) {
     if (d.full_name.toLowerCase() === normalized) return d.id;
   }
 
-  // 3. Fuzzy first+last
   const parts = normalized.split(/\s+/);
   if (parts.length >= 2) {
     const first = parts[0];
@@ -67,23 +64,28 @@ function matchTeam(
   return null;
 }
 
-/** Detect IMSA session type from folder name */
-function detectSessionType(folderName: string): { type: string; name: string } {
-  const lower = folderName.toLowerCase();
-  if (/qualifying/i.test(lower)) return { type: "qualifying", name: folderName };
-  if (/practice\s*(\d)/i.test(lower)) return { type: "practice", name: folderName };
-  if (/warm\s*up/i.test(lower)) return { type: "warmup", name: folderName };
-  if (/race|hour/i.test(lower)) return { type: "race", name: folderName };
-  if (/sprint/i.test(lower)) return { type: "sprint_race", name: folderName };
-  return { type: "other", name: folderName };
+/** Detect session type from the JSON session data or folder name */
+function detectSessionType(sessionName: string, sessionType?: string): { type: string; name: string } {
+  const lower = (sessionType || sessionName).toLowerCase();
+  if (/qualifying/i.test(lower)) return { type: "qualifying", name: sessionName };
+  if (/free\s*practice|practice/i.test(lower)) return { type: "practice", name: sessionName };
+  if (/warm\s*up/i.test(lower)) return { type: "warmup", name: sessionName };
+  if (/race|hour/i.test(lower)) return { type: "race", name: sessionName };
+  if (/sprint/i.test(lower)) return { type: "sprint_race", name: sessionName };
+  return { type: "other", name: sessionName };
 }
 
 /** Parse IMSA status string to our enum */
-function parseStatus(status: string | null | undefined): string {
-  if (!status) return "finished";
+function parseStatus(status: string, notFinished: boolean, cause: string): string {
+  if (!notFinished && (status === "Classified" || status === "Not Classified" || !status)) return "finished";
+  if (notFinished) {
+    const c = (cause || "").toUpperCase();
+    if (c.includes("DNS")) return "dns";
+    if (c.includes("DSQ") || c.includes("DISQUALIF")) return "dsq";
+    return "dnf";
+  }
   const s = status.toUpperCase().trim();
-  if (s === "FINISHED" || s === "RUNNING" || s === "" || s === "CLASSIFIED") return "finished";
-  if (s === "DNF" || s === "MECHANICAL" || s === "ACCIDENT" || s === "CONTACT" || s === "OFF TRACK" || s === "RETIREMENT") return "dnf";
+  if (s === "DNF" || s === "MECHANICAL" || s === "ACCIDENT" || s === "RETIREMENT") return "dnf";
   if (s === "DNS") return "dns";
   if (s === "DSQ" || s === "DISQUALIFIED") return "dsq";
   return "finished";
@@ -97,14 +99,6 @@ serve(async (req) => {
   }
 
   try {
-    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
-    if (!FIRECRAWL_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Firecrawl is not configured." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -133,108 +127,42 @@ serve(async (req) => {
       );
     }
 
-    // ── Step 1: Scrape the IMSA results page to discover JSON file links ──
-    console.log("Scraping IMSA page:", url);
-    const scrapeResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${FIRECRAWL_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ url, formats: ["links", "markdown"], onlyMainContent: false }),
-    });
-
-    if (!scrapeResponse.ok) {
-      const errText = await scrapeResponse.text();
-      console.error("Firecrawl error:", errText);
+    // ── Step 1: Fetch the IMSA results page HTML directly (no Firecrawl needed) ──
+    // The alkamelcloud site is server-rendered HTML with all links embedded
+    console.log("Fetching IMSA page:", url);
+    const pageResponse = await fetch(url);
+    if (!pageResponse.ok) {
       return new Response(
-        JSON.stringify({ error: "Failed to scrape the IMSA page." }),
+        JSON.stringify({ error: `Failed to fetch IMSA page: ${pageResponse.status}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const html = await pageResponse.text();
 
-    const scrapeData = await scrapeResponse.json();
-    const allLinks: string[] = scrapeData.data?.links || scrapeData.links || [];
-    const markdown: string = scrapeData.data?.markdown || scrapeData.markdown || "";
-
-    // Also extract links from markdown (some might not be in links array)
-    const mdLinkRegex = /https?:\/\/[^\s)]+\.JSON/gi;
-    let mdMatch: RegExpExecArray | null;
-    while ((mdMatch = mdLinkRegex.exec(markdown)) !== null) {
-      if (!allLinks.includes(mdMatch[0])) allLinks.push(mdMatch[0]);
+    // Extract all href links from the HTML
+    const hrefRegex = /href="([^"]+\.JSON)"/gi;
+    const allJsonLinks: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = hrefRegex.exec(html)) !== null) {
+      allJsonLinks.push(match[1]);
     }
 
-    // Filter for .JSON classification files from alkamelcloud
-    let jsonLinks = allLinks.filter(
-      (l) => /\.JSON$/i.test(l) && /classification/i.test(l)
-    );
+    console.log(`Found ${allJsonLinks.length} total .JSON links in HTML`);
 
-    // If no direct JSON links found, try to construct them from folder links
-    if (jsonLinks.length === 0) {
-      console.log("No direct JSON links found. Trying to construct from folder structure...");
-      
-      // Find session-like folder links (Practice, Qualifying, Race, Warm Up, etc.)
-      const sessionPattern = /\/(Practice\s*\d*|Qualifying|Race|Warm\s*Up|Sprint|Hour\s*\d+)\/?/i;
-      const candidateFolders = allLinks.filter(l => sessionPattern.test(decodeURIComponent(l)));
-      
-      // Also look for "Official" or "Unofficial" sub-folders
-      const officialPattern = /(Official|Unofficial)\/?$/i;
-      const officialFolders = allLinks.filter(l => officialPattern.test(decodeURIComponent(l)));
-      
-      // Build candidate JSON URLs
-      const candidateUrls = new Set<string>();
-      
-      // From official/unofficial folders, append Classification.JSON
-      for (const folder of officialFolders) {
-        const base = folder.endsWith("/") ? folder : folder + "/";
-        candidateUrls.add(base + "Classification.JSON");
-      }
-      
-      // From session folders, try both Official and direct Classification.JSON
-      for (const folder of candidateFolders) {
-        const base = folder.endsWith("/") ? folder : folder + "/";
-        candidateUrls.add(base + "Official/Classification.JSON");
-        candidateUrls.add(base + "Unofficial/Classification.JSON");
-        candidateUrls.add(base + "Classification.JSON");
-      }
-      
-      console.log(`Constructed ${candidateUrls.size} candidate URLs from ${candidateFolders.length} session folders and ${officialFolders.length} official folders`);
-      
-      // Try to fetch each candidate to see which ones exist (HEAD request first)
-      const validUrls: string[] = [];
-      const checks = Array.from(candidateUrls).map(async (candidateUrl) => {
-        try {
-          const headResp = await fetch(candidateUrl, { method: "HEAD" });
-          if (headResp.ok) {
-            validUrls.push(candidateUrl);
-          }
-        } catch {}
-      });
-      await Promise.all(checks);
-      
-      // Prefer "Official" over "Unofficial" for the same session
-      const sessionUrlMap = new Map<string, string>();
-      for (const validUrl of validUrls) {
-        // Extract session path (everything before Official/Unofficial/Classification)
-        const sessionKey = validUrl.replace(/\/(Official|Unofficial)\/Classification\.JSON$/i, "").replace(/\/Classification\.JSON$/i, "");
-        const existing = sessionUrlMap.get(sessionKey);
-        if (!existing || /Official/i.test(validUrl)) {
-          sessionUrlMap.set(sessionKey, validUrl);
-        }
-      }
-      
-      jsonLinks = Array.from(sessionUrlMap.values());
-      console.log(`Found ${jsonLinks.length} valid Classification.JSON file(s) after probing`);
-    }
+    // Filter for results JSON files (prefixed with 03_Results_)
+    const resultsJsonLinks = allJsonLinks.filter(l => /03_Results_/i.test(l));
 
-    if (jsonLinks.length === 0) {
+    console.log(`Found ${resultsJsonLinks.length} results JSON links:`, resultsJsonLinks);
+
+    if (resultsJsonLinks.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "No classification JSON files found. Make sure you're linking to an IMSA event results page on alkamelcloud.com that has session results (not a season overview page).",
-          debug_links_found: allLinks.length,
+          error: "No results JSON files found on this page. Make sure you're linking to an IMSA event results page on alkamelcloud.com that has session results.",
+          debug_json_links_found: allJsonLinks.length,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log(`Processing ${jsonLinks.length} JSON classification file(s):`, jsonLinks);
 
     // ── Step 2: Load reference data for matching ──
     const seasonId = event.season_id;
@@ -281,7 +209,7 @@ serve(async (req) => {
       .limit(1);
     let sortOrder = (allSessions?.[0]?.sort_order ?? -1) + 1;
 
-    for (const jsonUrl of jsonLinks) {
+    for (const jsonUrl of resultsJsonLinks) {
       try {
         console.log("Fetching JSON:", jsonUrl);
         const jsonResponse = await fetch(jsonUrl);
@@ -290,14 +218,13 @@ serve(async (req) => {
           continue;
         }
 
-        const classificationData = await jsonResponse.json();
+        const data = await jsonResponse.json();
 
-        // Extract session name from the URL path
-        // e.g. .../Practice 1/Classification.JSON or .../Race/Classification.JSON
-        const pathParts = new URL(jsonUrl).pathname.split("/").filter(Boolean);
-        const classIdx = pathParts.findIndex(p => /classification/i.test(p));
-        const sessionFolderName = classIdx > 0 ? decodeURIComponent(pathParts[classIdx - 1]) : "Unknown Session";
-        const sessionInfo = detectSessionType(sessionFolderName);
+        // The IMSA JSON has: { session: {...}, classification: [...] }
+        const sessionData = data.session || {};
+        const sessionName = sessionData.session_name || "Unknown Session";
+        const sessionType = sessionData.session_type || "";
+        const sessionInfo = detectSessionType(sessionName, sessionType);
 
         // Skip if session already exists
         if (existingSessionNames.has(sessionInfo.name)) {
@@ -306,29 +233,27 @@ serve(async (req) => {
           continue;
         }
 
-        // Parse entries from the IMSA classification JSON
-        // The JSON format typically has an array of results under various keys
-        const entries: any[] = classificationData.Results || classificationData.results ||
-          classificationData.Classification || classificationData.classification ||
-          classificationData.Entries || classificationData.entries || [];
+        const entries: any[] = data.classification || [];
 
-        if (!Array.isArray(entries) || entries.length === 0) {
-          // Try top-level if it's an array
-          if (Array.isArray(classificationData) && classificationData.length > 0) {
-            // It's a direct array
-          } else {
-            summary.errors.push(`No entries found in ${sessionFolderName}`);
-            continue;
-          }
+        if (entries.length === 0) {
+          summary.errors.push(`No entries found in ${sessionInfo.name}`);
+          continue;
         }
 
-        const entryArray = Array.isArray(classificationData) ? classificationData : entries;
-
         if (isPreview) {
-          // In preview mode, just count
           summary.sessions_created++;
-          summary.total_entries += entryArray.length;
+          summary.total_entries += entries.length;
           continue;
+        }
+
+        // Extract session date from the JSON if available
+        let sessionDate: string | null = null;
+        if (sessionData.session_date) {
+          // Format: "22/01/2026 10:05" → "2026-01-22"
+          const dateParts = sessionData.session_date.split(" ")[0]?.split("/");
+          if (dateParts && dateParts.length === 3) {
+            sessionDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+          }
         }
 
         // Create session
@@ -341,6 +266,7 @@ serve(async (req) => {
             status: "draft" as any,
             sort_order: sortOrder++,
             source_document_url: jsonUrl,
+            ...(sessionDate ? { date: sessionDate } : {}),
           } as any)
           .select("id")
           .single();
@@ -366,38 +292,30 @@ serve(async (req) => {
 
         // Process each entry
         const isRace = sessionInfo.type === "race" || sessionInfo.type === "sprint_race";
-        const resultTable = isRace ? "v2_race_results" : sessionInfo.type === "qualifying" ? "v2_qualifying_results" : "v2_practice_results";
 
-        for (const entry of entryArray) {
-          // Extract driver name(s) — IMSA format varies
-          const driverNames: string[] = [];
-          if (entry.Drivers && Array.isArray(entry.Drivers)) {
-            for (const d of entry.Drivers) {
-              const name = d.FullName || d.Name || d.DriverName || `${d.FirstName || ""} ${d.LastName || ""}`.trim();
-              if (name) driverNames.push(name);
-            }
-          } else if (entry.DriverName || entry.Driver) {
-            driverNames.push(entry.DriverName || entry.Driver);
-          } else if (entry.FirstName && entry.LastName) {
-            driverNames.push(`${entry.FirstName} ${entry.LastName}`);
-          }
+        for (const entry of entries) {
+          // IMSA JSON uses: drivers: [{ firstname, surname, country, ... }]
+          const drivers = entry.drivers || [];
+          const primaryDriver = drivers[0];
+          if (!primaryDriver) continue;
 
-          // For multi-driver endurance races, use the first driver for the result row
-          const primaryDriverName = driverNames[0];
+          const primaryDriverName = `${primaryDriver.firstname} ${primaryDriver.surname}`.trim();
           if (!primaryDriverName) continue;
 
           // Match or create driver
           let driverId = matchDriver(primaryDriverName, existingDrivers, driverAliasMap);
           if (!driverId) {
-            const parts = primaryDriverName.trim().split(/\s+/);
             const { data: newDriver } = await adminClient
               .from("v2_drivers")
-              .insert({ full_name: primaryDriverName.trim() })
+              .insert({
+                full_name: primaryDriverName,
+                ...(primaryDriver.country ? { nationality: primaryDriver.country } : {}),
+              })
               .select("id")
               .single();
             if (newDriver) {
               driverId = newDriver.id;
-              existingDrivers.push({ id: newDriver.id, full_name: primaryDriverName.trim() });
+              existingDrivers.push({ id: newDriver.id, full_name: primaryDriverName });
               summary.drivers_created++;
             }
           } else {
@@ -405,7 +323,7 @@ serve(async (req) => {
           }
 
           // Match or create team
-          const teamName = entry.TeamName || entry.Team || entry.Entrant || null;
+          const teamName = entry.team || null;
           let teamId: string | null = null;
           if (teamName) {
             teamId = matchTeam(teamName, existingTeams, seasonAliases, teamAliasMap);
@@ -425,17 +343,16 @@ serve(async (req) => {
             }
           }
 
-          // Car from season mapping
           const carId = teamId ? (seasonCarMap.get(teamId) || null) : null;
 
-          const position = entry.Position ?? entry.Pos ?? entry.FinishPosition ?? null;
-          const carNumber = entry.Number || entry.CarNumber || entry.No || null;
-          const laps = entry.Laps ?? entry.LapsCompleted ?? null;
-          const gapToLeader = entry.Gap || entry.GapToLeader || entry.Behind || null;
-          const pitStops = entry.PitStops ?? entry.Pits ?? null;
-          const bestLap = entry.BestLapTime || entry.FastestLap || entry.BestTime || null;
-          const totalTime = entry.TotalTime || entry.Time || entry.RaceTime || null;
-          const status = parseStatus(entry.Status || entry.Reason || null);
+          const position = typeof entry.position === "number" ? entry.position : null;
+          const carNumber = entry.number || null;
+          const laps = entry.laps ? parseInt(entry.laps, 10) : null;
+          const gapToLeader = entry.gap_first && entry.gap_first !== "-" ? entry.gap_first : null;
+          const pitStops = entry.pit_stops ? parseInt(entry.pit_stops, 10) : null;
+          const bestLap = entry.time || null;
+          const totalTime = entry.total_time || null;
+          const status = parseStatus(entry.status || "", entry.not_finished || false, entry.not_finished_cause || "");
 
           if (isRace) {
             await adminClient.from("v2_race_results").insert({
@@ -444,11 +361,11 @@ serve(async (req) => {
               team_id: teamId,
               car_id: carId,
               car_number: carNumber ? String(carNumber) : null,
-              position: typeof position === "number" ? position : null,
+              position,
               status: status as any,
-              laps_completed: typeof laps === "number" ? laps : null,
+              laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
               gap_to_leader: gapToLeader ? String(gapToLeader) : null,
-              pit_stops: typeof pitStops === "number" ? pitStops : null,
+              pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
               fastest_lap_time: bestLap ? String(bestLap) : null,
               total_time: totalTime ? String(totalTime) : null,
             } as any);
@@ -459,10 +376,10 @@ serve(async (req) => {
               team_id: teamId,
               car_id: carId,
               car_number: carNumber ? String(carNumber) : null,
-              position: typeof position === "number" ? position : null,
+              position,
               best_time: bestLap ? String(bestLap) : null,
               gap_to_pole: gapToLeader ? String(gapToLeader) : null,
-              laps_run: typeof laps === "number" ? laps : null,
+              laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
             } as any);
           } else {
             await adminClient.from("v2_practice_results").insert({
@@ -471,10 +388,10 @@ serve(async (req) => {
               team_id: teamId,
               car_id: carId,
               car_number: carNumber ? String(carNumber) : null,
-              position: typeof position === "number" ? position : null,
+              position,
               best_lap_time: bestLap ? String(bestLap) : null,
               gap_to_p1: gapToLeader ? String(gapToLeader) : null,
-              laps_run: typeof laps === "number" ? laps : null,
+              laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
             } as any);
           }
 
