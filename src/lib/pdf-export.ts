@@ -156,34 +156,34 @@ export async function exportEventPdf(params: EventExportParams) {
     // --- Header band: logo left, event info right-aligned ---
     const headerY = 12;
 
-    // Logo (left)
+    // Logo (right-aligned)
     if (logoData) {
       const imgProps = doc.getImageProperties(logoData);
       const logoHeight = 10;
       const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      doc.addImage(logoData, "PNG", 14, 7, logoWidth, logoHeight);
+      doc.addImage(logoData, "PNG", pageWidth - 14 - logoWidth, 7, logoWidth, logoHeight);
     } else {
       doc.setFontSize(10);
       doc.setTextColor(30);
-      doc.text("TRACK RECORDS", 14, headerY);
+      doc.text("TRACK RECORDS", pageWidth - 14, headerY, { align: "right" });
     }
 
-    // Event name (right-aligned, bold)
+    // Event name (left-aligned, bold)
     doc.setFontSize(13);
     doc.setTextColor(30);
-    doc.text(eventName, pageWidth - 14, headerY - 1, { align: "right" });
+    doc.text(eventName, 14, headerY - 1);
 
-    // Series • Circuit, Country (right-aligned, smaller)
+    // Series · Circuit, Country (left-aligned, smaller)
     doc.setFontSize(8);
     doc.setTextColor(100);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
     const subtitle = [seriesName, locationStr].filter(Boolean).join(" · ");
-    doc.text(subtitle, pageWidth - 14, headerY + 5, { align: "right" });
+    doc.text(subtitle, 14, headerY + 5);
 
-    // Export date (right, small, below subtitle)
+    // Export date (left, small, below subtitle)
     doc.setFontSize(6);
     doc.setTextColor(160);
-    doc.text(new Date().toLocaleDateString(), pageWidth - 14, headerY + 9, { align: "right" });
+    doc.text(new Date().toLocaleDateString(), 14, headerY + 9);
 
     // Session name & date
     let y = 24;
