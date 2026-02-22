@@ -1201,6 +1201,14 @@ serve(async (req) => {
         }
       } else {
         summary.sessions_skipped++;
+        // Look up existing parent session so we can still update driver_ids from final hour
+        const { data: existingParent } = await adminClient
+          .from("v2_sessions")
+          .select("id")
+          .eq("event_id", event_id)
+          .eq("name", raceSessionName)
+          .single();
+        if (existingParent) parentSessionId = existingParent.id;
       }
 
       // 4. Hour sub-sessions (using Time Card data for driver detection)
