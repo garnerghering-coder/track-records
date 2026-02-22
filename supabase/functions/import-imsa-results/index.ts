@@ -117,7 +117,7 @@ serve(async (req) => {
     // Verify event exists
     const { data: event, error: eventErr } = await adminClient
       .from("v2_events")
-      .select("id, name, season_id, circuit_id, v2_seasons(year)")
+      .select("id, name, season_id, circuit_id, v2_seasons(year, series_id, v2_series(name, v2_series_aliases(alias)))")
       .eq("id", event_id)
       .single();
     if (eventErr || !event) {
@@ -152,8 +152,24 @@ serve(async (req) => {
     // Filter for results JSON files (prefixed with 03_Results_)
     // Resolve relative URLs against the IMSA base URL
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
+
+    // Build series name matchers from the event's series name + aliases
+    const season = event.v2_seasons as any;
+    const seriesObj = season?.v2_series;
+    const seriesName: string = seriesObj?.name || "";
+    const seriesAliasesList: string[] = (seriesObj?.v2_series_aliases || []).map((a: any) => a.alias);
+    const allSeriesNames = [seriesName, ...seriesAliasesList].filter(Boolean).map(n => n.toLowerCase());
+
+    console.log("Series filter names:", allSeriesNames);
+
     const resultsJsonLinks = allJsonLinks
       .filter(l => /03_Results_/i.test(l))
+      .filter(l => {
+        // The URL path contains the series name in a folder like "01_IMSA WeatherTech SportsCar Championship"
+        // Decode and check if any series name/alias is a substring of the path
+        const decoded = decodeURIComponent(l).toLowerCase();
+        return allSeriesNames.some(sn => decoded.includes(sn.toLowerCase()));
+      })
       .map(l => {
         try {
           return new URL(l, baseUrl).href;
@@ -163,7 +179,7 @@ serve(async (req) => {
       })
       .filter(Boolean) as string[];
 
-    console.log(`Found ${resultsJsonLinks.length} results JSON links:`, resultsJsonLinks.slice(0, 5));
+    console.log(`Found ${resultsJsonLinks.length} series-filtered results JSON links (from ${allJsonLinks.length} total):`, resultsJsonLinks.slice(0, 5));
 
     if (resultsJsonLinks.length === 0) {
       return new Response(
