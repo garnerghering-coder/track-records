@@ -32,7 +32,7 @@ export default function ManageEventDetail() {
   const qc = useQueryClient();
   const [sessionOpen, setSessionOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<any>(null);
-  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "", layout_id: "" });
+  const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "", layout_id: "", qualifying_session_id: "" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
   // F1 import state
@@ -120,6 +120,7 @@ export default function ManageEventDetail() {
         end_time: sessionForm.end_time || null,
         sort_order: maxOrder + 1,
         layout_id: sessionForm.layout_id || null,
+        qualifying_session_id: sessionForm.qualifying_session_id || null,
       } as any);
       if (error) throw error;
     },
@@ -137,6 +138,7 @@ export default function ManageEventDetail() {
         start_time: sessionForm.start_time || null,
         end_time: sessionForm.end_time || null,
         layout_id: sessionForm.layout_id || null,
+        qualifying_session_id: sessionForm.qualifying_session_id || null,
       } as any).eq("id", editingSession.id);
       if (error) throw error;
     },
@@ -237,13 +239,14 @@ export default function ManageEventDetail() {
       start_time: s.start_time || "",
       end_time: s.end_time || "",
       layout_id: s.layout_id || "",
+      qualifying_session_id: (s as any).qualifying_session_id || "",
     });
     setSessionOpen(true);
   };
 
   const openNewSession = () => {
     setEditingSession(null);
-    setSessionForm({ name: "", session_type: "practice", date: "", start_time: "", end_time: "", layout_id: "" });
+    setSessionForm({ name: "", session_type: "practice", date: "", start_time: "", end_time: "", layout_id: "", qualifying_session_id: "" });
     setSessionOpen(true);
   };
 
@@ -529,6 +532,21 @@ export default function ManageEventDetail() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            {(sessionForm.session_type === "race" || sessionForm.session_type === "sprint_race") && sessions.length > 0 && (
+              <div>
+                <Label>Grid Reference (for +/- display)</Label>
+                <Select value={sessionForm.qualifying_session_id || "_auto"} onValueChange={v => setSessionForm(f => ({ ...f, qualifying_session_id: v === "_auto" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Auto-detect qualifying" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_auto">Auto-detect (first qualifying session)</SelectItem>
+                    {sessions.filter((s: any) => s.id !== editingSession?.id).map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name} ({s.session_type})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Override which session's positions are used for +/- gain/loss on the public page.</p>
               </div>
             )}
           </div>
