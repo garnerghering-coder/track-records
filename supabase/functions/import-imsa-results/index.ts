@@ -363,6 +363,19 @@ function buildResultRows(
     if (raceClass) extraData["PIC"] = pic;
     if (tires) extraData["Tires"] = tires;
 
+    // For overall endurance race results, store all drivers
+    if (isOverallEndurance && drivers.length > 1) {
+      const allDrivers: Array<{ id: string | null; name: string; nationality: string | null }> = [];
+      for (const d of drivers) {
+        const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
+        if (!dn) continue;
+        const did = driverMap.get(dn.toLowerCase()) || null;
+        const iso2 = (d.country || d.nationality) ? (country3to2[(d.country || d.nationality || "").toUpperCase()] || null) : null;
+        allDrivers.push({ id: did, name: dn, nationality: iso2 });
+      }
+      if (allDrivers.length > 0) extraData["all_drivers"] = allDrivers;
+    }
+
     if (isRace) {
       raceRows.push({
         session_id: sessionId,
