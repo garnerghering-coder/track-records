@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import trackRecordsLogo from "@/assets/track-records-logo.png";
 
 export interface SessionExportData {
@@ -216,7 +216,7 @@ export async function exportEventPdf(params: EventExportParams) {
     // Table
     const { head, body } = buildSessionTable(s);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       startY: tableStartY,
       head: [head],
       body,
@@ -230,7 +230,7 @@ export async function exportEventPdf(params: EventExportParams) {
 
     // Incidents
     if (isRace && s.incidents.length > 0) {
-      let incY = (doc as any).lastAutoTable.finalY + 8;
+      let incY = (doc as any).previousAutoTable.finalY + 8;
       if (incY > pageHeight - 20) {
         doc.addPage();
         incY = 14;
@@ -261,7 +261,7 @@ export async function exportEventPdf(params: EventExportParams) {
         return best;
       }, null);
       if (fastest) {
-        let flY = (doc as any).lastAutoTable.finalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
+        let flY = (doc as any).previousAutoTable.finalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
         if (flY > pageHeight - 10) {
           doc.addPage();
           flY = 14;
