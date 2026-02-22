@@ -213,6 +213,31 @@ function parseTimeCardCSV(csvText: string): Map<string, Map<number, string>> {
     result.set(car, simplified);
   }
 
+  // Cap overflow hours: laps beyond the race duration (e.g. after 24:00:00 in a 24h race)
+  // get assigned to hour 25+. Merge those into the actual max hour so the finishing driver is correct.
+  for (const [car, hourMap] of result) {
+    const maxHour = Math.max(...Array.from(hourMap.keys()));
+    // Check if there are standard hour boundaries (1-24 typical) with overflow
+    // If we have e.g. hours 1..24 and also 25, merge 25 into 24
+    const hours = Array.from(hourMap.keys()).sort((a, b) => a - b);
+    if (hours.length > 1) {
+      // Find contiguous block from 1..N, anything beyond N gets merged into N
+      let expectedMax = 1;
+      for (const h of hours) {
+        if (h === expectedMax) expectedMax++;
+      }
+      expectedMax--; // the last contiguous hour
+      // Merge any hours > expectedMax into expectedMax (use the one with highest elapsed = latest entry)
+      for (const h of hours) {
+        if (h > expectedMax && expectedMax >= 1) {
+          // The overflow hour's driver replaces the max hour's driver (they drove LATER)
+          hourMap.set(expectedMax, hourMap.get(h)!);
+          hourMap.delete(h);
+        }
+      }
+    }
+  }
+
   console.log(`Time Card parsed: ${result.size} cars, sample:`,
     Array.from(result.entries()).slice(0, 2).map(([car, hours]) =>
       `Car ${car}: ${Array.from(hours.entries()).slice(0, 3).map(([h, d]) => `H${h}=${d}`).join(", ")}`
