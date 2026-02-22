@@ -305,6 +305,7 @@ function SessionResults({ session, event, teamNameMap, allSessions, weatherMap }
       incidents: inc,
       customColumns: customCols,
       hasInt: res.some((r: any) => r.extra_data?.Int),
+      teamNameMap,
       weather: weatherMap[s.id] || null,
     };
   };
