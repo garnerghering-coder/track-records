@@ -1175,6 +1175,74 @@ export type Database = {
         }
         Relationships: []
       }
+      v2_driver_fingerprints: {
+        Row: {
+          calculation_details: Json | null
+          created_at: string
+          das: number | null
+          das_band: string | null
+          dcs: number | null
+          dcs_band: string | null
+          dps: number | null
+          dps_band: string | null
+          driver_id: string
+          dry_sessions: number
+          dws: number | null
+          dws_band: string | null
+          events_included: number
+          id: string
+          last_calculated_at: string
+          updated_at: string
+          wet_sessions: number
+        }
+        Insert: {
+          calculation_details?: Json | null
+          created_at?: string
+          das?: number | null
+          das_band?: string | null
+          dcs?: number | null
+          dcs_band?: string | null
+          dps?: number | null
+          dps_band?: string | null
+          driver_id: string
+          dry_sessions?: number
+          dws?: number | null
+          dws_band?: string | null
+          events_included?: number
+          id?: string
+          last_calculated_at?: string
+          updated_at?: string
+          wet_sessions?: number
+        }
+        Update: {
+          calculation_details?: Json | null
+          created_at?: string
+          das?: number | null
+          das_band?: string | null
+          dcs?: number | null
+          dcs_band?: string | null
+          dps?: number | null
+          dps_band?: string | null
+          driver_id?: string
+          dry_sessions?: number
+          dws?: number | null
+          dws_band?: string | null
+          events_included?: number
+          id?: string
+          last_calculated_at?: string
+          updated_at?: string
+          wet_sessions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_driver_fingerprints_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: true
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_drivers: {
         Row: {
           created_at: string

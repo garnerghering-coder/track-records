@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
+import DriverFingerprint, { DriverFingerprintData } from "@/components/DriverFingerprint";
 import { formatDateRange } from "@/lib/date-utils";
 
 const DriverProfilePage = () => {
@@ -20,6 +22,7 @@ const DriverProfilePage = () => {
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [teamAliasMap, setTeamAliasMap] = useState<Record<string, string>>({});
   const [selectedSeason, setSelectedSeason] = useState("all");
+  const [fingerprint, setFingerprint] = useState<DriverFingerprintData | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Derive season years and compute averages
@@ -56,6 +59,18 @@ const DriverProfilePage = () => {
     const fetchData = async () => {
       const { data: d } = await supabase.from("v2_drivers").select("*").eq("id", id).single();
       setDriver(d);
+
+      // Fetch fingerprint data
+      if (d) {
+        supabase
+          .from("v2_driver_fingerprints" as any)
+          .select("dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included")
+          .eq("driver_id", id)
+          .maybeSingle()
+          .then(({ data: fp }) => {
+            if (fp) setFingerprint(fp as any);
+          });
+      }
 
       if (d) {
         const sessionSelect = "id, name, session_type, event_id, date, parent_session_id, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(id, name)), v2_circuits(id, name, country))";
@@ -238,6 +253,26 @@ const DriverProfilePage = () => {
       </section>
 
       <div className="container py-10">
+        {/* Driver Fingerprint */}
+        {fingerprint && fingerprint.events_included > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <h2 className="font-display text-xl font-semibold text-foreground">Driver Fingerprint</h2>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-xs">
+                    Performance metrics calculated from positional data across all sessions — no AI or subjective judgment involved.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <DriverFingerprint data={fingerprint} />
+          </div>
+        )}
+
         {/* Statistics Section */}
         {(stats.avgQual !== null || stats.avgRace !== null) && (
           <div className="mb-8">

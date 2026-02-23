@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.resolve-dnf-reasons]
 verify_jwt = false
+
+[functions.recalculate-driver-fingerprint]
+verify_jwt = false
