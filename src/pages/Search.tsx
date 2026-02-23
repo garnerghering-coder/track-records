@@ -19,6 +19,8 @@ type ResultItem = {
   subtitle?: string;
   nationality?: string | null;
   tags?: { label: string; color: string }[];
+  dps?: number | null;
+  dps_band?: string | null;
 };
 
 const typeFilter = [
@@ -45,14 +47,25 @@ const SearchPage = () => {
   useEffect(() => {
     if (initialTab === "drivers" && !search.trim()) {
       setDriversLoading(true);
-      supabase.from("v2_drivers").select("id, full_name, nationality")
-        .order("full_name").limit(500).then(({ data }) => {
-          setAllDrivers((data || []).map((d: any) => ({
-            type: "driver" as const, id: d.id, label: d.full_name,
-            url: `/driver/${d.id}`, nationality: d.nationality,
-          })));
-          setDriversLoading(false);
-        });
+      (async () => {
+        const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality")
+          .order("full_name").limit(500);
+        const driverIds = (data || []).map((d: any) => d.id);
+        // Fetch fingerprints in chunks
+        const fpMap: Record<string, { dps: number | null; dps_band: string | null }> = {};
+        for (let i = 0; i < driverIds.length; i += 50) {
+          const chunk = driverIds.slice(i, i + 50);
+          const { data: fps } = await supabase.from("v2_driver_fingerprints" as any)
+            .select("driver_id, dps, dps_band").in("driver_id", chunk);
+          (fps || []).forEach((f: any) => { fpMap[f.driver_id] = { dps: f.dps, dps_band: f.dps_band }; });
+        }
+        setAllDrivers((data || []).map((d: any) => ({
+          type: "driver" as const, id: d.id, label: d.full_name,
+          url: `/driver/${d.id}`, nationality: d.nationality,
+          dps: fpMap[d.id]?.dps ?? null, dps_band: fpMap[d.id]?.dps_band ?? null,
+        })));
+        setDriversLoading(false);
+      })();
     }
   }, [initialTab]);
 
@@ -208,12 +221,48 @@ const SearchPage = () => {
       }
 
       await Promise.all(promises);
+
+      // Enrich driver results with DPS
+      const driverItems = items.filter(i => i.type === "driver");
+      if (driverItems.length > 0) {
+        const driverIds = driverItems.map(d => d.id);
+        const { data: fps } = await supabase.from("v2_driver_fingerprints" as any)
+          .select("driver_id, dps, dps_band").in("driver_id", driverIds);
+        const fpMap: Record<string, any> = {};
+        (fps || []).forEach((f: any) => { fpMap[f.driver_id] = f; });
+        driverItems.forEach(d => {
+          d.dps = fpMap[d.id]?.dps ?? null;
+          d.dps_band = fpMap[d.id]?.dps_band ?? null;
+        });
+      }
+
       setResults(items);
       setLoading(false);
     }, 300);
 
     return () => clearTimeout(timer);
   }, [search, typeFilterVal]);
+
+  const dpsBandColor = (band: string | null | undefined) => {
+    switch (band) {
+      case "Elite": return "text-emerald-400";
+      case "Competitive": return "text-blue-400";
+      case "Midfield": return "text-amber-400";
+      case "Below Average": return "text-orange-400";
+      case "Developing": return "text-red-400";
+      default: return "text-muted-foreground";
+    }
+  };
+
+  const DpsBadge = ({ item }: { item: ResultItem }) => {
+    if (item.type !== "driver" || item.dps == null) return null;
+    return (
+      <div className="flex items-center gap-2 shrink-0 ml-auto">
+        <span className={`text-xs font-medium ${dpsBandColor(item.dps_band)}`}>{item.dps_band}</span>
+        <span className="font-display text-sm font-bold text-foreground">{Math.round(item.dps)}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -259,6 +308,7 @@ const SearchPage = () => {
                     <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
                   </div>
                 </div>
+                <DpsBadge item={r} />
               </Link>
             ))}
           </div>
@@ -291,6 +341,7 @@ const SearchPage = () => {
                     </div>
                   )}
                 </div>
+                <DpsBadge item={r} />
               </Link>
             ))}
           </div>
