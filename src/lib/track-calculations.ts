@@ -136,3 +136,17 @@ export function categoryBubbleClasses(category: string): string {
     default: return "bg-muted text-muted-foreground border-border";
   }
 }
+
+export function categoryHexColor(category: string): string {
+  switch (category) {
+    case "Power Circuit": return "#60a5fa";
+    case "Speed Circuit": return "#38bdf8";
+    case "High-Speed Technical": return "#2dd4bf";
+    case "Balanced": case "Flat": case "Flowing": case "Efficient": return "#4ade80";
+    case "Technical": case "Hilly": case "High Braking Density": case "Punishing": return "#fb923c";
+    case "Tight & Twisty": case "Mountain": case "Extreme Braking Density": case "Relentless": return "#f87171";
+    case "Undulating": case "Rhythmic": case "Active": return "#facc15";
+    case "Highland": return "#f59e0b";
+    default: return "#8b8b9a";
+  }
+}
