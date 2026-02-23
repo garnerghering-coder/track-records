@@ -41,8 +41,8 @@ function tcsBandLabel(v: number): string {
   return "High";
 }
 function eiBandLabel(v: number): string {
-  if (v <= 15) return "Low";
-  if (v <= 65) return "Mid";
+  if (v <= 25) return "Low";
+  if (v <= 55) return "Mid";
   return "High";
 }
 function csiBandLabel(v: number): string {
@@ -521,9 +521,11 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   const circuitDataMap: Record<string, EventCircuitData> = {};
   for (const ecd of eventCircuitData) circuitDataMap[ecd.eventId] = ecd;
 
-  // DAS calculation — per dimension, need events in ≥2 bands
+  // DAS calculation — evaluate each dimension independently
+  // A dimension is "sufficient" if the driver has events in ≥2 bands for that dimension
+  // DAS calculates if at least 2 of 3 dimensions have sufficient spread
   const dimensionVariances: number[] = [];
-  let dasEligible = true;
+  let sufficientDimensions = 0;
 
   for (const dim of ["tcs", "ei", "csi"] as const) {
     const bandGroups: Record<string, number[]> = { Low: [], Mid: [], High: [] };
@@ -538,18 +540,17 @@ async function calculateFingerprint(supabase: any, driverId: string) {
       bandGroups[band].push(ev.swds);
     }
 
-    // Need events in at least 2 bands
     const populatedBands = Object.values(bandGroups).filter((g) => g.length > 0);
-    if (populatedBands.length < 2) {
-      dasEligible = false;
-      break;
+    if (populatedBands.length >= 2) {
+      // This dimension has sufficient spread
+      sufficientDimensions++;
+      const bandMeans = populatedBands.map((g) => mean(g));
+      dimensionVariances.push(variance(bandMeans));
     }
-
-    const bandMeans = populatedBands.map((g) => mean(g));
-    dimensionVariances.push(variance(bandMeans));
+    // If < 2 bands, skip this dimension (insufficient data) but don't block others
   }
 
-  if (dasEligible && dimensionVariances.length === 3 && eventsIncluded >= 3) {
+  if (sufficientDimensions >= 2 && eventsIncluded >= 3) {
     const vTotal = mean(dimensionVariances);
     das = clamp((1 - vTotal / 0.05) * 100, 0, 100);
     das = Math.round(das * 10) / 10;
