@@ -88,30 +88,13 @@ const DriverProfilePage = () => {
           .order("created_at", { ascending: false })
           .limit(200);
 
-        // Also find races where this driver is a co-driver (same car_number in same session)
-        // First get all car_numbers and session_ids for results where this driver appears
         const primaryResults = (raceResults || []) as any[];
         
-        // Find additional co-driver results: look for sessions where this driver has qualifying/practice results
-        // but not race results, by matching car_number in the same session
-        const { data: allDriverResults } = await supabase
-          .from("v2_race_results" as any)
-          .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-          .order("created_at", { ascending: false })
-          .limit(500);
-
-        // Build a set of (session_id, car_number) pairs where this driver has a direct result
-        const directPairs = new Set(primaryResults.map((r: any) => `${r.session_id}:${r.car_number}`));
-        
         // Find car_numbers this driver uses (from qualifying/practice)
-        const { data: qualForDriver } = await supabase
-          .from("v2_qualifying_results" as any)
-          .select("session_id, car_number, v2_sessions(event_id)")
-          .eq("driver_id", id);
-        const { data: pracForDriver } = await supabase
-          .from("v2_practice_results" as any)
-          .select("session_id, car_number, v2_sessions(event_id)")
-          .eq("driver_id", id);
+        const [{ data: qualForDriver }, { data: pracForDriver }] = await Promise.all([
+          supabase.from("v2_qualifying_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id),
+          supabase.from("v2_practice_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id),
+        ]);
         
         // Build map of event_id -> car_numbers this driver uses
         const driverCarsByEvent = new Map<string, Set<string>>();
@@ -122,8 +105,6 @@ const DriverProfilePage = () => {
             driverCarsByEvent.get(eventId)!.add(r.car_number);
           }
         }
-
-        // Also add car_numbers from primary race results
         for (const r of primaryResults) {
           if (r.car_number && r.v2_sessions?.v2_events?.id) {
             const eventId = r.v2_sessions.v2_events.id;
@@ -132,17 +113,77 @@ const DriverProfilePage = () => {
           }
         }
 
-        // Find co-driver race results: same event + car_number, different driver, not already in direct results
+        // For events where this driver has NO direct race result, fetch co-driver results by event+car_number
+        const directEventIds = new Set(primaryResults.map((r: any) => r.v2_sessions?.v2_events?.id).filter(Boolean));
+        const coDriverEventIds = [...driverCarsByEvent.keys()].filter(eid => !directEventIds.has(eid));
+        
         const coDriverResults: any[] = [];
-        for (const r of (allDriverResults || []) as any[]) {
-          if (r.driver_id === id) continue; // Already in primary results
-          if (!r.car_number || !r.v2_sessions?.v2_events?.id) continue;
-          const eventId = r.v2_sessions.v2_events.id;
-          const carNumbers = driverCarsByEvent.get(eventId);
-          if (carNumbers && carNumbers.has(r.car_number) && !directPairs.has(`${r.session_id}:${r.car_number}`)) {
-            coDriverResults.push(r);
-            directPairs.add(`${r.session_id}:${r.car_number}`);
+        // Fetch in chunks of 20 event IDs
+        for (let i = 0; i < coDriverEventIds.length; i += 20) {
+          const chunk = coDriverEventIds.slice(i, i + 20);
+          // Get all session IDs for these events
+          const { data: eventSessions } = await supabase
+            .from("v2_sessions" as any)
+            .select("id, event_id")
+            .in("event_id", chunk)
+            .is("parent_session_id", null);
+          
+          if (!eventSessions || eventSessions.length === 0) continue;
+          
+          // Collect car_numbers to filter for
+          const sessionIdsForChunk = (eventSessions as any[]).map((s: any) => s.id);
+          const carNumbersForChunk = new Set<string>();
+          for (const eid of chunk) {
+            const cars = driverCarsByEvent.get(eid);
+            if (cars) cars.forEach(c => carNumbersForChunk.add(c));
           }
+          
+          const { data: coResults } = await supabase
+            .from("v2_race_results" as any)
+            .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
+            .in("session_id", sessionIdsForChunk)
+            .in("car_number", [...carNumbersForChunk]);
+          
+          if (coResults) coDriverResults.push(...coResults);
+        }
+        
+        // Also find co-driver results in events where driver HAS a direct result but in different sessions
+        // (e.g. driver has practice but the endurance_race result is under a different driver_id)
+        const directPairs = new Set(primaryResults.map((r: any) => `${r.session_id}:${r.car_number}`));
+        const eventsWithDirectButMissingRace: string[] = [];
+        for (const eid of directEventIds) {
+          const hasRaceResult = primaryResults.some((r: any) => {
+            const st = r.v2_sessions?.session_type;
+            return r.v2_sessions?.v2_events?.id === eid && (st === 'race' || st === 'endurance_race' || st === 'sprint_race');
+          });
+          if (!hasRaceResult) eventsWithDirectButMissingRace.push(eid);
+        }
+        
+        for (let i = 0; i < eventsWithDirectButMissingRace.length; i += 20) {
+          const chunk = eventsWithDirectButMissingRace.slice(i, i + 20);
+          const { data: eventSessions } = await supabase
+            .from("v2_sessions" as any)
+            .select("id, event_id, session_type")
+            .in("event_id", chunk)
+            .is("parent_session_id", null)
+            .in("session_type", ["race", "endurance_race", "sprint_race"]);
+          
+          if (!eventSessions || eventSessions.length === 0) continue;
+          
+          const sessionIdsForChunk = (eventSessions as any[]).map((s: any) => s.id);
+          const carNumbersForChunk = new Set<string>();
+          for (const eid of chunk) {
+            const cars = driverCarsByEvent.get(eid);
+            if (cars) cars.forEach(c => carNumbersForChunk.add(c));
+          }
+          
+          const { data: coResults } = await supabase
+            .from("v2_race_results" as any)
+            .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
+            .in("session_id", sessionIdsForChunk)
+            .in("car_number", [...carNumbersForChunk]);
+          
+          if (coResults) coDriverResults.push(...coResults);
         }
 
         const mapResult = (r: any, source: string) => ({
