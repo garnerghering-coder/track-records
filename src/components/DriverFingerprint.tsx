@@ -203,7 +203,7 @@ export default function DriverFingerprint({ data }: { data: DriverFingerprintDat
     { key: "dps", value: perfValue, band: perfBand, title: "Driver Performance", tooltipExtra: perfTooltipExtra },
     { key: "dcs", value: d.dcs, band: d.dcs_band, title: "Consistency" },
     { key: "das", value: d.das, band: d.das_band, title: "Adaptability" },
-    { key: "dws", value: d.dws, band: d.dws_band, title: "Wet Weather" },
+    { key: "dws", value: d.dws, band: d.dws_band, title: "Weather" },
   ];
 
   return (
