@@ -80,15 +80,16 @@ function DataQualitySection() {
     setLoading(true);
     const found: DataIssue[] = [];
 
-    // 1. Race results with DNF/DSQ but no reason
+    // 1. Race results with DNF/DSQ but no reason — exclude endurance hourly sub-sessions
     const { data: badResults } = await supabase
       .from("v2_race_results" as any)
-      .select("id, status, dnf_reason, session_id, car_number, position, v2_sessions(id, name, event_id, v2_events(id, name))")
+      .select("id, status, dnf_reason, session_id, car_number, position, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
       .in("status", ["dnf", "dsq"])
       .or("dnf_reason.is.null,dnf_reason.eq.");
 
     for (const r of (badResults || []) as any[]) {
       const sess = r.v2_sessions;
+      if (sess?.parent_session_id) continue; // Skip hourly sub-sessions
       const evt = sess?.v2_events;
       found.push({
         id: `reason-${r.id}`,
@@ -123,7 +124,7 @@ function DataQualitySection() {
     // 3. Race results with no driver
     const { data: noDriverResults } = await supabase
       .from("v2_race_results" as any)
-      .select("id, position, car_number, session_id, v2_sessions(id, name, event_id, v2_events(id, name))")
+      .select("id, position, car_number, session_id, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
       .is("driver_id", null)
       .limit(50);
 
@@ -135,6 +136,28 @@ function DataQualitySection() {
         type: "missing_driver",
         severity: "error",
         title: `Race result missing driver — P${r.position || "?"} #${r.car_number || "?"}`,
+        description: `${evt?.name || "Unknown event"} → ${sess?.name || "Unknown session"}`,
+        linkTo: evt && sess ? `/manage/events/${evt.id}/session/${sess.id}` : undefined,
+        linkLabel: "Edit Session",
+      });
+    }
+
+    // 4. Race results with no position — exclude hourly sub-sessions
+    const { data: noPosResults } = await supabase
+      .from("v2_race_results" as any)
+      .select("id, car_number, session_id, driver_id, status, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
+      .is("position", null)
+      .limit(50);
+
+    for (const r of (noPosResults || []) as any[]) {
+      const sess = r.v2_sessions;
+      if (sess?.parent_session_id) continue;
+      const evt = sess?.v2_events;
+      found.push({
+        id: `nopos-${r.id}`,
+        type: "missing_reason" as any,
+        severity: "warning",
+        title: `Race result missing position — #${r.car_number || "?"}`,
         description: `${evt?.name || "Unknown event"} → ${sess?.name || "Unknown session"}`,
         linkTo: evt && sess ? `/manage/events/${evt.id}/session/${sess.id}` : undefined,
         linkLabel: "Edit Session",
@@ -204,10 +227,11 @@ function DuplicatesSection() {
     setLoading(true);
 
     // Load dismissed pairs
-    const [driverDismissed, teamDismissed, circuitDismissed] = await Promise.all([
+    const [driverDismissed, teamDismissed, circuitDismissed, carDismissed] = await Promise.all([
       supabase.from("dismissed_duplicates" as any).select("driver_id_1, driver_id_2"),
       supabase.from("dismissed_team_duplicates" as any).select("team_id_1, team_id_2"),
       supabase.from("dismissed_circuit_duplicates" as any).select("circuit_id_1, circuit_id_2"),
+      supabase.from("dismissed_car_duplicates" as any).select("car_id_1, car_id_2"),
     ]);
 
     const dSet = new Set<string>();
@@ -216,7 +240,9 @@ function DuplicatesSection() {
     for (const t of (teamDismissed.data || []) as any[]) tSet.add(makePairKey(t.team_id_1, t.team_id_2));
     const cSet = new Set<string>();
     for (const c of (circuitDismissed.data || []) as any[]) cSet.add(makePairKey(c.circuit_id_1, c.circuit_id_2));
-    setDismissed({ drivers: dSet, teams: tSet, circuits: cSet, cars: new Set() });
+    const carSet = new Set<string>();
+    for (const c of (carDismissed.data || []) as any[]) carSet.add(makePairKey(c.car_id_1, c.car_id_2));
+    setDismissed({ drivers: dSet, teams: tSet, circuits: cSet, cars: carSet });
 
     // Load entities
     const [driversRes, teamsRes, circuitsRes, carsRes] = await Promise.all([
@@ -258,7 +284,7 @@ function DuplicatesSection() {
 
     // Car duplicates
     const cars = (carsRes.data || []);
-    findDuplicates(cars.map(c => ({ id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" "), detail: undefined, usageCount: carCounts[c.id] || 0 })), new Set(), "car", allGroups);
+    findDuplicates(cars.map(c => ({ id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" "), detail: undefined, usageCount: carCounts[c.id] || 0 })), carSet, "car", allGroups);
 
     setGroups(allGroups);
     setLoading(false);
@@ -336,7 +362,7 @@ function DuplicatesSection() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const pairs: any[] = [];
-      const dismissedSet = group.entityType === "driver" ? dismissed.drivers : group.entityType === "team" ? dismissed.teams : dismissed.circuits;
+      const dismissedSet = group.entityType === "driver" ? dismissed.drivers : group.entityType === "team" ? dismissed.teams : group.entityType === "circuit" ? dismissed.circuits : dismissed.cars;
       for (let i = 0; i < group.items.length; i++) {
         for (let j = i + 1; j < group.items.length; j++) {
           const [id1, id2] = [group.items[i].id, group.items[j].id].sort();
@@ -344,11 +370,12 @@ function DuplicatesSection() {
             if (group.entityType === "driver") pairs.push({ driver_id_1: id1, driver_id_2: id2, dismissed_by: session?.user?.id });
             else if (group.entityType === "team") pairs.push({ team_id_1: id1, team_id_2: id2, dismissed_by: session?.user?.id });
             else if (group.entityType === "circuit") pairs.push({ circuit_id_1: id1, circuit_id_2: id2, dismissed_by: session?.user?.id });
+            else if (group.entityType === "car") pairs.push({ car_id_1: id1, car_id_2: id2, dismissed_by: session?.user?.id });
           }
         }
       }
       if (pairs.length > 0) {
-        const table = group.entityType === "driver" ? "dismissed_duplicates" : group.entityType === "team" ? "dismissed_team_duplicates" : "dismissed_circuit_duplicates";
+        const table = group.entityType === "driver" ? "dismissed_duplicates" : group.entityType === "team" ? "dismissed_team_duplicates" : group.entityType === "circuit" ? "dismissed_circuit_duplicates" : "dismissed_car_duplicates";
         await supabase.from(table as any).insert(pairs);
       }
       toast.success("Marked as not duplicates");
@@ -407,12 +434,10 @@ function DuplicatesSection() {
                 {isMerging ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Merge className="h-3.5 w-3.5 mr-1" />}
                 Merge
               </Button>
-              {group.entityType !== "car" && (
-                <Button size="sm" variant="outline" onClick={() => handleDismiss(group)} disabled={isMerging || isDismissing}>
-                  {isDismissing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <XCircle className="h-3.5 w-3.5 mr-1" />}
-                  Not Duplicates
-                </Button>
-              )}
+              <Button size="sm" variant="outline" onClick={() => handleDismiss(group)} disabled={isMerging || isDismissing}>
+                {isDismissing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <XCircle className="h-3.5 w-3.5 mr-1" />}
+                Not Duplicates
+              </Button>
             </div>
           </div>
         );

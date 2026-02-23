@@ -138,9 +138,16 @@ const DriverProfilePage = () => {
         });
 
         // Combine and filter out hourly sub-sessions (parent_session_id not null)
+        // Only show final race/endurance_race results, not individual hour breakdowns
         const allRaceRows = [...primaryResults, ...coDriverResults]
           .map((r: any) => mapResult(r, "race"))
-          .filter((r: any) => !r.session?.parent_session_id);
+          .filter((r: any) => {
+            const sess = r.session;
+            if (!sess) return true;
+            // Exclude hourly sub-sessions (they have parent_session_id set)
+            if (sess.parent_session_id) return false;
+            return true;
+          });
 
         // Deduplicate by session_id + car_number
         const seen = new Set<string>();
