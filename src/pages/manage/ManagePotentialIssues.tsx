@@ -32,13 +32,16 @@ function namesAreSimilar(a: string, b: string): boolean {
 
 interface DataIssue {
   id: string;
-  type: "missing_reason" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality";
+  type: "missing_reason" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality" | "missing_position";
   severity: "warning" | "error";
   title: string;
   description: string;
   linkTo?: string;
   linkLabel?: string;
-  resolveAction?: () => Promise<void>;
+  autoFixable?: boolean;
+  autoFixLabel?: string;
+  sessionId?: string;
+  resultId?: string;
 }
 
 // ─── Duplicate Group Types ───
@@ -72,7 +75,8 @@ export default function ManagePotentialIssues() {
 function DataQualitySection() {
   const [issues, setIssues] = useState<DataIssue[]>([]);
   const [loading, setLoading] = useState(true);
-  const [resolving, setResolving] = useState<string | null>(null);
+  const [fixing, setFixing] = useState<string | null>(null);
+  const [bulkFixing, setBulkFixing] = useState(false);
 
   useEffect(() => { scanForIssues(); }, []);
 
@@ -89,7 +93,7 @@ function DataQualitySection() {
 
     for (const r of (badResults || []) as any[]) {
       const sess = r.v2_sessions;
-      if (sess?.parent_session_id) continue; // Skip hourly sub-sessions
+      if (sess?.parent_session_id) continue;
       const evt = sess?.v2_events;
       found.push({
         id: `reason-${r.id}`,
@@ -142,12 +146,12 @@ function DataQualitySection() {
       });
     }
 
-    // 4. Race results with no position — exclude hourly sub-sessions
+    // 4. Race results with no position — exclude hourly sub-sessions, auto-fixable
     const { data: noPosResults } = await supabase
       .from("v2_race_results" as any)
       .select("id, car_number, session_id, driver_id, status, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
       .is("position", null)
-      .limit(50);
+      .limit(200);
 
     for (const r of (noPosResults || []) as any[]) {
       const sess = r.v2_sessions;
@@ -155,17 +159,82 @@ function DataQualitySection() {
       const evt = sess?.v2_events;
       found.push({
         id: `nopos-${r.id}`,
-        type: "missing_reason" as any,
+        type: "missing_position",
         severity: "warning",
         title: `Race result missing position — #${r.car_number || "?"}`,
         description: `${evt?.name || "Unknown event"} → ${sess?.name || "Unknown session"}`,
         linkTo: evt && sess ? `/manage/events/${evt.id}/session/${sess.id}` : undefined,
         linkLabel: "Edit Session",
+        autoFixable: true,
+        autoFixLabel: "Auto-assign position",
+        sessionId: sess?.id,
+        resultId: r.id,
       });
     }
 
     setIssues(found);
     setLoading(false);
+  };
+
+  // Auto-fix: for a session, order all results by existing position (nulls last),
+  // then assign sequential positions to the ones missing them.
+  const fixPositionsForSession = async (sessionId: string): Promise<number> => {
+    const { data: allResults } = await supabase
+      .from("v2_race_results" as any)
+      .select("id, position")
+      .eq("session_id", sessionId)
+      .order("position", { ascending: true, nullsFirst: false });
+
+    if (!allResults || allResults.length === 0) return 0;
+
+    // Build ordered list: positioned first (sorted), then unpositioned in their existing order
+    const positioned = (allResults as any[]).filter(r => r.position != null).sort((a, b) => a.position - b.position);
+    const unpositioned = (allResults as any[]).filter(r => r.position == null);
+    if (unpositioned.length === 0) return 0;
+
+    // Find the max existing position, assign sequentially after it
+    const maxPos = positioned.length > 0 ? Math.max(...positioned.map(r => r.position)) : 0;
+    let nextPos = maxPos + 1;
+    let fixed = 0;
+
+    for (const r of unpositioned) {
+      await supabase.from("v2_race_results" as any).update({ position: nextPos }).eq("id", (r as any).id);
+      nextPos++;
+      fixed++;
+    }
+    return fixed;
+  };
+
+  const handleFixOne = async (issue: DataIssue) => {
+    if (!issue.sessionId) return;
+    setFixing(issue.id);
+    try {
+      const count = await fixPositionsForSession(issue.sessionId);
+      toast.success(`Assigned ${count} position${count !== 1 ? "s" : ""}`);
+      scanForIssues();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setFixing(null);
+  };
+
+  const handleFixAll = async () => {
+    const fixable = issues.filter(i => i.autoFixable && i.sessionId);
+    if (fixable.length === 0) return;
+    setBulkFixing(true);
+    try {
+      // Deduplicate by session
+      const sessionIds = [...new Set(fixable.map(i => i.sessionId!))];
+      let totalFixed = 0;
+      for (const sid of sessionIds) {
+        totalFixed += await fixPositionsForSession(sid);
+      }
+      toast.success(`Auto-fixed ${totalFixed} position${totalFixed !== 1 ? "s" : ""} across ${sessionIds.length} session${sessionIds.length !== 1 ? "s" : ""}`);
+      scanForIssues();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+    setBulkFixing(false);
   };
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
@@ -180,12 +249,21 @@ function DataQualitySection() {
 
   const errors = issues.filter(i => i.severity === "error");
   const warnings = issues.filter(i => i.severity === "warning");
+  const fixableCount = issues.filter(i => i.autoFixable).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 text-sm">
-        {errors.length > 0 && <Badge variant="destructive">{errors.length} error{errors.length !== 1 ? "s" : ""}</Badge>}
-        {warnings.length > 0 && <Badge variant="secondary">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-3 text-sm">
+          {errors.length > 0 && <Badge variant="destructive">{errors.length} error{errors.length !== 1 ? "s" : ""}</Badge>}
+          {warnings.length > 0 && <Badge variant="secondary">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>}
+        </div>
+        {fixableCount > 0 && (
+          <Button size="sm" onClick={handleFixAll} disabled={bulkFixing}>
+            {bulkFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+            Fix All Suggested ({fixableCount})
+          </Button>
+        )}
       </div>
       <div className="space-y-2">
         {issues.map(issue => (
@@ -197,13 +275,21 @@ function DataQualitySection() {
                 <p className="text-xs text-muted-foreground truncate">{issue.description}</p>
               </div>
             </div>
-            {issue.linkTo && (
-              <Link to={issue.linkTo}>
-                <Button variant="outline" size="sm" className="shrink-0 gap-1">
-                  <ExternalLink className="h-3 w-3" />{issue.linkLabel || "View"}
+            <div className="flex gap-2 shrink-0">
+              {issue.autoFixable && (
+                <Button variant="default" size="sm" onClick={() => handleFixOne(issue)} disabled={fixing === issue.id || bulkFixing} className="gap-1">
+                  {fixing === issue.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                  Fix
                 </Button>
-              </Link>
-            )}
+              )}
+              {issue.linkTo && (
+                <Link to={issue.linkTo}>
+                  <Button variant="outline" size="sm" className="gap-1">
+                    <ExternalLink className="h-3 w-3" />{issue.linkLabel || "View"}
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </div>
