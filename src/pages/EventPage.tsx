@@ -25,13 +25,25 @@ export default function EventPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v2_events")
-        .select("*, v2_seasons(id, year, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url)")
+        .select("*, v2_seasons(id, year, is_multiclass, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url)")
         .eq("id", slug!)
         .eq("status", "published" as any)
         .single();
       if (error) throw error;
       return data;
     },
+  });
+
+  const seasonId2 = (event as any)?.v2_seasons?.id;
+  const isMulticlass = !!(event as any)?.v2_seasons?.is_multiclass;
+
+  const { data: seasonClasses = [] } = useQuery({
+    queryKey: ["v2_season_classes", seasonId2],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_season_classes" as any).select("*").eq("season_id", seasonId2).order("sort_order");
+      return (data || []) as any[];
+    },
+    enabled: !!seasonId2 && isMulticlass,
   });
 
   const { data: allSessions = [] } = useQuery({
@@ -157,9 +169,10 @@ export default function EventPage() {
                       weatherMap={weatherMap}
                       activeSubTab={activeSubTab}
                       setActiveSubTab={setActiveSubTab}
+                      isMulticlass={isMulticlass}
                     />
                   ) : (
-                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} />
+                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} />
                   )}
                 </TabsContent>
               ))}
@@ -183,6 +196,7 @@ function EnduranceRaceView({
   weatherMap,
   activeSubTab,
   setActiveSubTab,
+  isMulticlass,
 }: {
   parentSession: any;
   hourSessions: any[];
@@ -192,6 +206,7 @@ function EnduranceRaceView({
   weatherMap: Record<string, any>;
   activeSubTab: string;
   setActiveSubTab: (v: string) => void;
+  isMulticlass?: boolean;
 }) {
   // The sub-tabs: "Race Results" + each hour
   const subTabs = [
@@ -245,6 +260,7 @@ function EnduranceRaceView({
         prevHourSessionId={prevHourSession?.id || null}
         hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
         isOverallEnduranceView={!isHourView}
+        isMulticlass={isMulticlass}
       />
     </div>
   );
@@ -284,6 +300,7 @@ function SessionResults({
   prevHourSessionId,
   hideStatus,
   isOverallEnduranceView,
+  isMulticlass,
 }: {
   session: any;
   event: any;
@@ -294,6 +311,7 @@ function SessionResults({
   prevHourSessionId?: string | null;
   hideStatus?: boolean;
   isOverallEnduranceView?: boolean;
+  isMulticlass?: boolean;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -576,8 +594,8 @@ function SessionResults({
            <TableRow className="bg-muted/50">
                <TableHead className="w-12">Pos</TableHead>
                {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
-               {extraDataKeys.some(c => c.key === "PIC") && <TableHead>PIC</TableHead>}
-               {extraDataKeys.some(c => c.key === "Class") && <TableHead>Class</TableHead>}
+                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableHead>PIC</TableHead>}
+                {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableHead>Class</TableHead>}
                {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
                <TableHead>Driver</TableHead>
                <TableHead className="w-10">Nat</TableHead>
@@ -601,8 +619,8 @@ function SessionResults({
                     <PositionDelta racePos={r.position} qualPos={r.driver_id ? refPosMap[r.driver_id] ?? null : null} />
                   </TableCell>
                 )}
-                {extraDataKeys.some(c => c.key === "PIC") && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
-                {extraDataKeys.some(c => c.key === "Class") && <TableCell className="text-xs">{(r.extra_data as any)?.Class || "—"}</TableCell>}
+                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
+                {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableCell className="text-xs">{(r.extra_data as any)?.Class || "—"}</TableCell>}
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
                 <TableCell className="font-medium">
                   {(() => {
