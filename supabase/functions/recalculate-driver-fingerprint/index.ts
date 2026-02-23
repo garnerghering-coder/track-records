@@ -115,7 +115,6 @@ Deno.serve(async (req: Request) => {
       if (offset + limit < total) {
         const selfUrl = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/recalculate-driver-fingerprint`;
         const nextBody = JSON.stringify({ all: true, offset: offset + limit, limit });
-        // Fire-and-forget: don't await
         fetch(selfUrl, {
           method: "POST",
           headers: {
@@ -159,17 +158,17 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   const [raceRes, qualRes, pracRes] = await Promise.all([
     supabase
       .from("v2_race_results")
-      .select("id, position, status, dnf_reason, car_number, session_id, driver_id, v2_sessions(id, event_id, session_type, parent_session_id, name)")
+      .select("id, position, status, dnf_reason, car_number, session_id, driver_id, extra_data, v2_sessions(id, event_id, session_type, parent_session_id, name)")
       .eq("driver_id", driverId)
       .limit(500),
     supabase
       .from("v2_qualifying_results")
-      .select("id, position, car_number, session_id, driver_id, v2_sessions(id, event_id, session_type, parent_session_id, name)")
+      .select("id, position, car_number, session_id, driver_id, extra_data, v2_sessions(id, event_id, session_type, parent_session_id, name)")
       .eq("driver_id", driverId)
       .limit(500),
     supabase
       .from("v2_practice_results")
-      .select("id, position, car_number, session_id, driver_id, v2_sessions(id, event_id, session_type, parent_session_id, name)")
+      .select("id, position, car_number, session_id, driver_id, extra_data, v2_sessions(id, event_id, session_type, parent_session_id, name)")
       .eq("driver_id", driverId)
       .limit(500),
   ]);
@@ -187,6 +186,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     event_id: string;
     parent_session_id: string | null;
     source: string;
+    extra_data: any;
   }
 
   function mapRows(rows: any[], source: string): ResultRow[] {
@@ -204,6 +204,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
         event_id: r.v2_sessions.event_id,
         parent_session_id: r.v2_sessions.parent_session_id,
         source,
+        extra_data: r.extra_data || null,
       }));
   }
 
@@ -214,14 +215,62 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   ];
 
   if (allResults.length === 0) {
-    await upsertFingerprint(supabase, driverId, null, null, null, null, 0, 0, 0, {});
-    return { dps: null, dcs: null, das: null, dws: null };
+    await upsertFingerprint(supabase, driverId, null, null, null, null, null, 0, 0, 0, {});
+    return { dps: null, dcs: null, das: null, dws: null, adps: null };
+  }
+
+  // ── 1b. Fetch season multiclass info for events ─────────────
+  const eventIds = [...new Set(allResults.map((r) => r.event_id))];
+  const eventChunksForSeasons: string[][] = [];
+  for (let i = 0; i < eventIds.length; i += 50) {
+    eventChunksForSeasons.push(eventIds.slice(i, i + 50));
+  }
+
+  // event_id → { is_multiclass, cdm (season-level), season_id }
+  interface SeasonInfo {
+    is_multiclass: boolean;
+    cdm: number | null;
+    season_id: string;
+  }
+  const eventSeasonMap: Record<string, SeasonInfo> = {};
+
+  for (const chunk of eventChunksForSeasons) {
+    const { data: events } = await supabase
+      .from("v2_events")
+      .select("id, season_id, v2_seasons(id, is_multiclass, cdm)")
+      .in("id", chunk);
+    for (const ev of (events || [])) {
+      const season = ev.v2_seasons;
+      if (season) {
+        eventSeasonMap[ev.id] = {
+          is_multiclass: !!season.is_multiclass,
+          cdm: season.cdm != null ? Number(season.cdm) : null,
+          season_id: season.id,
+        };
+      }
+    }
+  }
+
+  // Fetch class-level CDMs for multiclass seasons
+  const multiclassSeasonIds = [...new Set(
+    Object.values(eventSeasonMap).filter((s) => s.is_multiclass).map((s) => s.season_id)
+  )];
+  // class_name → cdm, keyed by season_id
+  const classCdmMap: Record<string, Record<string, number>> = {};
+  if (multiclassSeasonIds.length > 0) {
+    const { data: classes } = await supabase
+      .from("v2_season_classes")
+      .select("season_id, class_name, cdm")
+      .in("season_id", multiclassSeasonIds);
+    for (const c of (classes || [])) {
+      if (!classCdmMap[c.season_id]) classCdmMap[c.season_id] = {};
+      if (c.cdm != null) classCdmMap[c.season_id][c.class_name] = Number(c.cdm);
+    }
   }
 
   // ── 2. Get total cars per session (count distinct results) ──
   const sessionIds = [...new Set(allResults.map((r) => r.session_id))];
 
-  // Fetch all results for these sessions to get field sizes and teammate data
   const sessionChunks: string[][] = [];
   for (let i = 0; i < sessionIds.length; i += 50) {
     sessionChunks.push(sessionIds.slice(i, i + 50));
@@ -230,9 +279,9 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   const allSessionResults: any[] = [];
   for (const chunk of sessionChunks) {
     const [rr, qr, pr] = await Promise.all([
-      supabase.from("v2_race_results").select("id, position, status, dnf_reason, car_number, session_id, driver_id").in("session_id", chunk),
-      supabase.from("v2_qualifying_results").select("id, position, car_number, session_id, driver_id").in("session_id", chunk),
-      supabase.from("v2_practice_results").select("id, position, car_number, session_id, driver_id").in("session_id", chunk),
+      supabase.from("v2_race_results").select("id, position, status, dnf_reason, car_number, session_id, driver_id, extra_data").in("session_id", chunk),
+      supabase.from("v2_qualifying_results").select("id, position, car_number, session_id, driver_id, extra_data").in("session_id", chunk),
+      supabase.from("v2_practice_results").select("id, position, car_number, session_id, driver_id, extra_data").in("session_id", chunk),
     ]);
     for (const r of (rr.data || [])) allSessionResults.push({ ...r, _src: "race" });
     for (const r of (qr.data || [])) allSessionResults.push({ ...r, _src: "qualifying" });
@@ -242,22 +291,39 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   // Build session field sizes (count results with non-null position)
   const sessionFieldSize: Record<string, number> = {};
   const sessionResultsByCarNumber: Record<string, Record<string, any[]>> = {};
+  // For multiclass: count classified finishers per class per session
+  const sessionClassFieldSize: Record<string, Record<string, number>> = {};
+
   for (const r of allSessionResults) {
     if (r.position != null) {
       sessionFieldSize[r.session_id] = (sessionFieldSize[r.session_id] || 0) + 1;
+
+      // Track class field sizes
+      const cls = r.extra_data?.Class;
+      if (cls) {
+        if (!sessionClassFieldSize[r.session_id]) sessionClassFieldSize[r.session_id] = {};
+        sessionClassFieldSize[r.session_id][cls] = (sessionClassFieldSize[r.session_id][cls] || 0) + 1;
+      }
     }
     // Group by session_id + car_number for CRS
     const key = r.session_id;
     if (!sessionResultsByCarNumber[key]) sessionResultsByCarNumber[key] = {};
-    const cn = r.car_number || r.id; // fallback if no car_number
+    const cn = r.car_number || r.id;
     if (!sessionResultsByCarNumber[key][cn]) sessionResultsByCarNumber[key][cn] = [];
     sessionResultsByCarNumber[key][cn].push(r);
   }
 
   // ── 3. Classify results and compute NPS ─────────────────────
+  // We need to know which event each session belongs to, for multiclass check
+  // Build session → event map from allResults
+  const sessionEventMap: Record<string, string> = {};
+  for (const r of allResults) {
+    sessionEventMap[r.session_id] = r.event_id;
+  }
+
   interface ScoredResult {
     resultRow: ResultRow;
-    nps: number | null; // null = excluded
+    nps: number | null;
     excluded: boolean;
     sessionType: string;
     eventId: string;
@@ -267,7 +333,8 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   const scoredResults: ScoredResult[] = [];
 
   for (const r of allResults) {
-    const totalCars = sessionFieldSize[r.session_id] || 1;
+    const seasonInfo = eventSeasonMap[r.event_id];
+    const isMulticlass = seasonInfo?.is_multiclass || false;
     let nps: number | null = null;
     let excluded = false;
 
@@ -282,30 +349,27 @@ async function calculateFingerprint(supabase: any, driverId: string) {
           excluded = true;
         } else if (reason.includes("not at fault") || reason.includes("contact")) {
           excluded = true;
-        } else if (reason.includes("penali") || reason.includes("at fault") && reason.includes("penal")) {
-          nps = 0.10; // Severe floor
+        } else if (reason.includes("penali") || (reason.includes("at fault") && reason.includes("penal"))) {
+          nps = 0.10;
         } else if (reason.includes("self-inflicted") || reason.includes("self inflicted") || reason.includes("loss of control") || reason.includes("spin") || reason.includes("crash") || reason.includes("accident")) {
-          nps = 0.25; // Error floor
+          nps = 0.25;
         } else {
-          // Unknown DNF reason — exclude to be safe
           excluded = true;
         }
       } else if (status === "dsq" || status === "disqualified") {
         if (reason.includes("technical") || reason.includes("underweight") || reason.includes("illegal parts") || reason.includes("fuel")) {
-          // Technical DSQ — use on-road NPS
           if (r.position != null) {
-            nps = computeNPS(r.position, totalCars);
+            nps = computeNPSForResult(r, isMulticlass, sessionFieldSize, sessionClassFieldSize);
           } else {
             excluded = true;
           }
         } else {
-          // Driving conduct DSQ
           nps = 0.10;
         }
       } else {
         // Finished / classified
         if (r.position != null) {
-          nps = computeNPS(r.position, totalCars);
+          nps = computeNPSForResult(r, isMulticlass, sessionFieldSize, sessionClassFieldSize);
         } else {
           excluded = true;
         }
@@ -313,8 +377,8 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     } else {
       // Qualifying / practice — no DNF classification
       if (r.position != null) {
-        const totalCarsForSession = sessionFieldSize[r.session_id] || 1;
-        nps = computeNPS(r.position, totalCarsForSession);
+        // For qual/practice in multiclass, still use PIC if available
+        nps = computeNPSForResult(r, isMulticlass, sessionFieldSize, sessionClassFieldSize);
       } else {
         excluded = true;
       }
@@ -334,6 +398,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   interface EnrichedResult extends ScoredResult {
     crs: number;
     sessionScore: number;
+    hasCRS: boolean;
   }
 
   const enriched: EnrichedResult[] = [];
@@ -358,8 +423,9 @@ async function calculateFingerprint(supabase: any, driverId: string) {
       crs = sr.nps - carAvgNPS;
       hasCRS = true;
     }
+    // Solo entry: skip CRS weight entirely — do NOT substitute CRS = 0
 
-    // Session score = NPS*w_nps + CRS*w_crs
+    // Session score = NPS*w_nps + CRS*w_crs (or just NPS if solo)
     const sessionTypeKey = sr.sessionType.includes("race") ? "race" :
       sr.sessionType === "qualifying" ? "qualifying" : "practice";
     const w = WEIGHTS[sessionTypeKey] || WEIGHTS.practice;
@@ -368,11 +434,11 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     if (hasCRS) {
       sessionScore = (w.nps * sr.nps + w.crs * crs) / (w.nps + w.crs);
     } else {
-      // Skip CRS weight — only use NPS
+      // Solo entry — skip CRS weight, use NPS only
       sessionScore = sr.nps;
     }
 
-    enriched.push({ ...sr, crs, sessionScore });
+    enriched.push({ ...sr, crs, sessionScore, hasCRS });
   }
 
   // ── 5. Group by event → compute SWDS per event ─────────────
@@ -390,14 +456,13 @@ async function calculateFingerprint(supabase: any, driverId: string) {
 
   const eventSWDSList: EventSWDS[] = [];
   for (const [eventId, results] of Object.entries(eventSessions)) {
-    // Weighted average of session scores within the event
     let totalWeight = 0;
     let weightedSum = 0;
     for (const r of results) {
       const sessionTypeKey = r.sessionType.includes("race") ? "race" :
         r.sessionType === "qualifying" ? "qualifying" : "practice";
       const w = WEIGHTS[sessionTypeKey] || WEIGHTS.practice;
-      const weight = w.nps + w.crs;
+      const weight = r.hasCRS ? (w.nps + w.crs) : w.nps;
       totalWeight += weight;
       weightedSum += r.sessionScore * weight;
     }
@@ -411,7 +476,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
 
   const eventsIncluded = eventSWDSList.length;
 
-  // ── 6. DPS ──────────────────────────────────────────────────
+  // ── 6. DPS (internal) ───────────────────────────────────────
   let dps: number | null = null;
   let dps_band: string | null = null;
   if (eventsIncluded >= 5) {
@@ -419,6 +484,40 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     dps = clamp(mean(swdsValues) * 100, 0, 100);
     dps = Math.round(dps * 10) / 10;
     dps_band = dpsBand(dps);
+  }
+
+  // ── 6b. aDPS (displayed) — DPS × CDM ───────────────────────
+  let adps: number | null = null;
+  let adps_band: string | null = null;
+
+  if (dps != null) {
+    const eventCdms: number[] = [];
+    for (const ev of eventSWDSList) {
+      const si = eventSeasonMap[ev.eventId];
+      if (!si) continue;
+
+      if (si.is_multiclass) {
+        // Find the driver's class in this event from their results
+        const driverResults = enriched.filter((e) => e.eventId === ev.eventId);
+        const driverClass = driverResults.find((r) => r.resultRow.extra_data?.Class)?.resultRow.extra_data?.Class;
+        if (driverClass && classCdmMap[si.season_id]?.[driverClass] != null) {
+          eventCdms.push(classCdmMap[si.season_id][driverClass]);
+        } else if (si.cdm != null) {
+          eventCdms.push(si.cdm);
+        }
+      } else {
+        if (si.cdm != null) {
+          eventCdms.push(si.cdm);
+        }
+      }
+    }
+
+    if (eventCdms.length > 0) {
+      const avgCdm = mean(eventCdms);
+      adps = clamp(dps * avgCdm, 0, 100);
+      adps = Math.round(adps * 10) / 10;
+      adps_band = dpsBand(adps);
+    }
   }
 
   // ── 7. DCS ──────────────────────────────────────────────────
@@ -436,11 +535,10 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   let das: number | null = null;
   let das_band: string | null = null;
 
-  // Fetch event → circuit → layout data
-  const eventIds = eventSWDSList.map((e) => e.eventId);
+  const eventIdsForCircuits = eventSWDSList.map((e) => e.eventId);
   const eventChunks: string[][] = [];
-  for (let i = 0; i < eventIds.length; i += 50) {
-    eventChunks.push(eventIds.slice(i, i + 50));
+  for (let i = 0; i < eventIdsForCircuits.length; i += 50) {
+    eventChunks.push(eventIdsForCircuits.slice(i, i + 50));
   }
 
   interface EventCircuitData {
@@ -460,7 +558,6 @@ async function calculateFingerprint(supabase: any, driverId: string) {
 
     if (!events) continue;
 
-    // Get layout IDs and circuit IDs
     const layoutIds = events.filter((e: any) => e.layout_id).map((e: any) => e.layout_id);
     const circuitIds = events.filter((e: any) => e.circuit_id && !e.layout_id).map((e: any) => e.circuit_id);
 
@@ -476,7 +573,6 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     const layoutMap: Record<string, any> = {};
     for (const l of (layoutsRes.data || [])) layoutMap[l.id] = l;
 
-    // For circuits without explicit layout_id, use first layout
     const circuitFirstLayout: Record<string, any> = {};
     for (const l of (circuitsRes.data || [])) {
       if (!circuitFirstLayout[l.circuit_id]) circuitFirstLayout[l.circuit_id] = l;
@@ -517,13 +613,10 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     }
   }
 
-  // Build event → circuit map
   const circuitDataMap: Record<string, EventCircuitData> = {};
   for (const ecd of eventCircuitData) circuitDataMap[ecd.eventId] = ecd;
 
   // DAS calculation — evaluate each dimension independently
-  // A dimension is "sufficient" if the driver has events in ≥2 bands for that dimension
-  // DAS calculates if at least 2 of 3 dimensions have sufficient spread
   const dimensionVariances: number[] = [];
   let sufficientDimensions = 0;
 
@@ -542,12 +635,10 @@ async function calculateFingerprint(supabase: any, driverId: string) {
 
     const populatedBands = Object.values(bandGroups).filter((g) => g.length > 0);
     if (populatedBands.length >= 2) {
-      // This dimension has sufficient spread
       sufficientDimensions++;
       const bandMeans = populatedBands.map((g) => mean(g));
       dimensionVariances.push(variance(bandMeans));
     }
-    // If < 2 bands, skip this dimension (insufficient data) but don't block others
   }
 
   if (sufficientDimensions >= 2 && eventsIncluded >= 3) {
@@ -561,7 +652,6 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   let dws: number | null = null;
   let dws_band: string | null = null;
 
-  // Collect all session IDs from included events
   const allIncludedSessionIds = eventSWDSList.flatMap((e) => e.sessionIds);
   const weatherChunks: string[][] = [];
   for (let i = 0; i < allIncludedSessionIds.length; i += 50) {
@@ -587,7 +677,6 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     }
   }
 
-  // For each event, classify as wet if any race session was wet
   const wetEventSWDS: number[] = [];
   const dryEventSWDS: number[] = [];
 
@@ -611,15 +700,40 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   }
 
   // ── 10. Upsert ─────────────────────────────────────────────
-  await upsertFingerprint(supabase, driverId, dps, dcs, das, dws, eventsIncluded, wetSessions, drySessions, {
+  await upsertFingerprint(supabase, driverId, dps, dcs, das, dws, adps, eventsIncluded, wetSessions, drySessions, {
     dps_band,
     dcs_band,
     das_band,
     dws_band,
+    adps_band,
   });
 
-  return { dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included: eventsIncluded };
+  return { dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, adps, adps_band, events_included: eventsIncluded };
 }
+
+// ── Helper: compute NPS for a result, handling multiclass ─────
+function computeNPSForResult(
+  r: { position: number | null; extra_data: any; session_id: string },
+  isMulticlass: boolean,
+  sessionFieldSize: Record<string, number>,
+  sessionClassFieldSize: Record<string, Record<string, number>>
+): number {
+  if (r.position == null) return 0;
+
+  if (isMulticlass) {
+    const pic = r.extra_data?.PIC;
+    const cls = r.extra_data?.Class;
+    if (pic != null && cls) {
+      const classTotal = sessionClassFieldSize[r.session_id]?.[cls] || 1;
+      return computeNPS(Number(pic), classTotal);
+    }
+  }
+
+  // Fallback: use overall position
+  const totalCars = sessionFieldSize[r.session_id] || 1;
+  return computeNPS(r.position, totalCars);
+}
+
 
 async function upsertFingerprint(
   supabase: any,
@@ -628,6 +742,7 @@ async function upsertFingerprint(
   dcs: number | null,
   das: number | null,
   dws: number | null,
+  adps: number | null,
   eventsIncluded: number,
   wetSessions: number,
   drySessions: number,
@@ -643,6 +758,8 @@ async function upsertFingerprint(
     das_band: bands.das_band || null,
     dws,
     dws_band: bands.dws_band || null,
+    adps,
+    adps_band: bands.adps_band || null,
     events_included: eventsIncluded,
     wet_sessions: wetSessions,
     dry_sessions: drySessions,

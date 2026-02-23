@@ -56,8 +56,8 @@ const SearchPage = () => {
         for (let i = 0; i < driverIds.length; i += 50) {
           const chunk = driverIds.slice(i, i + 50);
           const { data: fps } = await supabase.from("v2_driver_fingerprints" as any)
-            .select("driver_id, dps, dps_band").in("driver_id", chunk);
-          (fps || []).forEach((f: any) => { fpMap[f.driver_id] = { dps: f.dps, dps_band: f.dps_band }; });
+            .select("driver_id, dps, dps_band, adps, adps_band").in("driver_id", chunk);
+          (fps || []).forEach((f: any) => { fpMap[f.driver_id] = { dps: f.adps ?? f.dps, dps_band: f.adps_band ?? f.dps_band }; });
         }
         setAllDrivers((data || []).map((d: any) => ({
           type: "driver" as const, id: d.id, label: d.full_name,
@@ -227,12 +227,12 @@ const SearchPage = () => {
       if (driverItems.length > 0) {
         const driverIds = driverItems.map(d => d.id);
         const { data: fps } = await supabase.from("v2_driver_fingerprints" as any)
-          .select("driver_id, dps, dps_band").in("driver_id", driverIds);
+          .select("driver_id, dps, dps_band, adps, adps_band").in("driver_id", driverIds);
         const fpMap: Record<string, any> = {};
         (fps || []).forEach((f: any) => { fpMap[f.driver_id] = f; });
         driverItems.forEach(d => {
-          d.dps = fpMap[d.id]?.dps ?? null;
-          d.dps_band = fpMap[d.id]?.dps_band ?? null;
+          d.dps = fpMap[d.id]?.adps ?? fpMap[d.id]?.dps ?? null;
+          d.dps_band = fpMap[d.id]?.adps_band ?? fpMap[d.id]?.dps_band ?? null;
         });
       }
 

@@ -64,7 +64,7 @@ const DriverProfilePage = () => {
       if (d) {
         supabase
           .from("v2_driver_fingerprints" as any)
-          .select("dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included")
+          .select("dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included, adps, adps_band")
           .eq("driver_id", id)
           .maybeSingle()
           .then(({ data: fp }) => {

@@ -1177,6 +1177,8 @@ export type Database = {
       }
       v2_driver_fingerprints: {
         Row: {
+          adps: number | null
+          adps_band: string | null
           calculation_details: Json | null
           created_at: string
           das: number | null
@@ -1196,6 +1198,8 @@ export type Database = {
           wet_sessions: number
         }
         Insert: {
+          adps?: number | null
+          adps_band?: string | null
           calculation_details?: Json | null
           created_at?: string
           das?: number | null
@@ -1215,6 +1219,8 @@ export type Database = {
           wet_sessions?: number
         }
         Update: {
+          adps?: number | null
+          adps_band?: string | null
           calculation_details?: Json | null
           created_at?: string
           das?: number | null
