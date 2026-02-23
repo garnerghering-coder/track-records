@@ -1188,6 +1188,7 @@ export type Database = {
           description: string | null
           end_date: string | null
           id: string
+          layout_id: string | null
           name: string
           round_number: number | null
           season_id: string
@@ -1201,6 +1202,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          layout_id?: string | null
           name: string
           round_number?: number | null
           season_id: string
@@ -1214,6 +1216,7 @@ export type Database = {
           description?: string | null
           end_date?: string | null
           id?: string
+          layout_id?: string | null
           name?: string
           round_number?: number | null
           season_id?: string
@@ -1227,6 +1230,13 @@ export type Database = {
             columns: ["circuit_id"]
             isOneToOne: false
             referencedRelation: "v2_circuits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_events_layout_id_fkey"
+            columns: ["layout_id"]
+            isOneToOne: false
+            referencedRelation: "v2_circuit_layouts"
             referencedColumns: ["id"]
           },
           {

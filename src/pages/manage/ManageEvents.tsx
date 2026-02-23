@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +16,24 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, Search, Pencil } from "lucide-react";
 
 type Ref = { id: string; label: string } | null;
+type LayoutOption = { id: string; name: string };
+
+function useCircuitLayouts(circuitId: string | undefined) {
+  return useQuery({
+    queryKey: ["v2_circuit_layouts", circuitId],
+    queryFn: async () => {
+      if (!circuitId) return [];
+      const { data, error } = await supabase
+        .from("v2_circuit_layouts")
+        .select("id, name")
+        .eq("circuit_id", circuitId)
+        .order("sort_order");
+      if (error) throw error;
+      return data as LayoutOption[];
+    },
+    enabled: !!circuitId,
+  });
+}
 
 export default function ManageEvents() {
   const qc = useQueryClient();
@@ -25,6 +43,7 @@ export default function ManageEvents() {
   const [series, setSeries] = useState<Ref>(null);
   const [season, setSeason] = useState<Ref>(null);
   const [circuit, setCircuit] = useState<Ref>(null);
+  const [layoutId, setLayoutId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
 
   // Edit event state
@@ -32,6 +51,22 @@ export default function ManageEvents() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
   const [editCircuit, setEditCircuit] = useState<Ref>(null);
+  const [editLayoutId, setEditLayoutId] = useState<string | null>(null);
+
+  // Fetch layouts for create and edit dialogs
+  const { data: createLayouts = [] } = useCircuitLayouts(circuit?.id);
+  const { data: editLayouts = [] } = useCircuitLayouts(editCircuit?.id);
+
+  // Auto-fill layout when there's only one
+  useEffect(() => {
+    if (createLayouts.length === 1) setLayoutId(createLayouts[0].id);
+    else if (createLayouts.length === 0) setLayoutId(null);
+  }, [createLayouts]);
+
+  useEffect(() => {
+    if (editLayouts.length === 1) setEditLayoutId(editLayouts[0].id);
+    else if (editLayouts.length === 0) setEditLayoutId(null);
+  }, [editLayouts]);
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["v2_events_list"],
@@ -44,7 +79,6 @@ export default function ManageEvents() {
 
   const deleteEvent = useMutation({
     mutationFn: async (eventId: string) => {
-      // Delete sessions first (cascade), then event
       const { error: sessErr } = await supabase.from("v2_sessions").delete().eq("event_id", eventId);
       if (sessErr) throw sessErr;
       const { error } = await supabase.from("v2_events").delete().eq("id", eventId);
@@ -60,6 +94,7 @@ export default function ManageEvents() {
       const payload = {
         season_id: season.id,
         circuit_id: circuit?.id || null,
+        layout_id: layoutId || null,
         name: form.name,
         round_number: form.round_number ? parseInt(form.round_number) : null,
         start_date: form.start_date || null,
@@ -84,6 +119,7 @@ export default function ManageEvents() {
         end_date: editForm.end_date || null,
         description: editForm.description || null,
         circuit_id: editCircuit?.id || null,
+        layout_id: editLayoutId || null,
       }).eq("id", editId);
       if (error) throw error;
     },
@@ -101,11 +137,12 @@ export default function ManageEvents() {
       description: e.description || "",
     });
     setEditCircuit(e.v2_circuits ? { id: e.v2_circuits.id, label: e.v2_circuits.name } : null);
+    setEditLayoutId(e.layout_id || null);
     setEditOpen(true);
   };
 
   const openNew = () => {
-    setSeries(null); setSeason(null); setCircuit(null);
+    setSeries(null); setSeason(null); setCircuit(null); setLayoutId(null);
     setForm({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" });
     setOpen(true);
   };
@@ -167,6 +204,8 @@ export default function ManageEvents() {
           </TableBody>
         </Table>
       )}
+
+      {/* New Event Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>New Event</DialogTitle></DialogHeader>
@@ -185,8 +224,24 @@ export default function ManageEvents() {
             </div>
             <div>
               <Label>Circuit</Label>
-              <AutocompleteField entityType="circuit" value={circuit} onChange={setCircuit} />
+              <AutocompleteField entityType="circuit" value={circuit} onChange={v => { setCircuit(v); setLayoutId(null); }} />
             </div>
+            {circuit && createLayouts.length > 0 && (
+              <div>
+                <Label>Default Track Layout</Label>
+                <Select value={layoutId || ""} onValueChange={v => setLayoutId(v || null)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select layout…" /></SelectTrigger>
+                  <SelectContent>
+                    {createLayouts.map(l => (
+                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {createLayouts.length > 1 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Individual sessions can override this layout</p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Start Date</Label><Input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} /></div>
               <div><Label>End Date</Label><Input type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} /></div>
@@ -214,8 +269,24 @@ export default function ManageEvents() {
             </div>
             <div>
               <Label>Circuit</Label>
-              <AutocompleteField entityType="circuit" value={editCircuit} onChange={setEditCircuit} />
+              <AutocompleteField entityType="circuit" value={editCircuit} onChange={v => { setEditCircuit(v); setEditLayoutId(null); }} />
             </div>
+            {editCircuit && editLayouts.length > 0 && (
+              <div>
+                <Label>Default Track Layout</Label>
+                <Select value={editLayoutId || ""} onValueChange={v => setEditLayoutId(v || null)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select layout…" /></SelectTrigger>
+                  <SelectContent>
+                    {editLayouts.map(l => (
+                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editLayouts.length > 1 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Individual sessions can override this layout</p>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Start Date</Label><Input type="date" value={editForm.start_date} onChange={e => setEditForm(f => ({ ...f, start_date: e.target.value }))} /></div>
               <div><Label>End Date</Label><Input type="date" value={editForm.end_date} onChange={e => setEditForm(f => ({ ...f, end_date: e.target.value }))} /></div>

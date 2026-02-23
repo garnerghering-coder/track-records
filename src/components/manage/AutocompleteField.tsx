@@ -100,9 +100,6 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
 
   const entityLabel = entityType === "season" ? "season (year)" : entityType;
 
-  // Portal into nearest dialog content (if inside a dialog) so the focus trap doesn't block clicks
-  const portalTarget = containerRef.current?.closest('[role="dialog"]') as HTMLElement | null;
-
   const dropdown = open && dropdownPos && createPortal(
     <div
       id={`ac-dropdown-${entityType}`}
@@ -123,7 +120,7 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
         + Create new {entityLabel}
       </button>
     </div>,
-    portalTarget || document.body
+    document.body
   );
 
   return (
