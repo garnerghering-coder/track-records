@@ -401,7 +401,7 @@ function SessionResults({
     queryKey: ["public_qual_for_race", qualSession?.id, qualTable],
     queryFn: async () => {
       if (!qualSession) return [];
-      const { data } = await supabase.from(qualTable as any).select("driver_id, position").eq("session_id", qualSession.id).order("position");
+      const { data } = await supabase.from(qualTable as any).select("driver_id, position, car_number").eq("session_id", qualSession.id).order("position");
       return (data || []) as any[];
     },
     enabled: isRace && useQualifying && !!qualSession,
@@ -412,25 +412,24 @@ function SessionResults({
     queryKey: ["public_prev_hour", prevHourSessionId],
     queryFn: async () => {
       if (!prevHourSessionId) return [];
-      const { data } = await supabase.from("v2_race_results" as any).select("driver_id, position").eq("session_id", prevHourSessionId).order("position");
+      const { data } = await supabase.from("v2_race_results" as any).select("driver_id, position, car_number").eq("session_id", prevHourSessionId).order("position");
       return (data || []) as any[];
     },
     enabled: isRace && !useQualifying && !!prevHourSessionId,
   });
 
-  // Build position lookup map
-  const refPosMap: Record<string, number> = {};
-  if (useQualifying) {
-    for (const qr of qualResults) {
-      if (qr.driver_id && qr.position) refPosMap[qr.driver_id] = qr.position;
-    }
-  } else {
-    for (const pr of prevHourResults) {
-      if (pr.driver_id && pr.position) refPosMap[pr.driver_id] = pr.position;
+  // Build position lookup maps (by driver_id and by car_number as fallback for multi-driver entries)
+  const refPosMapByDriver: Record<string, number> = {};
+  const refPosMapByCar: Record<string, number> = {};
+  const refSource = useQualifying ? qualResults : prevHourResults;
+  for (const ref of refSource) {
+    if (ref.driver_id && ref.position) refPosMapByDriver[ref.driver_id] = ref.position;
+    if (ref.car_number && ref.position && !refPosMapByCar[ref.car_number]) {
+      refPosMapByCar[ref.car_number] = ref.position;
     }
   }
 
-  const hasRefData = Object.keys(refPosMap).length > 0;
+  const hasRefData = Object.keys(refPosMapByDriver).length > 0 || Object.keys(refPosMapByCar).length > 0;
 
   // Extract custom columns from extra_data
   const extraDataKeys: { key: string; name: string }[] = [];
@@ -616,7 +615,7 @@ function SessionResults({
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
                 {isRace && hasRefData && (
                   <TableCell className="text-center">
-                    <PositionDelta racePos={r.position} qualPos={r.driver_id ? refPosMap[r.driver_id] ?? null : null} />
+                    <PositionDelta racePos={r.position} qualPos={r.driver_id && refPosMapByDriver[r.driver_id] ? refPosMapByDriver[r.driver_id] : (r.car_number && refPosMapByCar[r.car_number] ? refPosMapByCar[r.car_number] : null)} />
                   </TableCell>
                 )}
                 {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
