@@ -659,6 +659,14 @@ export default function ManageSessionResults() {
       }
       await supabase.from("v2_sessions").update(sessionUpdate).eq("id", sessionId!);
 
+      // Trigger driver fingerprint recalculation for all drivers in this session
+      const driverIdsInSession = [...new Set(rows.flatMap(r => [r.driver?.id, ...r.additionalDrivers.map(d => d?.id)]).filter(Boolean))] as string[];
+      if (driverIdsInSession.length > 0) {
+        supabase.functions.invoke("recalculate-driver-fingerprint", {
+          body: { driver_ids: driverIdsInSession },
+        }).catch(err => console.warn("Fingerprint recalc:", err));
+      }
+
       qc.invalidateQueries({ queryKey: ["v2_sessions"] });
       toast.success(publish ? "Published!" : "Draft saved");
     } catch (e: any) {
