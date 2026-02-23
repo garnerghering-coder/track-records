@@ -6,6 +6,7 @@ import { Search as SearchIcon, Car } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
+import SEOHead from "@/components/SEOHead";
 
 const TeamsPage = () => {
   const [teams, setTeams] = useState<any[]>([]);
@@ -27,6 +28,7 @@ const TeamsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Teams" description="Browse motorsport teams." canonical="/teams" />
       <Header />
       <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">

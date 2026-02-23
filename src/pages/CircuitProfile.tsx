@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import TrackFingerprint from "@/components/TrackFingerprint";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { formatDateRange } from "@/lib/date-utils";
 import { computeTrackMetrics } from "@/lib/track-calculations";
 import ReportDialog from "@/components/ReportDialog";
@@ -104,6 +105,12 @@ const CircuitProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={circuit.name}
+        description={`Circuit profile for ${circuit.name}${circuit.country ? ` in ${circuit.country}` : ""}. View events and track data.`}
+        canonical={`/circuit/${id}`}
+        ogImage={circuit.layout_image_url || undefined}
+      />
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">

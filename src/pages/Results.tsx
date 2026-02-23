@@ -7,6 +7,7 @@ import { formatDateRange } from "@/lib/date-utils";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
+import SEOHead from "@/components/SEOHead";
 
 interface DisplayEvent {
   id: string;
@@ -126,6 +127,7 @@ const ResultsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Race Results" description="Browse race events and view detailed classified results." canonical="/results" />
       <Header />
       <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">

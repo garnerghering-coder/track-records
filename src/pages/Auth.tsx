@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, X } from "lucide-react";
 import Header from "@/components/Header";
+import SEOHead from "@/components/SEOHead";
 
 type AuthMode = "login" | "signup";
 
@@ -68,6 +69,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Sign In" description="Sign in or create your Track Records account." canonical="/auth" noIndex />
       <Header />
 
       {/* Email verification lightbox */}

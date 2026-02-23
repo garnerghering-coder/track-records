@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, Clock, CheckCircle2, XCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 
 const RACING_CATEGORIES = [
   "karting", "single_seater", "gt", "touring_car", "sports_car",
@@ -128,6 +129,7 @@ const Submit = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEOHead title="Submit Race Results" description="Submit race results to the Track Records database." canonical="/submit" noIndex />
       <Header />
       <main className="flex-1 container pt-24 pb-16">
         <h1 className="font-display text-3xl font-bold text-foreground mb-2">Submit Race Results</h1>

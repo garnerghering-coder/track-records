@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Wrench } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
 import { formatDateRange } from "@/lib/date-utils";
@@ -72,6 +73,11 @@ const CarProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={displayName}
+        description={`Car profile for ${displayName}. View race history and results.`}
+        canonical={`/car/${id}`}
+      />
       <Header />
       <section className="pt-24 pb-12" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">

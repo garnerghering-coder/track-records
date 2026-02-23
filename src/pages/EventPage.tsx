@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,11 @@ export default function EventPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEOHead
+        title={event.name}
+        description={`${event.name} – ${seriesName || ""}${year ? ` ${year}` : ""}. View sessions, results, and weather data.`}
+        canonical={`/events/${slug}`}
+      />
       <Header />
       <main className="flex-1 pt-16">
         {/* Event Header */}

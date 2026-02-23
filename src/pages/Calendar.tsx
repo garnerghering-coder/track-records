@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search as SearchIcon, Ticket } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 
 const categoryOptions = [
   { value: "all", label: "All Categories" },
@@ -105,6 +106,7 @@ const CalendarPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Upcoming Races" description="Browse upcoming motorsport events. Filter by series, category, or search by name." canonical="/calendar" />
       <Header />
 
       <section className="pt-24 pb-10 bg-card border-b border-border">
