@@ -92,10 +92,32 @@ export default function ManageSessionResults() {
   const { data: session } = useQuery({
     queryKey: ["v2_session", sessionId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("v2_sessions").select("*, v2_events(name, circuit_id)").eq("id", sessionId!).single();
+      const { data, error } = await supabase.from("v2_sessions").select("*, v2_events(name, circuit_id, season_id)").eq("id", sessionId!).single();
       if (error) throw error;
       return data;
     },
+  });
+
+  const seasonId = (session as any)?.v2_events?.season_id;
+
+  const { data: seasonData } = useQuery({
+    queryKey: ["v2_season_for_session", seasonId],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_seasons").select("id, is_multiclass, cdm").eq("id", seasonId).single();
+      return data;
+    },
+    enabled: !!seasonId,
+  });
+
+  const isMulticlass = !!(seasonData as any)?.is_multiclass;
+
+  const { data: seasonClasses = [] } = useQuery({
+    queryKey: ["v2_season_classes_for_session", seasonId],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_season_classes" as any).select("*").eq("season_id", seasonId).order("sort_order");
+      return (data || []) as any[];
+    },
+    enabled: !!seasonId && isMulticlass,
   });
 
 
@@ -123,13 +145,15 @@ export default function ManageSessionResults() {
 
   // Column order management
   const getDefaultColumns = useCallback(() => {
-    const cols: string[] = ["position", "car_number", "driver", "nat", "team", "car"];
+    const cols: string[] = ["position"];
+    if (isMulticlass) cols.push("_class", "_pic");
+    cols.push("car_number", "driver", "nat", "team", "car");
     if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes");
     else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run");
     else if (type === "race" || type === "sprint_race" || type === "endurance_race") cols.push("laps_completed", "total_time", "gap_to_leader", "gap_int", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status");
     else cols.push("notes");
     return cols;
-  }, [type]);
+  }, [type, isMulticlass]);
 
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
 
@@ -176,7 +200,7 @@ export default function ManageSessionResults() {
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int") continue; // built-in
+              if (k === "Int" || k === "Class" || k === "PIC") continue; // built-in
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
                 foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
@@ -230,11 +254,13 @@ export default function ManageSessionResults() {
           else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else if (t === "race" || t === "sprint_race" || t === "endurance_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.gap_to_leader = r.gap_to_leader || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else { row.notes = ""; }
-          // Load custom column data from extra_data
+          // Load class/PIC and custom column data from extra_data
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
+            if (ed.Class) row._class = String(ed.Class);
+            if (ed.PIC) row._pic = String(ed.PIC);
             for (const k of Object.keys(ed)) {
-              if (k === "Int") continue;
+              if (k === "Int" || k === "Class" || k === "PIC") continue;
               row[`_custom_${k}`] = String(ed[k] ?? "");
             }
           }
@@ -585,6 +611,37 @@ export default function ManageSessionResults() {
     }
   };
 
+  // Auto-calculate PIC (Position in Class) based on position and class assignment
+  const recalcPIC = useCallback((currentRows: ResultRow[]): ResultRow[] => {
+    if (!isMulticlass) return currentRows;
+    const sorted = [...currentRows].sort((a, b) => (parseInt(a.position) || 999) - (parseInt(b.position) || 999));
+    const classCounters: Record<string, number> = {};
+    const picMap: Record<string, string> = {};
+    for (const r of sorted) {
+      const cls = r._class;
+      if (cls) {
+        classCounters[cls] = (classCounters[cls] || 0) + 1;
+        picMap[r._key] = String(classCounters[cls]);
+      } else {
+        picMap[r._key] = "";
+      }
+    }
+    return currentRows.map(r => ({ ...r, _pic: picMap[r._key] || "" }));
+  }, [isMulticlass]);
+
+  // Recalculate PIC when class or position changes - triggered via updateRow
+  const picKeyRef = useRef("");
+  useEffect(() => {
+    if (!isMulticlass || rows.length === 0) return;
+    const key = rows.map(r => `${r.position}:${r._class}`).join(",");
+    if (key === picKeyRef.current) return;
+    picKeyRef.current = key;
+    const updated = recalcPIC(rows);
+    // Only update if PIC values actually changed
+    const changed = updated.some((r, i) => r._pic !== rows[i]._pic);
+    if (changed) setRows(updated);
+  }, [rows, isMulticlass, recalcPIC]);
+
   // Build extra_data from custom columns + gap_int for a row
   const buildExtraData = (row: ResultRow): Record<string, any> => {
     const ed: Record<string, any> = {};
@@ -592,6 +649,9 @@ export default function ManageSessionResults() {
     if (row.gap_int) {
       ed["Int"] = row.gap_int;
     }
+    // Store Class and PIC in extra_data for multiclass seasons
+    if (row._class) ed["Class"] = row._class;
+    if (row._pic) ed["PIC"] = row._pic;
     for (const col of customColumns) {
       const val = row[`_custom_${col.key}`];
       if (val !== undefined && val !== "") {
@@ -684,7 +744,7 @@ export default function ManageSessionResults() {
 
   // Column label map
   const colLabels: Record<string, string> = {
-    position: "Pos", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
+    position: "Pos", _class: "Class", _pic: "PIC", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
     best_lap_time: "Best Lap", gap_to_p1: "Gap", gap_int: "Int", laps_run: "Laps", notes: "Notes",
     q1_time: "Q1", q2_time: "Q2", q3_time: "Q3", best_time: "Best", gap_to_pole: "Gap",
     laps_completed: "Laps", total_time: "Time", gap_to_leader: "Gap", fastest_lap_time: "Best Lap", average_lap_time: "Avg Lap",
@@ -704,6 +764,21 @@ export default function ManageSessionResults() {
   // Render cell for a column
   const renderCell = (row: ResultRow, col: string) => {
     if (col === "position") return <Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" />;
+    if (col === "_class") {
+      if (seasonClasses.length > 0) {
+        return (
+          <Select value={row._class || ""} onValueChange={v => updateRow(row._key, "_class", v)}>
+            <SelectTrigger className="h-7 text-xs w-24"><SelectValue placeholder="Class…" /></SelectTrigger>
+            <SelectContent>{seasonClasses.map((sc: any) => <SelectItem key={sc.id} value={sc.class_name} className="text-xs">{sc.class_name}</SelectItem>)}</SelectContent>
+          </Select>
+        );
+      }
+      return <Input value={row._class || ""} onChange={e => updateRow(row._key, "_class", e.target.value)} className="h-7 w-20 text-xs" placeholder="Class" />;
+    }
+    if (col === "_pic") {
+      // PIC is auto-calculated, show read-only
+      return <span className="text-xs text-muted-foreground px-1">{row._pic || "—"}</span>;
+    }
     if (col === "car_number") return <Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" />;
     if (col === "driver") return (
       <div className="space-y-1">
