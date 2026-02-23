@@ -1720,22 +1720,63 @@ export type Database = {
           },
         ]
       }
-      v2_seasons: {
+      v2_season_classes: {
         Row: {
+          cdm: number | null
+          class_name: string
           created_at: string
           id: string
+          season_id: string
+          sort_order: number
+        }
+        Insert: {
+          cdm?: number | null
+          class_name: string
+          created_at?: string
+          id?: string
+          season_id: string
+          sort_order?: number
+        }
+        Update: {
+          cdm?: number | null
+          class_name?: string
+          created_at?: string
+          id?: string
+          season_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_season_classes_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "v2_seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_seasons: {
+        Row: {
+          cdm: number | null
+          created_at: string
+          id: string
+          is_multiclass: boolean
           series_id: string
           year: number
         }
         Insert: {
+          cdm?: number | null
           created_at?: string
           id?: string
+          is_multiclass?: boolean
           series_id: string
           year: number
         }
         Update: {
+          cdm?: number | null
           created_at?: string
           id?: string
+          is_multiclass?: boolean
           series_id?: string
           year?: number
         }

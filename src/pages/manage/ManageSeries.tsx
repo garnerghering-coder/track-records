@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import SeasonEditDialog from "@/components/manage/SeasonEditDialog";
 
 export default function ManageSeries() {
   const qc = useQueryClient();
@@ -20,6 +22,7 @@ export default function ManageSeries() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [seasonYear, setSeasonYear] = useState("");
   const [search, setSearch] = useState("");
+  const [editingSeason, setEditingSeason] = useState<any>(null);
 
   const { data: seriesList = [], isLoading } = useQuery({
     queryKey: ["v2_series"],
@@ -77,7 +80,6 @@ export default function ManageSeries() {
         if (error) throw error;
         seriesId = data.id;
       }
-      // Sync aliases: delete all existing, insert new
       await supabase.from("v2_series_aliases").delete().eq("series_id", seriesId);
       if (aliases.length > 0) {
         const rows = aliases.map(a => ({ series_id: seriesId, alias: a }));
@@ -159,8 +161,15 @@ export default function ManageSeries() {
                         <div className="space-y-2 py-2">
                           {sSeasons.map((se: any) => (
                             <div key={se.id} className="flex items-center justify-between">
-                              <span className="text-sm">{se.year}</span>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => delSeason.mutate(se.id)}><Trash2 className="h-3 w-3" /></Button>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{se.year}</span>
+                                {se.is_multiclass && <Badge variant="outline" className="text-xs">Multiclass</Badge>}
+                                {se.cdm != null && <span className="text-xs text-muted-foreground">CDM: {se.cdm}</span>}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditingSeason(se)}><Pencil className="h-3 w-3" /></Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => delSeason.mutate(se.id)}><Trash2 className="h-3 w-3" /></Button>
+                              </div>
                             </div>
                           ))}
                           <div className="flex items-center gap-2">
@@ -180,6 +189,8 @@ export default function ManageSeries() {
           </TableBody>
         </Table>
       )}
+
+      {/* Series edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editing ? "Edit" : "New"} Series</DialogTitle></DialogHeader>
@@ -211,6 +222,20 @@ export default function ManageSeries() {
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.name.trim()}>Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Season edit dialog */}
+      {editingSeason && (
+        <SeasonEditDialog
+          season={editingSeason}
+          open={!!editingSeason}
+          onOpenChange={(v) => { if (!v) setEditingSeason(null); }}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["v2_seasons"] });
+            qc.invalidateQueries({ queryKey: ["v2_season_classes"] });
+            setEditingSeason(null);
+          }}
+        />
+      )}
     </div>
   );
 }
