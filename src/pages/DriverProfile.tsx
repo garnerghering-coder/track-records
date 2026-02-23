@@ -254,8 +254,7 @@ const DriverProfilePage = () => {
 
       <div className="container py-10">
         {/* Driver Fingerprint */}
-        {fingerprint && fingerprint.events_included > 0 && (
-          <div className="mb-8">
+        <div className="mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
               <h2 className="font-display text-xl font-semibold text-foreground">Driver Fingerprint</h2>
               <TooltipProvider delayDuration={200}>
@@ -271,7 +270,6 @@ const DriverProfilePage = () => {
             </div>
             <DriverFingerprint data={fingerprint} />
           </div>
-        )}
 
         {/* Statistics Section */}
         {(stats.avgQual !== null || stats.avgRace !== null) && (
