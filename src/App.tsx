@@ -33,7 +33,7 @@ import ManageCars from "./pages/manage/ManageCars";
 import ManageCircuits from "./pages/manage/ManageCircuits";
 import ManageSeries from "./pages/manage/ManageSeries";
 import ManageReports from "./pages/manage/ManageReports";
-
+import ManagePotentialIssues from "./pages/manage/ManagePotentialIssues";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -73,6 +73,7 @@ const App = () => (
             <Route path="circuits" element={<ManageCircuits />} />
             <Route path="series" element={<ManageSeries />} />
             <Route path="reports" element={<ManageReports />} />
+            <Route path="issues" element={<ManagePotentialIssues />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
