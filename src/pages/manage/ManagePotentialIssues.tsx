@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Merge, XCircle, Check, AlertTriangle, ExternalLink } from "lucide-react";
+import { Loader2, Merge, XCircle, Check, AlertTriangle, ExternalLink, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import FlagImage from "@/components/FlagImage";
 
@@ -77,7 +77,7 @@ function DataQualitySection() {
   const [loading, setLoading] = useState(true);
   const [fixing, setFixing] = useState<string | null>(null);
   const [bulkFixing, setBulkFixing] = useState(false);
-
+  const [aiResolving, setAiResolving] = useState(false);
   useEffect(() => { scanForIssues(); }, []);
 
   const scanForIssues = async () => {
@@ -218,6 +218,34 @@ function DataQualitySection() {
     setFixing(null);
   };
 
+  const handleAiResolveReasons = async () => {
+    setAiResolving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resolve-dnf-reasons`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+        }
+      );
+      const result = await resp.json();
+      if (!resp.ok) throw new Error(result.error || "Failed");
+      const parts: string[] = [];
+      if (result.resolved > 0) parts.push(`${result.resolved} resolved`);
+      if (result.skippedLow > 0) parts.push(`${result.skippedLow} skipped (low confidence)`);
+      toast.success(`AI Resolve: ${parts.join(", ") || "Nothing to resolve"}`);
+      scanForIssues();
+    } catch (e: any) {
+      toast.error(`AI resolve failed: ${e.message}`);
+    }
+    setAiResolving(false);
+  };
+
   const handleFixAll = async () => {
     const fixable = issues.filter(i => i.autoFixable && i.sessionId);
     if (fixable.length === 0) return;
@@ -250,6 +278,7 @@ function DataQualitySection() {
   const errors = issues.filter(i => i.severity === "error");
   const warnings = issues.filter(i => i.severity === "warning");
   const fixableCount = issues.filter(i => i.autoFixable).length;
+  const missingReasonCount = issues.filter(i => i.type === "missing_reason").length;
 
   return (
     <div className="space-y-4">
@@ -258,12 +287,20 @@ function DataQualitySection() {
           {errors.length > 0 && <Badge variant="destructive">{errors.length} error{errors.length !== 1 ? "s" : ""}</Badge>}
           {warnings.length > 0 && <Badge variant="secondary">{warnings.length} warning{warnings.length !== 1 ? "s" : ""}</Badge>}
         </div>
-        {fixableCount > 0 && (
-          <Button size="sm" onClick={handleFixAll} disabled={bulkFixing}>
-            {bulkFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Check className="h-3.5 w-3.5 mr-1" />}
-            Fix All Suggested ({fixableCount})
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {missingReasonCount > 0 && (
+            <Button size="sm" variant="secondary" onClick={handleAiResolveReasons} disabled={aiResolving || bulkFixing}>
+              {aiResolving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+              AI Resolve Reasons ({missingReasonCount})
+            </Button>
+          )}
+          {fixableCount > 0 && (
+            <Button size="sm" onClick={handleFixAll} disabled={bulkFixing || aiResolving}>
+              {bulkFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+              Fix All Suggested ({fixableCount})
+            </Button>
+          )}
+        </div>
       </div>
       <div className="space-y-2">
         {issues.map(issue => (
