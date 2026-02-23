@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_events ADD COLUMN layout_id uuid REFERENCES public.v2_circuit_layouts(id) ON DELETE SET NULL;
