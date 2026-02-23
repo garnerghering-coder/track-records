@@ -58,20 +58,77 @@ const DriverProfilePage = () => {
       setDriver(d);
 
       if (d) {
-        const sessionSelect = "id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(id, name)), v2_circuits(id, name, country))";
+        const sessionSelect = "id, name, session_type, event_id, date, parent_session_id, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(id, name)), v2_circuits(id, name, country))";
         const sortResults = (items: any[]) => items.sort((a: any, b: any) => {
           const dateA = a.event?.start_date || "";
           const dateB = b.event?.start_date || "";
           return dateB.localeCompare(dateA);
         });
 
-        // Fetch race results
+        // Fetch race results where this driver is the primary driver
         const { data: raceResults } = await supabase
           .from("v2_race_results" as any)
-          .select(`position, status, car_number, total_time, gap_to_leader, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
+          .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
           .eq("driver_id", id)
           .order("created_at", { ascending: false })
           .limit(200);
+
+        // Also find races where this driver is a co-driver (same car_number in same session)
+        // First get all car_numbers and session_ids for results where this driver appears
+        const primaryResults = (raceResults || []) as any[];
+        
+        // Find additional co-driver results: look for sessions where this driver has qualifying/practice results
+        // but not race results, by matching car_number in the same session
+        const { data: allDriverResults } = await supabase
+          .from("v2_race_results" as any)
+          .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
+          .order("created_at", { ascending: false })
+          .limit(500);
+
+        // Build a set of (session_id, car_number) pairs where this driver has a direct result
+        const directPairs = new Set(primaryResults.map((r: any) => `${r.session_id}:${r.car_number}`));
+        
+        // Find car_numbers this driver uses (from qualifying/practice)
+        const { data: qualForDriver } = await supabase
+          .from("v2_qualifying_results" as any)
+          .select("session_id, car_number, v2_sessions(event_id)")
+          .eq("driver_id", id);
+        const { data: pracForDriver } = await supabase
+          .from("v2_practice_results" as any)
+          .select("session_id, car_number, v2_sessions(event_id)")
+          .eq("driver_id", id);
+        
+        // Build map of event_id -> car_numbers this driver uses
+        const driverCarsByEvent = new Map<string, Set<string>>();
+        for (const r of [...(qualForDriver || []), ...(pracForDriver || [])] as any[]) {
+          if (r.car_number && r.v2_sessions?.event_id) {
+            const eventId = r.v2_sessions.event_id;
+            if (!driverCarsByEvent.has(eventId)) driverCarsByEvent.set(eventId, new Set());
+            driverCarsByEvent.get(eventId)!.add(r.car_number);
+          }
+        }
+
+        // Also add car_numbers from primary race results
+        for (const r of primaryResults) {
+          if (r.car_number && r.v2_sessions?.v2_events?.id) {
+            const eventId = r.v2_sessions.v2_events.id;
+            if (!driverCarsByEvent.has(eventId)) driverCarsByEvent.set(eventId, new Set());
+            driverCarsByEvent.get(eventId)!.add(r.car_number);
+          }
+        }
+
+        // Find co-driver race results: same event + car_number, different driver, not already in direct results
+        const coDriverResults: any[] = [];
+        for (const r of (allDriverResults || []) as any[]) {
+          if (r.driver_id === id) continue; // Already in primary results
+          if (!r.car_number || !r.v2_sessions?.v2_events?.id) continue;
+          const eventId = r.v2_sessions.v2_events.id;
+          const carNumbers = driverCarsByEvent.get(eventId);
+          if (carNumbers && carNumbers.has(r.car_number) && !directPairs.has(`${r.session_id}:${r.car_number}`)) {
+            coDriverResults.push(r);
+            directPairs.add(`${r.session_id}:${r.car_number}`);
+          }
+        }
 
         const mapResult = (r: any, source: string) => ({
           ...r,
@@ -80,10 +137,23 @@ const DriverProfilePage = () => {
           _source: source,
         });
 
-        const raceRows = (raceResults || []).map((r: any) => mapResult(r, "race"));
-        setRaceHistory(sortResults([...raceRows]));
+        // Combine and filter out hourly sub-sessions (parent_session_id not null)
+        const allRaceRows = [...primaryResults, ...coDriverResults]
+          .map((r: any) => mapResult(r, "race"))
+          .filter((r: any) => !r.session?.parent_session_id);
 
-        // Fetch qualifying results
+        // Deduplicate by session_id + car_number
+        const seen = new Set<string>();
+        const uniqueRaceRows = allRaceRows.filter(r => {
+          const key = `${r.session?.id}:${r.car_number}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        
+        setRaceHistory(sortResults([...uniqueRaceRows]));
+
+        // Fetch qualifying results (only for this driver directly)
         const { data: qualResults } = await supabase
           .from("v2_qualifying_results" as any)
           .select(`position, car_number, best_time, gap_to_pole, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
@@ -101,7 +171,7 @@ const DriverProfilePage = () => {
 
         const qualRows = (qualResults || []).map((r: any) => mapResult(r, "qualifying"));
         const pracRows = (pracResults || []).map((r: any) => mapResult(r, "practice"));
-        const allRows = [...raceRows, ...qualRows, ...pracRows];
+        const allRows = [...uniqueRaceRows, ...qualRows, ...pracRows];
         setAllSessionResults(sortResults([...allRows]));
 
         // Build team alias map from v2_team_season_names

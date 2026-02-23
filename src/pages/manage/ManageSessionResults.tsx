@@ -29,9 +29,11 @@ interface ResultRow {
   position: string;
   car_number: string;
   driver: Ref;
+  additionalDrivers: Ref[];
   team: Ref;
   car: Ref;
   _driverNationality?: string | null;
+  _additionalDriverNationalities?: (string | null)[];
   [key: string]: any;
 }
 
@@ -40,7 +42,7 @@ const RACE_STATUSES = ["finished", "dnf", "dns", "dsq", "classified"];
 const makeKey = () => Math.random().toString(36).slice(2, 10);
 
 const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): ResultRow => {
-  const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, team: null, car: null, _driverNationality: null };
+  const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, additionalDrivers: [], team: null, car: null, _driverNationality: null, _additionalDriverNationalities: [] };
   if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.gap_int = ""; base.laps_run = ""; base.notes = ""; }
   else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.gap_int = ""; base.laps_run = ""; }
   else if (type === "race" || type === "sprint_race" || type === "endurance_race") { base.laps_completed = ""; base.total_time = ""; base.gap_to_leader = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; base.gap_int = ""; }
@@ -184,15 +186,45 @@ export default function ManageSessionResults() {
         }
         if (foundCustomCols.length > 0) setCustomColumns(foundCustomCols);
 
-        setRows(data.map((r: any) => {
+        // Group rows by car_number to find additional drivers for same car
+        const rowsByCarNumber = new Map<string, any[]>();
+        for (const r of data) {
+          const cn = (r as any).car_number;
+          if (cn) {
+            if (!rowsByCarNumber.has(cn)) rowsByCarNumber.set(cn, []);
+            rowsByCarNumber.get(cn)!.push(r);
+          }
+        }
+
+        // Deduplicate: keep only one row per car_number (lowest position), store extra drivers
+        const seenCarNumbers = new Set<string>();
+        const mappedRows: ResultRow[] = [];
+        
+        for (const r of data as any[]) {
+          const cn = r.car_number || "";
+          // If we've already created a row for this car_number, skip
+          if (cn && seenCarNumbers.has(cn)) continue;
+          if (cn) seenCarNumbers.add(cn);
+
+          // Find additional drivers for this car_number
+          const sameCarRows = cn ? (rowsByCarNumber.get(cn) || []) : [];
+          const otherDrivers = sameCarRows
+            .filter((o: any) => o.id !== r.id && o.v2_drivers)
+            .map((o: any) => ({ id: o.v2_drivers.id, label: o.v2_drivers.full_name }));
+          const otherNationalities = sameCarRows
+            .filter((o: any) => o.id !== r.id && o.v2_drivers)
+            .map((o: any) => o.v2_drivers?.nationality || null);
+
           const row: ResultRow = {
             _key: r.id,
             position: String(r.position || ""),
-            car_number: r.car_number || "",
+            car_number: cn,
             driver: r.v2_drivers ? { id: r.v2_drivers.id, label: r.v2_drivers.full_name } : null,
+            additionalDrivers: otherDrivers,
             team: r.v2_teams ? { id: r.v2_teams.id, label: r.v2_teams.full_name } : null,
             car: r.v2_cars ? { id: r.v2_cars.id, label: [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") } : null,
             _driverNationality: r.v2_drivers?.nationality || null,
+            _additionalDriverNationalities: otherNationalities,
           };
           if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
@@ -206,8 +238,9 @@ export default function ManageSessionResults() {
               row[`_custom_${k}`] = String(ed[k] ?? "");
             }
           }
-          return row;
-        }));
+          mappedRows.push(row);
+        }
+        setRows(mappedRows);
       } else {
         setRows([blankRow(1, t)]);
       }
@@ -583,7 +616,15 @@ export default function ManageSessionResults() {
         if (inserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(inserts as any); if (error) throw error; }
       } else {
         await supabase.from("v2_race_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, extra_data: buildExtraData(r) }));
+        const inserts: any[] = [];
+        for (const r of rows.filter(r => r.driver)) {
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, extra_data: buildExtraData(r) };
+          inserts.push({ ...base, driver_id: r.driver?.id || null });
+          // Insert additional drivers with same car data
+          for (const ad of (r.additionalDrivers || [])) {
+            if (ad) inserts.push({ ...base, driver_id: ad.id });
+          }
+        }
         if (inserts.length) { const { error } = await supabase.from("v2_race_results").insert(inserts as any); if (error) throw error; }
 
         await supabase.from("v2_pit_stops").delete().eq("session_id", sessionId!);
@@ -656,19 +697,75 @@ export default function ManageSessionResults() {
   const renderCell = (row: ResultRow, col: string) => {
     if (col === "position") return <Input value={row.position} onChange={e => updateRow(row._key, "position", e.target.value)} className="h-7 w-12 text-xs text-center" />;
     if (col === "car_number") return <Input value={row.car_number} onChange={e => updateRow(row._key, "car_number", e.target.value)} className="h-7 w-14 text-xs text-center" placeholder="#" />;
-    if (col === "driver") return <AutocompleteField entityType="driver" value={row.driver} onChange={v => handleDriverChange(row._key, v)} />;
-    if (col === "nat") return <FlagImage nationality={row._driverNationality} size={18} />;
-    if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
-    if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
-    if (col === "status") return (
-      <div>
-        <Select value={row.status} onValueChange={v => updateRow(row._key, "status", v)}>
-          <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
-          <SelectContent>{RACE_STATUSES.map(s => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}</SelectContent>
-        </Select>
-        {row.status === "dnf" && <Input value={row.dnf_reason} onChange={e => updateRow(row._key, "dnf_reason", e.target.value)} className="h-6 text-xs mt-1" placeholder="DNF reason" />}
+    if (col === "driver") return (
+      <div className="space-y-1">
+        <AutocompleteField entityType="driver" value={row.driver} onChange={v => handleDriverChange(row._key, v)} />
+        {(row.additionalDrivers || []).map((ad: Ref, idx: number) => (
+          <div key={idx} className="flex items-center gap-1">
+            <AutocompleteField entityType="driver" value={ad} onChange={v => {
+              setRows(prev => prev.map(r => {
+                if (r._key !== row._key) return r;
+                const newAd = [...(r.additionalDrivers || [])];
+                const newNats = [...(r._additionalDriverNationalities || [])];
+                if (v) { newAd[idx] = v; } else { newAd.splice(idx, 1); newNats.splice(idx, 1); }
+                return { ...r, additionalDrivers: newAd, _additionalDriverNationalities: newNats };
+              }));
+              if (v) {
+                supabase.from("v2_drivers").select("nationality").eq("id", v.id).single().then(({ data }) => {
+                  if (data) setRows(prev => prev.map(r => {
+                    if (r._key !== row._key) return r;
+                    const newNats = [...(r._additionalDriverNationalities || [])];
+                    newNats[idx] = data.nationality;
+                    return { ...r, _additionalDriverNationalities: newNats };
+                  }));
+                });
+              }
+            }} />
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive shrink-0" onClick={() => {
+              setRows(prev => prev.map(r => {
+                if (r._key !== row._key) return r;
+                const newAd = [...(r.additionalDrivers || [])]; newAd.splice(idx, 1);
+                const newNats = [...(r._additionalDriverNationalities || [])]; newNats.splice(idx, 1);
+                return { ...r, additionalDrivers: newAd, _additionalDriverNationalities: newNats };
+              }));
+            }}><X className="h-3 w-3" /></Button>
+          </div>
+        ))}
+        <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1 text-muted-foreground" onClick={() => {
+          setRows(prev => prev.map(r => r._key === row._key ? { ...r, additionalDrivers: [...(r.additionalDrivers || []), null], _additionalDriverNationalities: [...(r._additionalDriverNationalities || []), null] } : r));
+        }}>+ driver</Button>
       </div>
     );
+    if (col === "nat") return (
+      <div className="space-y-1">
+        <FlagImage nationality={row._driverNationality} size={18} />
+        {(row._additionalDriverNationalities || []).map((nat: string | null, idx: number) => (
+          <FlagImage key={idx} nationality={nat} size={18} />
+        ))}
+      </div>
+    );
+    if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
+    if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
+    if (col === "status") {
+      const DNF_REASONS = ["Technical", "Not-at-Fault", "At-Fault"];
+      const DSQ_REASONS = ["Technical", "Driving Conduct"];
+      const showReason = row.status === "dnf" || row.status === "dsq";
+      const reasonOptions = row.status === "dnf" ? DNF_REASONS : DSQ_REASONS;
+      return (
+        <div>
+          <Select value={row.status} onValueChange={v => { updateRow(row._key, "status", v); if (v !== "dnf" && v !== "dsq") updateRow(row._key, "dnf_reason", ""); }}>
+            <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+            <SelectContent>{RACE_STATUSES.map(s => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}</SelectContent>
+          </Select>
+          {showReason && (
+            <Select value={row.dnf_reason || ""} onValueChange={v => updateRow(row._key, "dnf_reason", v)}>
+              <SelectTrigger className="h-6 text-xs mt-1 w-28"><SelectValue placeholder="Reason…" /></SelectTrigger>
+              <SelectContent>{reasonOptions.map(r => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
+        </div>
+      );
+    }
     if (col.startsWith("_custom_")) {
       const customCol = customColumns.find(c => `_custom_${c.key}` === col);
       return <Input type={customCol?.type === "number" ? "number" : "text"} value={row[col] || ""} onChange={e => updateRow(row._key, col, e.target.value)} className="h-7 text-xs" />;
