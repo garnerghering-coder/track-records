@@ -123,7 +123,7 @@ export default function TrackFingerprint({ metrics }: { metrics: TrackMetrics })
   if (gauges.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-end justify-center gap-6">
+    <div className="flex items-center gap-6">
       {gauges.map(g => (
         <SemiCircleGauge key={g.key} value={g.value} category={g.category} title={g.title} large={g.key === "tdi"} />
       ))}
