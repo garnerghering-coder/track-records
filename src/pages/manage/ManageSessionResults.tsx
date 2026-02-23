@@ -146,7 +146,7 @@ export default function ManageSessionResults() {
   // Column order management
   const getDefaultColumns = useCallback(() => {
     const cols: string[] = ["position"];
-    if (isMulticlass) cols.push("_class", "_pic");
+    if (isMulticlass) cols.push("_pic", "_class");
     cols.push("car_number", "driver", "nat", "team", "car");
     if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes");
     else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run");
@@ -744,7 +744,7 @@ export default function ManageSessionResults() {
 
   // Column label map
   const colLabels: Record<string, string> = {
-    position: "Pos", _class: "Class", _pic: "PIC", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
+    position: "Pos", _pic: "PIC", _class: "Class", car_number: "No.", driver: "Driver", nat: "Nat", team: "Team", car: "Car",
     best_lap_time: "Best Lap", gap_to_p1: "Gap", gap_int: "Int", laps_run: "Laps", notes: "Notes",
     q1_time: "Q1", q2_time: "Q2", q3_time: "Q3", best_time: "Best", gap_to_pole: "Gap",
     laps_completed: "Laps", total_time: "Time", gap_to_leader: "Gap", fastest_lap_time: "Best Lap", average_lap_time: "Avg Lap",

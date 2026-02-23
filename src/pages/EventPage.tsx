@@ -594,7 +594,7 @@ function SessionResults({
            <TableRow className="bg-muted/50">
                <TableHead className="w-12">Pos</TableHead>
                {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
-                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableHead>PIC</TableHead>}
+                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableHead className="w-12">PIC</TableHead>}
                 {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableHead>Class</TableHead>}
                {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
                <TableHead>Driver</TableHead>
