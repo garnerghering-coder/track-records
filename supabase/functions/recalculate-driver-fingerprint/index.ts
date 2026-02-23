@@ -187,11 +187,12 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     parent_session_id: string | null;
     source: string;
     extra_data: any;
+    isHourSubSession: boolean;
   }
 
   function mapRows(rows: any[], source: string): ResultRow[] {
     return (rows || [])
-      .filter((r: any) => r.v2_sessions && !r.v2_sessions.parent_session_id)
+      .filter((r: any) => r.v2_sessions)
       .map((r: any) => ({
         id: r.id,
         position: r.position,
@@ -205,14 +206,107 @@ async function calculateFingerprint(supabase: any, driverId: string) {
         parent_session_id: r.v2_sessions.parent_session_id,
         source,
         extra_data: r.extra_data || null,
+        isHourSubSession: !!r.v2_sessions.parent_session_id,
       }));
   }
 
-  const allResults: ResultRow[] = [
+  let allResults: ResultRow[] = [
     ...mapRows(raceRes.data, "race"),
     ...mapRows(qualRes.data, "qualifying"),
     ...mapRows(pracRes.data, "practice"),
   ];
+
+  // ── 1a. Find co-driver endurance race results ───────────────
+  // For endurance races, the parent session result may have a different driver_id.
+  // Find events where this driver has practice/qualifying/hour results and add the
+  // parent endurance_race result as a co-driver credit.
+  const driverEventCarNumbers = new Map<string, Set<string>>();
+  for (const r of allResults) {
+    if (r.car_number) {
+      if (!driverEventCarNumbers.has(r.event_id)) driverEventCarNumbers.set(r.event_id, new Set());
+      driverEventCarNumbers.get(r.event_id)!.add(r.car_number);
+    }
+  }
+
+  // Check which events already have a parent-level race/endurance_race result
+  const eventsWithParentRace = new Set<string>();
+  for (const r of allResults) {
+    if (!r.isHourSubSession && (r.session_type === "race" || r.session_type === "endurance_race" || r.session_type === "sprint_race")) {
+      eventsWithParentRace.add(r.event_id);
+    }
+  }
+
+  // Find events where driver participated but has no parent race result
+  const missingRaceEventIds = [...driverEventCarNumbers.keys()].filter(eid => !eventsWithParentRace.has(eid));
+  
+  if (missingRaceEventIds.length > 0) {
+    for (let i = 0; i < missingRaceEventIds.length; i += 50) {
+      const chunk = missingRaceEventIds.slice(i, i + 50);
+      // Find parent race sessions for these events
+      const { data: raceSessions } = await supabase
+        .from("v2_sessions")
+        .select("id, event_id, session_type, parent_session_id")
+        .in("event_id", chunk)
+        .is("parent_session_id", null)
+        .in("session_type", ["race", "endurance_race", "sprint_race"]);
+      
+      if (raceSessions && raceSessions.length > 0) {
+        const raceSessionIds = raceSessions.map((s: any) => s.id);
+        const carNumbers = new Set<string>();
+        for (const eid of chunk) {
+          const cars = driverEventCarNumbers.get(eid);
+          if (cars) cars.forEach(c => carNumbers.add(c));
+        }
+        
+        const { data: coDriverRaceResults } = await supabase
+          .from("v2_race_results")
+          .select("id, position, status, dnf_reason, car_number, session_id, driver_id, extra_data, v2_sessions(id, event_id, session_type, parent_session_id, name)")
+          .in("session_id", raceSessionIds)
+          .in("car_number", [...carNumbers]);
+        
+        if (coDriverRaceResults) {
+          for (const r of coDriverRaceResults) {
+            if (!r.v2_sessions) continue;
+            const eventId = r.v2_sessions.event_id;
+            const cars = driverEventCarNumbers.get(eventId);
+            if (cars && cars.has(r.car_number)) {
+              allResults.push({
+                id: r.id,
+                position: r.position,
+                status: r.status || null,
+                dnf_reason: r.dnf_reason || null,
+                car_number: r.car_number,
+                session_id: r.session_id,
+                driver_id: r.driver_id,
+                session_type: r.v2_sessions.session_type,
+                event_id: r.v2_sessions.event_id,
+                parent_session_id: r.v2_sessions.parent_session_id,
+                source: "race",
+                extra_data: r.extra_data || null,
+                isHourSubSession: false,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // For endurance events, if we have hour sub-sessions, exclude the parent endurance_race
+  // result to avoid double-counting — hour sub-sessions give per-driver granularity
+  const eventsWithHourSubs = new Set<string>();
+  for (const r of allResults) {
+    if (r.isHourSubSession) eventsWithHourSubs.add(r.event_id);
+  }
+  
+  // Remove parent endurance_race results for events that have hour sub-sessions
+  // (hour sub-sessions are more granular and per-driver)
+  allResults = allResults.filter(r => {
+    if (r.session_type === "endurance_race" && !r.isHourSubSession && eventsWithHourSubs.has(r.event_id)) {
+      return false; // Skip parent result, use hour sub-sessions instead
+    }
+    return true;
+  });
 
   if (allResults.length === 0) {
     await upsertFingerprint(supabase, driverId, null, null, null, null, null, 0, 0, 0, {});
@@ -652,15 +746,41 @@ async function calculateFingerprint(supabase: any, driverId: string) {
   let dws: number | null = null;
   let dws_band: string | null = null;
 
+  // Collect all session IDs including hour sub-sessions for weather matching
+  // For endurance events, weather is often on the hour sub-sessions
   const allIncludedSessionIds = eventSWDSList.flatMap((e) => e.sessionIds);
+  
+  // Also find hour sub-session IDs for events (they carry weather data)
+  const includedEventIds = [...new Set(eventSWDSList.map((e) => e.eventId))];
+  const subSessionIds: string[] = [];
+  for (let i = 0; i < includedEventIds.length; i += 50) {
+    const chunk = includedEventIds.slice(i, i + 50);
+    const { data: subSessions } = await supabase
+      .from("v2_sessions")
+      .select("id, event_id, parent_session_id")
+      .in("event_id", chunk)
+      .not("parent_session_id", "is", null);
+    if (subSessions) {
+      for (const s of subSessions) subSessionIds.push(s.id);
+    }
+  }
+
+  const allWeatherSessionIds = [...new Set([...allIncludedSessionIds, ...subSessionIds])];
   const weatherChunks: string[][] = [];
-  for (let i = 0; i < allIncludedSessionIds.length; i += 50) {
-    weatherChunks.push(allIncludedSessionIds.slice(i, i + 50));
+  for (let i = 0; i < allWeatherSessionIds.length; i += 50) {
+    weatherChunks.push(allWeatherSessionIds.slice(i, i + 50));
+  }
+
+  // Map sub-session → event for weather aggregation
+  const subSessionEventMap: Record<string, string> = {};
+  for (const r of allResults) {
+    subSessionEventMap[r.session_id] = r.event_id;
   }
 
   interface WeatherInfo {
     sessionId: string;
     isWet: boolean;
+    eventId?: string;
   }
 
   const weatherMap: Record<string, WeatherInfo> = {};
@@ -676,12 +796,29 @@ async function calculateFingerprint(supabase: any, driverId: string) {
       weatherMap[w.session_id] = { sessionId: w.session_id, isWet };
     }
   }
+  
+  // Build event → isWet map including sub-session weather
+  const eventWetMap: Record<string, boolean> = {};
+  for (const [sid, wInfo] of Object.entries(weatherMap)) {
+    if (wInfo.isWet) {
+      // Find which event this session belongs to
+      const eventId = subSessionEventMap[sid];
+      if (eventId) eventWetMap[eventId] = true;
+    }
+  }
+  // Also check sub-sessions by matching event via the sub-session query
+  for (const r of allResults) {
+    if (weatherMap[r.session_id]?.isWet) {
+      eventWetMap[r.event_id] = true;
+    }
+  }
 
   const wetEventSWDS: number[] = [];
   const dryEventSWDS: number[] = [];
 
   for (const ev of eventSWDSList) {
-    const anyWet = ev.sessionIds.some((sid) => weatherMap[sid]?.isWet);
+    // Check direct session weather + sub-session weather via eventWetMap
+    const anyWet = ev.sessionIds.some((sid) => weatherMap[sid]?.isWet) || eventWetMap[ev.eventId];
     if (anyWet) {
       wetEventSWDS.push(ev.swds);
     } else {
