@@ -260,6 +260,30 @@ export type Database = {
         }
         Relationships: []
       }
+      dismissed_car_duplicates: {
+        Row: {
+          car_id_1: string
+          car_id_2: string
+          dismissed_at: string
+          dismissed_by: string | null
+          id: string
+        }
+        Insert: {
+          car_id_1: string
+          car_id_2: string
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+        }
+        Update: {
+          car_id_1?: string
+          car_id_2?: string
+          dismissed_at?: string
+          dismissed_by?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
       dismissed_circuit_duplicates: {
         Row: {
           circuit_id_1: string
