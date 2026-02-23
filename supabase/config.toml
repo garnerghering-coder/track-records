@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.import-imsa-results]
 verify_jwt = false
+
+[functions.resolve-dnf-reasons]
+verify_jwt = false
