@@ -31,7 +31,13 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
   const updatePosition = useCallback(() => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    const dialog = inputRef.current.closest('[role="dialog"]') as HTMLElement | null;
+    if (dialog) {
+      const dialogRect = dialog.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom - dialogRect.top + 2, left: rect.left - dialogRect.left, width: rect.width });
+    } else {
+      setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+    }
   }, []);
 
   useEffect(() => {
@@ -100,11 +106,16 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
 
   const entityLabel = entityType === "season" ? "season (year)" : entityType;
 
+  const portalTarget = containerRef.current?.closest('[role="dialog"]') as HTMLElement | null;
+  const posStyle = portalTarget
+    ? { position: 'absolute' as const, top: dropdownPos?.top, left: dropdownPos?.left, width: dropdownPos?.width }
+    : { position: 'fixed' as const, top: dropdownPos?.top, left: dropdownPos?.left, width: dropdownPos?.width };
+
   const dropdown = open && dropdownPos && createPortal(
     <div
       id={`ac-dropdown-${entityType}`}
-      className="fixed z-[9999] rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto"
-      style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+      className="z-[9999] rounded-md border border-border bg-popover shadow-lg max-h-48 overflow-y-auto"
+      style={posStyle}
       onPointerDown={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
     >
@@ -120,7 +131,7 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
         + Create new {entityLabel}
       </button>
     </div>,
-    document.body
+    portalTarget || document.body
   );
 
   return (
