@@ -105,8 +105,11 @@ Deno.serve(async (req: Request) => {
         .select("driver_id")
         .not("driver_id", "is", null);
       const uniqueIds = [...new Set((drivers || []).map((d: any) => d.driver_id))];
-      driverIds = uniqueIds as string[];
-      console.log(`Batch mode: recalculating ${driverIds.length} drivers`);
+      // Support offset/limit for chunked batch runs
+      const offset = body.offset || 0;
+      const limit = body.limit || 20;
+      driverIds = (uniqueIds as string[]).slice(offset, offset + limit);
+      console.log(`Batch mode: recalculating ${driverIds.length} drivers (offset=${offset}, total=${uniqueIds.length})`);
     }
 
     if (driverIds.length === 0) {
