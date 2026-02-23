@@ -222,10 +222,13 @@ function DataQualitySection() {
     setAiResolving(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resolve-dnf-reasons`,
         {
           method: "POST",
+          signal: controller.signal,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${session?.access_token}`,
@@ -233,6 +236,7 @@ function DataQualitySection() {
           },
         }
       );
+      clearTimeout(timeout);
       const result = await resp.json();
       if (!resp.ok) throw new Error(result.error || "Failed");
       const parts: string[] = [];
@@ -241,7 +245,8 @@ function DataQualitySection() {
       toast.success(`AI Resolve: ${parts.join(", ") || "Nothing to resolve"}`);
       scanForIssues();
     } catch (e: any) {
-      toast.error(`AI resolve failed: ${e.message}`);
+      const msg = e.name === "AbortError" ? "Request timed out — try again, it processes in batches" : e.message;
+      toast.error(`AI resolve failed: ${msg}`);
     }
     setAiResolving(false);
   };
