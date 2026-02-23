@@ -32,7 +32,7 @@ function namesAreSimilar(a: string, b: string): boolean {
 
 interface DataIssue {
   id: string;
-  type: "missing_reason" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality" | "missing_position";
+  type: "missing_reason" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality" | "missing_position" | "missing_class";
   severity: "warning" | "error";
   title: string;
   description: string;
@@ -170,6 +170,66 @@ function DataQualitySection() {
         sessionId: sess?.id,
         resultId: r.id,
       });
+    }
+
+    // 5. Race results missing class in multiclass seasons
+    const { data: multiclassSeasons } = await supabase
+      .from("v2_seasons")
+      .select("id, year, is_multiclass, v2_series(name)")
+      .eq("is_multiclass", true);
+
+    if (multiclassSeasons && multiclassSeasons.length > 0) {
+      const seasonIds = multiclassSeasons.map((s: any) => s.id);
+      // Get all events in multiclass seasons
+      const { data: mcEvents } = await supabase
+        .from("v2_events")
+        .select("id, name, season_id")
+        .in("season_id", seasonIds);
+
+      if (mcEvents && mcEvents.length > 0) {
+        const eventIds = mcEvents.map((e: any) => e.id);
+        // Get sessions for those events
+        const { data: mcSessions } = await supabase
+          .from("v2_sessions")
+          .select("id, name, event_id, session_type, parent_session_id")
+          .in("event_id", eventIds)
+          .is("parent_session_id", null);
+
+        if (mcSessions && mcSessions.length > 0) {
+          const sessIds = mcSessions.map((s: any) => s.id);
+          // Check race results missing class
+          const { data: noClassResults } = await supabase
+            .from("v2_race_results" as any)
+            .select("id, position, car_number, session_id, extra_data")
+            .in("session_id", sessIds)
+            .limit(500);
+
+          const eventMap: Record<string, any> = {};
+          for (const e of mcEvents) eventMap[e.id] = e;
+          const sessMap: Record<string, any> = {};
+          for (const s of mcSessions as any[]) sessMap[s.id] = s;
+          const seasonMap: Record<string, any> = {};
+          for (const s of multiclassSeasons as any[]) seasonMap[s.id] = s;
+
+          for (const r of (noClassResults || []) as any[]) {
+            const cls = r.extra_data?.Class;
+            if (cls) continue; // has class
+            const sess = sessMap[r.session_id];
+            if (!sess) continue;
+            const evt = eventMap[sess.event_id];
+            if (!evt) continue;
+            found.push({
+              id: `noclass-${r.id}`,
+              type: "missing_class",
+              severity: "warning",
+              title: `Missing class — P${r.position || "?"} #${r.car_number || "?"}`,
+              description: `${evt.name} → ${sess.name}`,
+              linkTo: `/manage/events/${evt.id}/session/${sess.id}`,
+              linkLabel: "Edit Session",
+            });
+          }
+        }
+      }
     }
 
     setIssues(found);
