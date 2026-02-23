@@ -170,14 +170,10 @@ export default function ManageSessionResults() {
       const newKeys = allKeys.filter(k => !existing.includes(k));
       setColumnOrder([...existing, ...newKeys]);
     } else {
-      setColumnOrder(prev => {
-        const defaults = getDefaultColumns();
-        const customKeys = customColumns.map(c => `_custom_${c.key}`);
-        const allKeys = [...defaults, ...customKeys];
-        const existing = prev.filter(k => allKeys.includes(k));
-        const newKeys = allKeys.filter(k => !existing.includes(k));
-        return existing.length > 0 ? [...existing, ...newKeys] : allKeys;
-      });
+      // No saved order — always use the fresh defaults (ensures multiclass columns appear in correct position)
+      const defaults = getDefaultColumns();
+      const customKeys = customColumns.map(c => `_custom_${c.key}`);
+      setColumnOrder([...defaults, ...customKeys]);
     }
   }, [session, type, customColumns, getDefaultColumns]);
 
