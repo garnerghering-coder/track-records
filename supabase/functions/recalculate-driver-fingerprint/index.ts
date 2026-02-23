@@ -96,10 +96,21 @@ Deno.serve(async (req: Request) => {
     );
 
     const body = await req.json().catch(() => ({}));
-    const driverIds: string[] = body.driver_ids || (body.driver_id ? [body.driver_id] : []);
+    let driverIds: string[] = body.driver_ids || (body.driver_id ? [body.driver_id] : []);
+
+    // Batch mode: recalculate all drivers who have results
+    if (body.all === true && driverIds.length === 0) {
+      const { data: drivers } = await supabase
+        .from("v2_race_results")
+        .select("driver_id")
+        .not("driver_id", "is", null);
+      const uniqueIds = [...new Set((drivers || []).map((d: any) => d.driver_id))];
+      driverIds = uniqueIds as string[];
+      console.log(`Batch mode: recalculating ${driverIds.length} drivers`);
+    }
 
     if (driverIds.length === 0) {
-      return new Response(JSON.stringify({ error: "driver_id or driver_ids required" }), {
+      return new Response(JSON.stringify({ error: "driver_id, driver_ids, or all:true required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
