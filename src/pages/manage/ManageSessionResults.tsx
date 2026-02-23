@@ -747,7 +747,7 @@ export default function ManageSessionResults() {
     if (col === "team") return <AutocompleteField entityType="team" value={row.team} onChange={v => updateRow(row._key, "team", v)} />;
     if (col === "car") return <AutocompleteField entityType="car" value={row.car} onChange={v => updateRow(row._key, "car", v)} />;
     if (col === "status") {
-      const DNF_REASONS = ["Technical", "Not-at-Fault", "At-Fault"];
+      const DNF_REASONS = ["Mechanical Failure", "Technical Failure (Non-Contact)", "Not At Fault – Contact", "At Fault – Penalized", "At Fault – Self-Inflicted (No Penalty)", "Other"];
       const DSQ_REASONS = ["Technical", "Driving Conduct"];
       const showReason = row.status === "dnf" || row.status === "dsq";
       const reasonOptions = row.status === "dnf" ? DNF_REASONS : DSQ_REASONS;
