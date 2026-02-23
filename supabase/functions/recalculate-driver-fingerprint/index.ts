@@ -105,11 +105,27 @@ Deno.serve(async (req: Request) => {
         .select("driver_id")
         .not("driver_id", "is", null);
       const uniqueIds = [...new Set((drivers || []).map((d: any) => d.driver_id))];
-      // Support offset/limit for chunked batch runs
       const offset = body.offset || 0;
-      const limit = body.limit || 20;
+      const limit = body.limit || 15;
       driverIds = (uniqueIds as string[]).slice(offset, offset + limit);
-      console.log(`Batch mode: recalculating ${driverIds.length} drivers (offset=${offset}, total=${uniqueIds.length})`);
+      const total = uniqueIds.length;
+      console.log(`Batch mode: recalculating ${driverIds.length} drivers (offset=${offset}, total=${total})`);
+
+      // Self-chain: process this chunk, then invoke self for the next chunk
+      if (offset + limit < total) {
+        const selfUrl = `${Deno.env.get("SUPABASE_URL")!}/functions/v1/recalculate-driver-fingerprint`;
+        const nextBody = JSON.stringify({ all: true, offset: offset + limit, limit });
+        // Fire-and-forget: don't await
+        fetch(selfUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!}`,
+          },
+          body: nextBody,
+        }).catch((e) => console.error("Self-chain error:", e));
+        console.log(`Queued next chunk at offset ${offset + limit}`);
+      }
     }
 
     if (driverIds.length === 0) {

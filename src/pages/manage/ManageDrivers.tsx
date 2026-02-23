@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Search, Sparkles } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Sparkles, RefreshCw, Calculator } from "lucide-react";
 
 interface Driver { id: string; full_name: string; short_name: string | null; nationality: string | null; date_of_birth: string | null; }
 
@@ -18,6 +18,8 @@ export default function ManageDrivers() {
   const [form, setForm] = useState({ full_name: "", nationality: "", date_of_birth: "" });
   const [search, setSearch] = useState("");
   const [enriching, setEnriching] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcSingle, setRecalcSingle] = useState<string | null>(null);
 
   const { data: drivers = [], isLoading } = useQuery({
     queryKey: ["v2_drivers"],
@@ -67,11 +69,46 @@ export default function ManageDrivers() {
       setEnriching(false);
     }
   };
+
+  const handleRecalcAll = async () => {
+    setRecalculating(true);
+    try {
+      const { error } = await supabase.functions.invoke("recalculate-driver-fingerprint", {
+        body: { all: true, offset: 0, limit: 15 },
+      });
+      if (error) throw error;
+      toast.success("Fingerprint recalculation started for all drivers. It will continue in the background.");
+    } catch (e: any) {
+      toast.error(e.message || "Recalculation failed");
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const handleRecalcSingle = async (driverId: string) => {
+    setRecalcSingle(driverId);
+    try {
+      const { data, error } = await supabase.functions.invoke("recalculate-driver-fingerprint", {
+        body: { driver_id: driverId },
+      });
+      if (error) throw error;
+      toast.success("Fingerprint recalculated");
+    } catch (e: any) {
+      toast.error(e.message || "Recalculation failed");
+    } finally {
+      setRecalcSingle(null);
+    }
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Drivers</h1>
         <div className="flex items-center gap-2">
+          <Button onClick={handleRecalcAll} size="sm" variant="outline" disabled={recalculating}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${recalculating ? "animate-spin" : ""}`} />
+            {recalculating ? "Starting…" : "Recalculate All"}
+          </Button>
           {missingCount > 0 && (
             <Button onClick={handleEnrich} size="sm" variant="outline" disabled={enriching}>
               <Sparkles className="h-4 w-4 mr-1" />
@@ -95,6 +132,9 @@ export default function ManageDrivers() {
                 <TableCell>{d.nationality}</TableCell>
                 <TableCell>{d.date_of_birth}</TableCell>
                 <TableCell className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRecalcSingle(d.id)} disabled={recalcSingle === d.id}>
+                    <Calculator className={`h-3 w-3 ${recalcSingle === d.id ? "animate-spin" : ""}`} />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(d)}><Pencil className="h-3 w-3" /></Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => del.mutate(d.id)}><Trash2 className="h-3 w-3" /></Button>
                 </TableCell>
