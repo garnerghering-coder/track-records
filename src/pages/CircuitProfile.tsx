@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Trophy, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import TrackFingerprint from "@/components/TrackFingerprint";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { formatDateRange } from "@/lib/date-utils";
-import { computeTrackMetrics, categoryBubbleClasses } from "@/lib/track-calculations";
+import { computeTrackMetrics } from "@/lib/track-calculations";
 import ReportDialog from "@/components/ReportDialog";
 import FlagImage from "@/components/FlagImage";
 
@@ -129,8 +130,20 @@ const CircuitProfile = () => {
         {/* Track Layouts with Metrics */}
         {layouts.length > 0 && (
           <div className="mb-8">
-            <h2 className="font-display text-xl font-semibold text-foreground mb-4">Track Configurations</h2>
-            <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="font-display text-xl font-semibold text-foreground">Track Fingerprint</h2>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[240px] text-xs">
+                    These characteristics are calculated using mathematical formulas derived from track layout data — no AI is used.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="space-y-4">
               {layouts.map((l: any) => {
                 const m = computeTrackMetrics(
                   l.length_km ? Number(l.length_km) : null,
@@ -139,41 +152,16 @@ const CircuitProfile = () => {
                   l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
                   l.heavy_braking_corners
                 );
-                const metrics = [
-                  m.tcsCategory && { title: "Track Character", label: m.tcsCategory, classes: categoryBubbleClasses(m.tcsCategory) },
-                  m.eiCategory && { title: "Elevation", label: m.eiCategory, classes: categoryBubbleClasses(m.eiCategory) },
-                  m.csiCategory && { title: "Corner Severity", label: m.csiCategory, classes: categoryBubbleClasses(m.csiCategory) },
-                  m.tdiCategory && { title: "Track Demand", label: m.tdiCategory, classes: categoryBubbleClasses(m.tdiCategory) },
-                ].filter(Boolean) as { title: string; label: string; classes: string }[];
-
                 return (
-                  <div key={l.id} className="rounded-lg border border-border bg-card p-4">
-                    <div>
+                  <div key={l.id} className="rounded-lg border border-border bg-card p-5">
+                    <div className="mb-4">
                       <span className="font-display text-sm font-semibold text-card-foreground">{l.name}</span>
                       <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                         {l.length_km && <span>{l.length_km} km</span>}
                         {l.turns != null && <span>{l.turns} turns</span>}
                       </div>
                     </div>
-                    {metrics.length > 0 && (
-                      <div className="flex flex-wrap items-center gap-2 mt-3">
-                        {metrics.map((t) => (
-                          <span key={t.title} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${t.classes}`}>
-                            <span className="opacity-60 font-medium">{t.title}:</span> {t.label}
-                          </span>
-                        ))}
-                        <TooltipProvider delayDuration={200}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[240px] text-xs">
-                              These characteristics are calculated using mathematical formulas derived from track layout data — no AI is used.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    )}
+                    <TrackFingerprint metrics={m} />
                   </div>
                 );
               })}
