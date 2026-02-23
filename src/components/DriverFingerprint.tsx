@@ -170,15 +170,15 @@ function InsufficientGauge({ title, large }: { title: string; large?: boolean })
   );
 }
 
-export default function DriverFingerprint({ data }: { data: DriverFingerprintData }) {
-  // Don't render at all if no data
-  if (data.events_included === 0) return null;
+export default function DriverFingerprint({ data }: { data: DriverFingerprintData | null }) {
+  const empty: DriverFingerprintData = { dps: null, dps_band: null, dcs: null, dcs_band: null, das: null, das_band: null, dws: null, dws_band: null, events_included: 0 };
+  const d = data || empty;
 
   const gauges: { key: string; value: number | null; band: string | null; title: string }[] = [
-    { key: "dps", value: data.dps, band: data.dps_band, title: "Driver Performance" },
-    { key: "dcs", value: data.dcs, band: data.dcs_band, title: "Consistency" },
-    { key: "das", value: data.das, band: data.das_band, title: "Adaptability" },
-    { key: "dws", value: data.dws, band: data.dws_band, title: "Wet Weather" },
+    { key: "dps", value: d.dps, band: d.dps_band, title: "Driver Performance" },
+    { key: "dcs", value: d.dcs, band: d.dcs_band, title: "Consistency" },
+    { key: "das", value: d.das, band: d.das_band, title: "Adaptability" },
+    { key: "dws", value: d.dws, band: d.dws_band, title: "Wet Weather" },
   ];
 
   return (
