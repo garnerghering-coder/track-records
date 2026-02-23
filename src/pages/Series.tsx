@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, ArrowLeft, Trophy } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 
 const SeriesPage = () => {
   const [seriesList, setSeriesList] = useState<any[]>([]);
@@ -26,6 +27,7 @@ const SeriesPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Series & Championships" description="Browse motorsport series and their race history." canonical="/series" />
       <Header />
       <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">

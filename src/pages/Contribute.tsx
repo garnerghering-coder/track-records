@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Search, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import CountrySelect from "@/components/CountrySelect";
 import { checkFieldsForProfanity } from "@/lib/profanity-filter";
 
@@ -423,6 +424,7 @@ const ContributePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Contribute" description="Help build the motorsport database. Add results, drivers, or teams." canonical="/contribute" />
       <Header />
 
       <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>

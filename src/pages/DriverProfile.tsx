@@ -9,6 +9,7 @@ import { ArrowLeft, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
 import DriverFingerprint, { DriverFingerprintData } from "@/components/DriverFingerprint";
@@ -265,6 +266,11 @@ const DriverProfilePage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={driver.full_name}
+        description={`Motorsport profile for ${driver.full_name}${driver.nationality ? ` from ${driver.nationality}` : ""}. View race results and statistics.`}
+        canonical={`/driver/${id}`}
+      />
       <Header />
       <section className="pt-24 pb-12" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">

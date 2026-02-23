@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
+import SEOHead from "@/components/SEOHead";
 import { formatDateRange } from "@/lib/date-utils";
 import { computeTrackMetrics, categoryColor } from "@/lib/track-calculations";
 
@@ -266,6 +267,7 @@ const SearchPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Search" description="Search across drivers, teams, events, series, circuits, and cars." canonical="/search" />
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">

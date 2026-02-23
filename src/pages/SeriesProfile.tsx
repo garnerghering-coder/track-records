@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Trophy } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import { formatDateRange } from "@/lib/date-utils";
 import FlagImage from "@/components/FlagImage";
 
@@ -133,6 +134,11 @@ const SeriesProfile = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={series.name}
+        description={`Motorsport series profile for ${series.name}. View seasons and events.`}
+        canonical={`/series/${id}`}
+      />
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">

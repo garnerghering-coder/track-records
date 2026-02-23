@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WelcomeLightbox from "@/components/WelcomeLightbox";
+import SEOHead from "@/components/SEOHead";
 import heroImage from "@/assets/hero-racing.jpg";
 import { formatDateRange } from "@/lib/date-utils";
 
@@ -58,8 +59,12 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title="Track Records – The Motorsport Database"
+        description="Search drivers, teams, series, circuits, and race results — all in one place."
+        canonical="/"
+      />
       <WelcomeLightbox />
-      <Header />
 
       {/* Hero */}
       <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">

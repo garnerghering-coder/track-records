@@ -1,9 +1,11 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 
 const Privacy = () => {
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Privacy Policy" description="Learn how Track Records collects, uses, and protects your data." canonical="/privacy" />
       <Header />
       <main className="container max-w-3xl py-24">
         <h1 className="font-display text-4xl font-bold mb-2 text-foreground">Privacy Policy</h1>

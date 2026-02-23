@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Trophy, CheckCircle, MapPin, Calendar, Pencil } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 import ReportDialog from "@/components/ReportDialog";
 import FlagImage from "@/components/FlagImage";
 
@@ -154,6 +155,11 @@ const EventDetailPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead
+        title={event.event_name}
+        description={`${event.event_name} – ${event.series_name} ${event.season_year}. View race entries and results.`}
+        canonical={`/event/${id}`}
+      />
       <Header />
 
       <section

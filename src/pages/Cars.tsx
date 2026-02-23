@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Search as SearchIcon, ArrowLeft } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SEOHead from "@/components/SEOHead";
 
 const CarsPage = () => {
   const [cars, setCars] = useState<any[]>([]);
@@ -33,6 +34,7 @@ const CarsPage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOHead title="Cars" description="Browse car models used in motorsport." canonical="/cars" />
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">
