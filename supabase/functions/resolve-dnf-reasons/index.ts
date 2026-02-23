@@ -7,15 +7,79 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const BATCH_SIZE = 15;
+
+const SYSTEM_PROMPT = `You are a motorsport data specialist. Classify DNF/DSQ reasons for race results.
+
+FOR DSQ, choose exactly one:
+- "Technical" — car failed post-race scrutineering, weight, ride height, fuel sample, etc.
+- "Driving Conduct" — penalty for dangerous driving, repeated track limits, ignoring flags, etc.
+
+FOR DNF, choose exactly one:
+- "Mechanical Failure" — engine, gearbox, PU, hydraulics, suspension, electrical, brake failure, or puncture not from contact.
+- "Technical Failure (Non-Contact)" — operational/damage failure without contact: floor damage from kerbs, overheating from debris, cooling issues, bodywork failure.
+- "Not At Fault – Contact" — eliminated by contact caused by another competitor, not this driver's fault.
+- "At Fault – Penalized" — official penalty for causing collision, dangerous driving leading to retirement.
+- "At Fault – Self-Inflicted (No Penalty)" — single-car accident, loss of control, spin into barrier/gravel, self-caused retirement without penalty.
+- "Other" — ONLY if none of the above fit.
+
+Respond with ONLY a JSON array. Each element: {"id":"<result_id>","reason":"<exact reason string>","confidence":"high"|"medium"|"low"}
+No other text. Prefer "Mechanical Failure" for generic DNFs where specifics are unknown.`;
+
+async function processBatch(admin: any, batch: any[]): Promise<{ resolved: number; skippedLow: number }> {
+  const entries = batch.map((r: any, i: number) => {
+    const evt = r.session?.event;
+    const season = evt?.season;
+    const series = season?.series;
+    return `${i + 1}. [${r.id}] ${r.status.toUpperCase()}, ${r.driver?.full_name || "?"}, ${r.team?.full_name || "?"}, #${r.car_number || "?"}, P${r.position || "?"}, ${evt?.name || "?"}, ${series?.name || "?"} ${season?.year || "?"}`;
+  }).join("\n");
+
+  const resp = await callAI({
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: `Classify these ${batch.length} results:\n${entries}` },
+    ],
+    temperature: 0.1,
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error(`AI batch failed (${resp.status}): ${errText}`);
+    return { resolved: 0, skippedLow: 0 };
+  }
+
+  const aiData = await resp.json();
+  const content = aiData.choices?.[0]?.message?.content || "";
+  const jsonMatch = content.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    console.error("AI did not return valid JSON for batch");
+    return { resolved: 0, skippedLow: 0 };
+  }
+
+  const classifications: { id: string; reason: string; confidence: string }[] = JSON.parse(jsonMatch[0]);
+
+  let resolved = 0;
+  let skippedLow = 0;
+  for (const c of classifications) {
+    if (c.confidence === "low") { skippedLow++; continue; }
+    const { error: upErr } = await admin
+      .from("v2_race_results")
+      .update({ dnf_reason: c.reason })
+      .eq("id", c.id);
+    if (!upErr) resolved++;
+  }
+  return { resolved, skippedLow };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const admin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
 
-    // Fetch all race results with DNF/DSQ but no reason, with context
     const { data: results, error } = await admin
       .from("v2_race_results")
       .select(`
@@ -29,78 +93,25 @@ serve(async (req) => {
 
     if (error) throw error;
 
-    // Filter out endurance sub-sessions
     const toResolve = (results || []).filter((r: any) => !r.session?.parent_session_id);
 
     if (toResolve.length === 0) {
-      return new Response(JSON.stringify({ resolved: 0, message: "No missing reasons found" }), {
+      return new Response(JSON.stringify({ resolved: 0, skippedLow: 0, total: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build a compact list for AI — batch all into one call for minimal credits
-    const entries = toResolve.map((r: any, i: number) => {
-      const evt = r.session?.event;
-      const season = evt?.season;
-      const series = season?.series;
-      return `${i + 1}. [${r.id}] Status: ${r.status.toUpperCase()}, Driver: ${r.driver?.full_name || "Unknown"}, Team: ${r.team?.full_name || "Unknown"}, Car #${r.car_number || "?"}, P${r.position || "?"}, Event: ${evt?.name || "?"}, Series: ${series?.name || "?"} ${season?.year || "?"}`;
-    }).join("\n");
-
-    const systemPrompt = `You are a motorsport data specialist. You must classify DNF/DSQ reasons for race results.
-
-FOR DSQ, choose exactly one:
-- "Technical" — car failed post-race scrutineering, weight, ride height, fuel sample, etc.
-- "Driving Conduct" — penalty for dangerous driving, repeated track limits, ignoring flags, etc.
-
-FOR DNF, choose exactly one:
-- "Mechanical Failure" — engine, gearbox, PU, hydraulics, suspension, electrical, brake failure, or puncture not from contact.
-- "Technical Failure (Non-Contact)" — operational/damage failure without contact: floor damage from kerbs, overheating from debris, cooling issues, bodywork failure.
-- "Not At Fault – Contact" — eliminated by contact caused by another competitor, not this driver's fault.
-- "At Fault – Penalized" — official penalty for causing collision, dangerous driving leading to retirement.
-- "At Fault – Self-Inflicted (No Penalty)" — single-car accident, loss of control, spin into barrier/gravel, self-caused retirement without penalty.
-- "Other" — ONLY if none of the above fit and you truly cannot determine.
-
-Respond with ONLY a JSON array. Each element: {"id":"<result_id>","reason":"<exact reason string>","confidence":"high"|"medium"|"low"}
-Do NOT include any other text. If unsure, use your best judgment based on common racing patterns for that series/era. Prefer "Mechanical Failure" for generic DNFs where specifics are unknown.`;
-
-    const resp = await callAI({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Classify these ${toResolve.length} results:\n${entries}` },
-      ],
-      temperature: 0.1,
-    });
-
-    if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(`AI call failed (${resp.status}): ${errText}`);
+    // Process in batches of BATCH_SIZE
+    let totalResolved = 0;
+    let totalSkipped = 0;
+    for (let i = 0; i < toResolve.length; i += BATCH_SIZE) {
+      const batch = toResolve.slice(i, i + BATCH_SIZE);
+      const { resolved, skippedLow } = await processBatch(admin, batch);
+      totalResolved += resolved;
+      totalSkipped += skippedLow;
     }
 
-    const aiData = await resp.json();
-    const content = aiData.choices?.[0]?.message?.content || "";
-
-    // Extract JSON array from response
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error("AI did not return valid JSON array");
-
-    const classifications: { id: string; reason: string; confidence: string }[] = JSON.parse(jsonMatch[0]);
-
-    // Apply updates
-    let resolved = 0;
-    let skippedLow = 0;
-    for (const c of classifications) {
-      if (c.confidence === "low") {
-        skippedLow++;
-        continue;
-      }
-      const { error: upErr } = await admin
-        .from("v2_race_results")
-        .update({ dnf_reason: c.reason })
-        .eq("id", c.id);
-      if (!upErr) resolved++;
-    }
-
-    return new Response(JSON.stringify({ resolved, skippedLow, total: toResolve.length }), {
+    return new Response(JSON.stringify({ resolved: totalResolved, skippedLow: totalSkipped, total: toResolve.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
