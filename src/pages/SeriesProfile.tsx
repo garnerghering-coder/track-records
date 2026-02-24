@@ -222,6 +222,17 @@ const SeriesProfile = () => {
           }));
           setEvents(mappedEvents);
 
+          // Fetch team season aliases for display names
+          const { data: teamSeasonNames } = await supabase
+            .from("v2_team_season_names" as any)
+            .select("team_id, season_id, display_name")
+            .in("season_id", seasonIds);
+          // Build lookup: "teamId|seasonId" -> display_name
+          const teamAliasMap = new Map<string, string>();
+          for (const tsn of (teamSeasonNames || []) as any[]) {
+            teamAliasMap.set(`${tsn.team_id}|${tsn.season_id}`, tsn.display_name);
+          }
+
           // Compute standings per season from points data
           const standingsMap: Record<string, StandingEntry[]> = {};
 
@@ -253,10 +264,10 @@ const SeriesProfile = () => {
             // Fetch results with points
             const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
               supabase.from("v2_race_results" as any)
-                .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)")
+                .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
                 .in("session_id", sessIds),
               supabase.from("v2_qualifying_results" as any)
-                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)")
+                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
                 .in("session_id", sessIds),
             ]);
 
@@ -279,8 +290,9 @@ const SeriesProfile = () => {
               if (!r.car_number) continue;
               const pts = r.points != null ? Number(r.points) : 0;
               const className = r.extra_data?.Class || r.extra_data?.class || null;
-              // Use short_name (alias) if available, fallback to full_name
-              const teamDisplayName = r.v2_teams?.short_name || r.v2_teams?.full_name || null;
+              // Use season alias from v2_team_season_names, fallback to full_name
+              const teamId = r.v2_teams?.id || null;
+              const teamDisplayName = (teamId ? teamAliasMap.get(`${teamId}|${seasonId}`) : null) || r.v2_teams?.full_name || null;
 
               if (!carMap.has(r.car_number)) {
                 carMap.set(r.car_number, {
