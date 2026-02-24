@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -74,6 +74,8 @@ export default function PositionProgressionChart({
   const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
   const [highlightedCar, setHighlightedCar] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"overall" | "class">("overall");
+  const [hoveredCar, setHoveredCar] = useState<string | null>(null);
+  const [hoveredHour, setHoveredHour] = useState<number | null>(null);
 
   // Fetch all hour results in one batch
   const hourIds = hourSessions.map((h) => h.id);
@@ -310,9 +312,74 @@ export default function PositionProgressionChart({
         </div>
       </div>
 
-      <div className="w-full" style={{ height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}>
+      <div
+        className="w-full relative"
+        style={{ height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}
+        onMouseMove={(e) => {
+          // Find nearest car line by Y position
+          const chartArea = e.currentTarget.querySelector('.recharts-cartesian-grid') as SVGElement | null;
+          if (!chartArea) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const mouseY = e.clientY - rect.top;
+          const mouseX = e.clientX - rect.left;
+
+          // Get the plot area bounds from the responsive container
+          const plotArea = e.currentTarget.querySelector('.recharts-surface') as SVGElement | null;
+          if (!plotArea) return;
+
+          // Find the nearest hour (X snap)
+          const totalHours = hourSessions.length;
+          // Approximate plot area from margins
+          const svgRect = plotArea.getBoundingClientRect();
+          const plotLeft = svgRect.left - rect.left + 50; // ~left margin
+          const plotRight = svgRect.right - rect.left - 20; // ~right margin
+          const plotTop = svgRect.top - rect.top + 10;
+          const plotBottom = svgRect.bottom - rect.top - 30;
+          const plotWidth = plotRight - plotLeft;
+          const plotHeight = plotBottom - plotTop;
+
+          if (mouseX < plotLeft || mouseX > plotRight || mouseY < plotTop || mouseY > plotBottom) {
+            setHoveredCar(null);
+            return;
+          }
+
+          // Determine hour
+          const hourFrac = (mouseX - plotLeft) / plotWidth;
+          const hourIdx = Math.round(hourFrac * (totalHours - 1));
+          const hour = Math.max(1, Math.min(totalHours, hourIdx + 1));
+
+          // Determine mouse position value (Y -> position, reversed)
+          const yFrac = (mouseY - plotTop) / plotHeight;
+          const mousePos = 1 + yFrac * (maxPosition - 1);
+
+          // Find nearest car at this hour
+          const hourData = tooltipLookup[hour] || {};
+          let nearestCar: string | null = null;
+          let nearestDist = Infinity;
+
+          for (const cn of Object.keys(hourData)) {
+            const pt = hourData[cn];
+            const pos = viewMode === "class" && pt.classPosition ? parseInt(pt.classPosition, 10) : pt.position;
+            if (pos === null) continue;
+            const dist = Math.abs(pos - mousePos);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestCar = cn;
+            }
+          }
+
+          // Only snap if within ~2 positions
+          if (nearestCar && nearestDist < 3) {
+            setHoveredCar(nearestCar);
+            setHoveredHour(hour);
+          } else {
+            setHoveredCar(null);
+          }
+        }}
+        onMouseLeave={() => setHoveredCar(null)}
+      >
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
+          <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 50 }}>
             <XAxis
               dataKey="hourLabel"
               tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
@@ -329,42 +396,11 @@ export default function PositionProgressionChart({
               label={{ value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } }}
             />
             <Tooltip
-              content={({ active, label, payload }) => {
-                if (!active || !payload?.length) return null;
-                // Find the hour number from the label
-                const hourIdx = chartData.findIndex((d) => d.hourLabel === label);
-                const hour = hourIdx >= 0 ? hourIdx + 1 : 0;
-                const hourData = tooltipLookup[hour] || {};
-
-                // Get the closest car from payload
-                const carEntries = payload
-                  .filter((p) => p.value != null)
-                  .map((p) => {
-                    const cn = (p.dataKey as string).replace("car_", "");
-                    return hourData[cn];
-                  })
-                  .filter(Boolean);
-
-                if (carEntries.length === 0) return null;
-
-                // Show the hovered/nearest car
-                const pt = carEntries[0];
-
-                return (
-                  <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]">
-                    <div className="font-semibold text-popover-foreground">#{pt.carNumber}</div>
-                    {pt.teamName && <div className="text-muted-foreground">{pt.teamName}</div>}
-                    {pt.driverName && <div className="text-muted-foreground">{pt.driverName}</div>}
-                    <div className="flex gap-3 text-popover-foreground">
-                      <span>P{pt.position}</span>
-                      {pt.className && <span>{pt.className}</span>}
-                      {pt.classPosition && <span>PIC {pt.classPosition}</span>}
-                    </div>
-                    <div className="text-muted-foreground">{pt.hourLabel}</div>
-                  </div>
-                );
+              content={() => {
+                // Custom tooltip rendered outside via hoveredCar state
+                return null;
               }}
-              wrapperStyle={{ zIndex: 50 }}
+              wrapperStyle={{ display: "none" }}
             />
             {activeHourIndex && activeHourIndex > 0 && (
               <ReferenceLine
@@ -374,28 +410,57 @@ export default function PositionProgressionChart({
                 strokeOpacity={0.5}
               />
             )}
-            {filteredSeries.map((car) => (
-              <Line
-                key={car.carNumber}
-                type="linear"
-                dataKey={`car_${car.carNumber}`}
-                stroke={getCarColor(car.carNumber, allCarNumbers)}
-                strokeWidth={highlightedCar === car.carNumber ? 3 : 1.5}
-                strokeOpacity={
-                  highlightedCar
-                    ? highlightedCar === car.carNumber
-                      ? 1
-                      : 0.15
-                    : 0.8
-                }
-                dot={{ r: 2.5, strokeWidth: 0, fill: getCarColor(car.carNumber, allCarNumbers) }}
-                activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--background))" }}
-                connectNulls={false}
-                isAnimationActive={false}
-              />
-            ))}
+            {filteredSeries.map((car) => {
+              const isActive = hoveredCar === car.carNumber || highlightedCar === car.carNumber;
+              const anyHighlight = hoveredCar || highlightedCar;
+              return (
+                <Line
+                  key={car.carNumber}
+                  type="linear"
+                  dataKey={`car_${car.carNumber}`}
+                  stroke={getCarColor(car.carNumber, allCarNumbers)}
+                  strokeWidth={isActive ? 3 : 1.5}
+                  strokeOpacity={anyHighlight ? (isActive ? 1 : 0.12) : 0.8}
+                  dot={{
+                    r: isActive ? 3.5 : 2.5,
+                    strokeWidth: 0,
+                    fill: getCarColor(car.carNumber, allCarNumbers),
+                    fillOpacity: anyHighlight ? (isActive ? 1 : 0.12) : 0.8,
+                  }}
+                  activeDot={false}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
+
+        {/* Custom tooltip */}
+        {hoveredCar && hoveredHour && tooltipLookup[hoveredHour]?.[hoveredCar] && (() => {
+          const pt = tooltipLookup[hoveredHour][hoveredCar];
+          return (
+            <div
+              className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
+              style={{
+                left: "50%",
+                bottom: 60,
+                transform: "translateX(-50%)",
+                zIndex: 50,
+              }}
+            >
+              <div className="font-semibold text-popover-foreground">#{pt.carNumber}</div>
+              {pt.teamName && <div className="text-muted-foreground">{pt.teamName}</div>}
+              {pt.driverName && <div className="text-muted-foreground">{pt.driverName}</div>}
+              <div className="flex gap-3 text-popover-foreground">
+                <span>P{pt.position}</span>
+                {pt.className && <span>{pt.className}</span>}
+                {pt.classPosition && <span>PIC {pt.classPosition}</span>}
+              </div>
+              <div className="text-muted-foreground">{pt.hourLabel}</div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Car legend */}
@@ -404,7 +469,7 @@ export default function PositionProgressionChart({
           <button
             key={car.carNumber}
             className={`inline-flex items-center gap-1 transition-opacity ${
-              highlightedCar && highlightedCar !== car.carNumber ? "opacity-30" : "opacity-100"
+              (highlightedCar || hoveredCar) && highlightedCar !== car.carNumber && hoveredCar !== car.carNumber ? "opacity-30" : "opacity-100"
             }`}
             onMouseEnter={() => setHighlightedCar(car.carNumber)}
             onMouseLeave={() => setHighlightedCar(null)}
