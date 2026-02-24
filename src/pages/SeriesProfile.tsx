@@ -130,33 +130,33 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
               {/* Header row */}
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-2 py-1 border-b border-border mb-1">
                 <span className="w-6 text-right">#</span>
-                <span className="flex-1">
+                <span className="flex-1 min-w-0">
                   {anyMultiDriver ? "Car / Team" : "Driver"}
                 </span>
-                {!anyMultiDriver && <span className="w-20 truncate text-right">Team</span>}
+                {!anyMultiDriver && <span className="shrink-0 text-right">Team</span>}
                 {hasWinsOrPodiums && (
                   <>
-                    <span className="w-8 text-center">W</span>
-                    <span className="w-8 text-center">Pod</span>
+                    <span className="w-10 text-center shrink-0">Wins</span>
+                    <span className="w-14 text-center shrink-0">Podiums</span>
                   </>
                 )}
-                <span className="w-14 text-right">Pts</span>
+                <span className="w-14 text-right shrink-0">Pts</span>
               </div>
               <div className="space-y-0.5">
                 {standings.map((entry) => (
                   <div key={entry.carNumber} className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-muted/50">
-                    <span className="font-mono w-6 text-right font-semibold text-muted-foreground">{entry.position}.</span>
-                    <span className="flex-1 truncate text-foreground">{getDisplayName(entry)}</span>
+                    <span className="font-mono w-6 text-right font-semibold text-muted-foreground shrink-0">{entry.position}.</span>
+                    <span className="flex-1 min-w-0 truncate text-foreground">{getDisplayName(entry)}</span>
                     {!anyMultiDriver && (
-                      <span className="w-20 truncate text-right text-muted-foreground text-[10px]">{entry.teamName || ""}</span>
+                      <span className="shrink-0 text-right text-muted-foreground text-[10px]">{entry.teamName || ""}</span>
                     )}
                     {hasWinsOrPodiums && (
                       <>
-                        <span className="font-mono w-8 text-center text-muted-foreground">{entry.wins}</span>
-                        <span className="font-mono w-8 text-center text-muted-foreground">{entry.podiums}</span>
+                        <span className="font-mono w-10 text-center text-muted-foreground shrink-0">{entry.wins}</span>
+                        <span className="font-mono w-14 text-center text-muted-foreground shrink-0">{entry.podiums}</span>
                       </>
                     )}
-                    <span className="font-mono w-14 text-right text-muted-foreground">{entry.totalPoints} pts</span>
+                    <span className="font-mono w-14 text-right text-muted-foreground shrink-0">{entry.totalPoints} pts</span>
                   </div>
                 ))}
               </div>
