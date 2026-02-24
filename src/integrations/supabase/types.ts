@@ -1488,6 +1488,7 @@ export type Database = {
           gap_to_p1: string | null
           id: string
           laps_run: number | null
+          points: number | null
           position: number | null
           session_id: string
           team_id: string | null
@@ -1502,6 +1503,7 @@ export type Database = {
           gap_to_p1?: string | null
           id?: string
           laps_run?: number | null
+          points?: number | null
           position?: number | null
           session_id: string
           team_id?: string | null
@@ -1516,6 +1518,7 @@ export type Database = {
           gap_to_p1?: string | null
           id?: string
           laps_run?: number | null
+          points?: number | null
           position?: number | null
           session_id?: string
           team_id?: string | null
@@ -1562,6 +1565,7 @@ export type Database = {
           gap_to_pole: string | null
           id: string
           laps_run: number | null
+          points: number | null
           position: number | null
           q1_time: string | null
           q2_time: string | null
@@ -1579,6 +1583,7 @@ export type Database = {
           gap_to_pole?: string | null
           id?: string
           laps_run?: number | null
+          points?: number | null
           position?: number | null
           q1_time?: string | null
           q2_time?: string | null
@@ -1596,6 +1601,7 @@ export type Database = {
           gap_to_pole?: string | null
           id?: string
           laps_run?: number | null
+          points?: number | null
           position?: number | null
           q1_time?: string | null
           q2_time?: string | null

@@ -13,6 +13,7 @@ import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
 import DriverFingerprint, { DriverFingerprintData } from "@/components/DriverFingerprint";
+import { useDriverStandings } from "@/hooks/useDriverStandings";
 import { formatDateRange } from "@/lib/date-utils";
 
 const DriverProfilePage = () => {
@@ -25,6 +26,7 @@ const DriverProfilePage = () => {
   const [selectedSeason, setSelectedSeason] = useState("all");
   const [fingerprint, setFingerprint] = useState<DriverFingerprintData | null>(null);
   const [loading, setLoading] = useState(true);
+  const standingsData = useDriverStandings(id);
 
   // Derive season years and compute averages
   const qualifyingResults = useMemo(() => allSessionResults.filter((r) => r._source === "qualifying"), [allSessionResults]);
@@ -315,7 +317,7 @@ const DriverProfilePage = () => {
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <DriverFingerprint data={fingerprint} />
+            <DriverFingerprint data={fingerprint} standingsData={standingsData} />
           </div>
 
         {/* Statistics Section */}

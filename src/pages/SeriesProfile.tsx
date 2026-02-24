@@ -16,32 +16,106 @@ interface DisplayEvent {
   date: string | null;
   endDate: string | null;
   year: number;
+  seasonId: string;
 }
 
-interface PodiumEntry {
-  driverId: string;
-  name: string;
+interface StandingEntry {
+  carNumber: string;
+  driverNames: string[];
+  driverIds: string[];
+  teamName: string | null;
+  teamId: string | null;
+  totalPoints: number;
   position: number;
+  className: string | null;
 }
 
-/** Shorten "Max Verstappen" → "M. Verstappen" */
+const PODIUM_HEIGHT: Record<number, string> = {
+  1: "h-28",
+  2: "h-20",
+  3: "h-16",
+};
+
+const PODIUM_BG: Record<number, string> = {
+  1: "from-yellow-500/30 to-yellow-600/10 border-yellow-500/50",
+  2: "from-gray-300/20 to-gray-400/10 border-gray-400/40",
+  3: "from-amber-700/25 to-amber-800/10 border-amber-700/40",
+};
+
+const PODIUM_TEXT: Record<number, string> = {
+  1: "text-yellow-400",
+  2: "text-gray-300",
+  3: "text-amber-600",
+};
+
 function shortenName(full: string): string {
   const parts = full.trim().split(/\s+/);
   if (parts.length <= 1) return full;
   return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
 }
 
-const PODIUM_COLORS: Record<number, string> = {
-  1: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
-  2: "bg-gray-300/15 text-gray-300 border-gray-400/40",
-  3: "bg-amber-700/20 text-amber-600 border-amber-700/40",
-};
+function PodiumDisplay({ standings, className: classLabel }: { standings: StandingEntry[]; className?: string | null }) {
+  const top3 = standings.slice(0, 3);
+  if (top3.length === 0 || top3[0].totalPoints === 0) return null;
+
+  // Reorder for visual: [2nd, 1st, 3rd]
+  const ordered = [top3[1], top3[0], top3[2]].filter(Boolean);
+
+  return (
+    <div className="mb-4">
+      {classLabel && (
+        <p className="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider mb-2">{classLabel}</p>
+      )}
+      <div className="flex items-end justify-center gap-2">
+        {ordered.map((entry) => {
+          const pos = entry.position;
+          return (
+            <div key={entry.carNumber} className="flex flex-col items-center" style={{ minWidth: 100, maxWidth: 140 }}>
+              {/* Driver info above pillar */}
+              <div className="text-center mb-1.5">
+                {entry.driverNames.length > 1 ? (
+                  <div className="flex flex-col gap-0.5">
+                    {entry.driverNames.slice(0, 3).map((name, i) => (
+                      <span key={i} className={`text-[10px] font-medium leading-tight ${PODIUM_TEXT[pos] || "text-foreground"}`}>
+                        {shortenName(name)}
+                      </span>
+                    ))}
+                    {entry.driverNames.length > 3 && (
+                      <span className="text-[9px] text-muted-foreground">+{entry.driverNames.length - 3} more</span>
+                    )}
+                  </div>
+                ) : (
+                  <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
+                    {shortenName(entry.driverNames[0] || "Unknown")}
+                  </span>
+                )}
+                {entry.teamName && (
+                  <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{entry.teamName}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground">#{entry.carNumber} · {entry.totalPoints} pts</p>
+              </div>
+              {/* Podium pillar */}
+              <div
+                className={`w-full ${PODIUM_HEIGHT[pos] || "h-12"} rounded-t-md border-t border-x bg-gradient-to-b ${PODIUM_BG[pos] || ""} flex items-center justify-center`}
+              >
+                <span className={`font-display text-2xl font-bold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
+                  P{pos}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 const SeriesProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [series, setSeries] = useState<any>(null);
   const [events, setEvents] = useState<DisplayEvent[]>([]);
-  const [podiums, setPodiums] = useState<Record<string, PodiumEntry[]>>({});
+  const [seasonStandings, setSeasonStandings] = useState<Record<string, StandingEntry[]>>({});
+  const [seasonClassMap, setSeasonClassMap] = useState<Record<string, { id: string; name: string }[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,9 +125,25 @@ const SeriesProfile = () => {
       setSeries(s);
 
       if (s) {
-        const { data: seasons } = await supabase.from("v2_seasons").select("id, year").eq("series_id", id);
+        const { data: seasons } = await supabase.from("v2_seasons").select("id, year, is_multiclass").eq("series_id", id);
         const seasonIds = (seasons || []).map(sn => sn.id);
         const seasonYearMap = Object.fromEntries((seasons || []).map(sn => [sn.id, sn.year]));
+        const multiclassSeasons = new Set((seasons || []).filter(sn => sn.is_multiclass).map(sn => sn.id));
+
+        // Fetch classes for multiclass seasons
+        if (multiclassSeasons.size > 0) {
+          const { data: classes } = await supabase
+            .from("v2_season_classes")
+            .select("id, season_id, class_name, sort_order")
+            .in("season_id", [...multiclassSeasons])
+            .order("sort_order");
+          const cMap: Record<string, { id: string; name: string }[]> = {};
+          for (const c of (classes || []) as any[]) {
+            if (!cMap[c.season_id]) cMap[c.season_id] = [];
+            cMap[c.season_id].push({ id: c.id, name: c.class_name });
+          }
+          setSeasonClassMap(cMap);
+        }
 
         if (seasonIds.length > 0) {
           const { data: evts } = await supabase.from("v2_events")
@@ -70,51 +160,101 @@ const SeriesProfile = () => {
             date: e.start_date,
             endDate: e.end_date,
             year: seasonYearMap[e.season_id] || 0,
+            seasonId: e.season_id,
           }));
           setEvents(mappedEvents);
 
-          // Fetch top 3 race finishers for all events
-          const eventIds = mappedEvents.map(e => e.id);
-          if (eventIds.length > 0) {
-            // Get race sessions for these events — prefer parent (endurance_race) over child hour sessions
-            const { data: raceSessions } = await supabase
+          // Compute standings per season from points data
+          const standingsMap: Record<string, StandingEntry[]> = {};
+
+          for (const seasonId of seasonIds) {
+            const seasonEvts = mappedEvents.filter(e => e.seasonId === seasonId);
+            if (seasonEvts.length === 0) continue;
+
+            const evtIds = seasonEvts.map(e => e.id);
+
+            // Get sessions
+            const { data: sessions } = await supabase
               .from("v2_sessions")
-              .select("id, event_id, session_type, parent_session_id, sort_order")
-              .in("event_id", eventIds)
-              .in("session_type", ["race", "endurance_race", "sprint_race"] as any)
-              .eq("status", "published" as any)
-              .is("parent_session_id", null)
-              .order("sort_order");
+              .select("id, parent_session_id")
+              .in("event_id", evtIds);
 
-            if (raceSessions && raceSessions.length > 0) {
-              const sessionIds = raceSessions.map(rs => rs.id);
-              const sessionEventMap: Record<string, string> = {};
-              raceSessions.forEach(rs => { sessionEventMap[rs.id] = rs.event_id; });
+            if (!sessions || sessions.length === 0) continue;
 
-              const { data: topResults } = await supabase
-                .from("v2_race_results" as any)
-                .select("session_id, position, driver_id, v2_drivers(full_name)")
-                .in("session_id", sessionIds)
-                .lte("position", 3)
-                .order("position");
+            const sessIds = sessions.filter(s => !s.parent_session_id).map(s => s.id);
+            if (sessIds.length === 0) continue;
 
-              const podiumMap: Record<string, PodiumEntry[]> = {};
-              for (const r of (topResults || []) as any[]) {
-                const eventId = sessionEventMap[r.session_id];
-                if (!eventId) continue;
-                if (!podiumMap[eventId]) podiumMap[eventId] = [];
-                // Only keep the first race's podium per event (main race, lowest sort_order)
-                if (podiumMap[eventId].length < 3 && !podiumMap[eventId].some(p => p.position === r.position)) {
-                  podiumMap[eventId].push({
-                    driverId: r.driver_id,
-                    name: r.v2_drivers?.full_name || "Unknown",
-                    position: r.position,
-                  });
-                }
+            // Fetch results with points
+            const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
+              supabase.from("v2_race_results" as any)
+                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
+                .in("session_id", sessIds),
+              supabase.from("v2_qualifying_results" as any)
+                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
+                .in("session_id", sessIds),
+            ]);
+
+            const allResults = [...((raceRes || []) as any[]), ...((qualRes || []) as any[])];
+
+            // Group by car_number
+            const carMap = new Map<string, {
+              carNumber: string;
+              driverIds: Set<string>;
+              driverNames: Set<string>;
+              teamName: string | null;
+              teamId: string | null;
+              totalPoints: number;
+              className: string | null;
+            }>();
+
+            for (const r of allResults) {
+              if (!r.car_number) continue;
+              const pts = r.points != null ? Number(r.points) : 0;
+              const className = r.extra_data?.Class || r.extra_data?.class || null;
+
+              if (!carMap.has(r.car_number)) {
+                carMap.set(r.car_number, {
+                  carNumber: r.car_number,
+                  driverIds: new Set(),
+                  driverNames: new Set(),
+                  teamName: r.v2_teams?.full_name || null,
+                  teamId: r.v2_teams?.id || null,
+                  totalPoints: 0,
+                  className,
+                });
               }
-              setPodiums(podiumMap);
+
+              const entry = carMap.get(r.car_number)!;
+              entry.totalPoints += pts;
+              if (r.driver_id) entry.driverIds.add(r.driver_id);
+              if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
+              if (!entry.teamName && r.v2_teams?.full_name) {
+                entry.teamName = r.v2_teams.full_name;
+                entry.teamId = r.v2_teams.id;
+              }
+              if (!entry.className && className) entry.className = className;
+            }
+
+            const entries = [...carMap.values()].filter(e => e.totalPoints > 0);
+            entries.sort((a, b) => b.totalPoints - a.totalPoints);
+
+            const standings: StandingEntry[] = entries.map((e, i) => ({
+              carNumber: e.carNumber,
+              driverNames: [...e.driverNames],
+              driverIds: [...e.driverIds],
+              teamName: e.teamName,
+              teamId: e.teamId,
+              totalPoints: e.totalPoints,
+              position: i + 1,
+              className: e.className,
+            }));
+
+            if (standings.length > 0) {
+              standingsMap[seasonId] = standings;
             }
           }
+
+          setSeasonStandings(standingsMap);
         }
       }
       setLoading(false);
@@ -126,9 +266,9 @@ const SeriesProfile = () => {
   if (!series) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Series not found.</p></div></div>;
 
   // Group by year
-  const seasons = events.reduce<Record<number, DisplayEvent[]>>((acc, ev) => {
-    if (!acc[ev.year]) acc[ev.year] = [];
-    acc[ev.year].push(ev);
+  const seasonsGrouped = events.reduce<Record<number, { events: DisplayEvent[]; seasonId: string }>>((acc, ev) => {
+    if (!acc[ev.year]) acc[ev.year] = { events: [], seasonId: ev.seasonId };
+    acc[ev.year].events.push(ev);
     return acc;
   }, {});
 
@@ -155,14 +295,43 @@ const SeriesProfile = () => {
         {events.length === 0 ? (
           <p className="text-muted-foreground text-sm">No events linked to this series yet.</p>
         ) : (
-          <div className="space-y-8">
-            {Object.entries(seasons).sort(([a], [b]) => Number(b) - Number(a)).map(([year, yearEvents]) => (
-              <div key={year}>
-                <h3 className="font-display text-lg font-semibold text-foreground mb-3">{year} Season</h3>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {yearEvents.map(ev => {
-                    const evPodium = (podiums[ev.id] || []).sort((a, b) => a.position - b.position);
-                    return (
+          <div className="space-y-10">
+            {Object.entries(seasonsGrouped).sort(([a], [b]) => Number(b) - Number(a)).map(([year, { events: yearEvents, seasonId }]) => {
+              const standings = seasonStandings[seasonId] || [];
+              const classes = seasonClassMap[seasonId] || [];
+              const isMulticlass = classes.length > 0;
+
+              return (
+                <div key={year}>
+                  <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
+
+                  {/* Podium standings */}
+                  {standings.length > 0 && (
+                    <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
+                      <h4 className="font-display text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <Trophy className="h-4 w-4 text-yellow-500" />
+                        {year} Championship Standings
+                      </h4>
+                      {isMulticlass ? (
+                        <div className="grid gap-6 sm:grid-cols-2">
+                          {classes.map((cls) => {
+                            const classStandings = standings
+                              .filter(s => s.className === cls.name)
+                              .sort((a, b) => b.totalPoints - a.totalPoints)
+                              .map((s, i) => ({ ...s, position: i + 1 }));
+                            return (
+                              <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <PodiumDisplay standings={standings} />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {yearEvents.map(ev => (
                       <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5 shrink-0">
@@ -176,27 +345,12 @@ const SeriesProfile = () => {
                             </div>
                           </div>
                         </div>
-
-                        {evPodium.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-1.5">
-                            {evPodium.map(p => (
-                              <span
-                                key={p.position}
-                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${PODIUM_COLORS[p.position] || ""}`}
-                              >
-                                <Trophy className="h-2.5 w-2.5" />
-                                <span className="opacity-60">P{p.position}</span>
-                                <span className="truncate max-w-[80px]">{shortenName(p.name)}</span>
-                              </span>
-                            ))}
-                          </div>
-                        )}
                       </Link>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
