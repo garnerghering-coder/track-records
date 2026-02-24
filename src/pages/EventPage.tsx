@@ -627,7 +627,7 @@ function SessionResults({
                 {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
                 {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableCell className="text-xs">{(r.extra_data as any)?.Class || "—"}</TableCell>}
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
-                <TableCell className="font-medium">
+                <TableCell className="font-medium whitespace-nowrap">
                   {(() => {
                     const coDrivers = (r as any)._coDrivers;
                     const allDrivers = (r as any).extra_data?.all_drivers;
@@ -636,7 +636,7 @@ function SessionResults({
                       return (
                         <div className="flex flex-col">
                           {drivers.map((d: any, idx: number) => (
-                            <span key={idx} className="leading-[22px]">
+                            <span key={idx} className="leading-[22px] whitespace-nowrap">
                               {d.id ? (
                                 <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
                               ) : d.name}
@@ -645,7 +645,7 @@ function SessionResults({
                         </div>
                       );
                     }
-                    return r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors">{r.v2_drivers?.full_name || "—"}</Link> : "—";
+                    return r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{r.v2_drivers?.full_name || "—"}</Link> : "—";
                   })()}
                 </TableCell>
                 <TableCell>
@@ -667,7 +667,7 @@ function SessionResults({
                     return <FlagImage nationality={r.v2_drivers?.nationality} size={18} />;
                   })()}
                 </TableCell>
-                {hasTeam && <TableCell className="text-muted-foreground">
+                {hasTeam && <TableCell className="text-muted-foreground whitespace-nowrap">
                   {r.team_id ? <Link to={`/team/${r.team_id}`} className="hover:text-primary transition-colors">{getTeamName(r)}</Link> : getTeamName(r)}
                 </TableCell>}
                 {hasCar && <TableCell className="text-muted-foreground text-xs">

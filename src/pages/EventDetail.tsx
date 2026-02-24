@@ -283,7 +283,7 @@ const EventDetailPage = () => {
                                 <Link
                                   key={d.id}
                                   to={`/driver/${d.id}`}
-                                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline whitespace-nowrap"
                                 >
                                   <FlagImage nationality={d.nationality} size={14} />
                                   {d.first_name} {d.last_name}
