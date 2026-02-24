@@ -62,9 +62,11 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
   // Reorder for visual: [2nd, 1st, 3rd]
   const ordered = [top3[1], top3[0], top3[2]].filter(Boolean);
 
+  // If ANY car in the standings has multiple drivers, use car#/team format for ALL
+  const anyMultiDriver = standings.some(s => s.driverNames.length > 1);
+
   const getPillarLabel = (entry: StandingEntry) => {
-    const isMultiDriver = entry.driverNames.length > 1;
-    if (isMultiDriver) {
+    if (anyMultiDriver) {
       return { primary: `#${entry.carNumber}`, secondary: entry.teamName };
     }
     return { primary: shortenName(entry.driverNames[0] || "Unknown"), secondary: entry.teamName };
@@ -117,8 +119,7 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
           {showFull && (
             <div className="mt-2 space-y-0.5">
               {standings.map((entry) => {
-                const isMultiDriver = entry.driverNames.length > 1;
-                const displayName = isMultiDriver
+                const displayName = anyMultiDriver
                   ? `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`
                   : entry.driverNames[0] || "Unknown";
                 return (
