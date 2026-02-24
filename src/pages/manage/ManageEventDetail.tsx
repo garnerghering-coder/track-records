@@ -141,10 +141,77 @@ export default function ManageEventDetail() {
         qualifying_session_id: sessionForm.qualifying_session_id || null,
       } as any).eq("id", editingSession.id);
       if (error) throw error;
+
+      // Auto-cascade hour times when an endurance_race session's start_time is set/changed
+      if (editingSession.session_type === "endurance_race" && sessionForm.start_time) {
+        await cascadeHourTimes(editingSession.id, sessionForm.date, sessionForm.start_time);
+      }
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_sessions", id] }); setSessionOpen(false); setEditingSession(null); toast.success("Session updated"); },
     onError: (e: any) => toast.error(e.message),
   });
+
+  /** Auto-populate hour sub-session start/end times from parent race start time */
+  const cascadeHourTimes = async (parentSessionId: string, baseDate: string, startTime: string) => {
+    // Fetch child hour sessions
+    const { data: children } = await (supabase
+      .from("v2_sessions") as any)
+      .select("id, name, sort_order")
+      .eq("parent_session_id", parentSessionId)
+      .order("sort_order", { ascending: true });
+    if (!children || children.length === 0) return;
+
+    // Parse base start time
+    const [startH, startM] = startTime.split(":").map(Number);
+    if (isNaN(startH) || isNaN(startM)) return;
+
+    // Parse base date
+    const baseD = new Date(baseDate + "T00:00:00");
+    if (isNaN(baseD.getTime())) return;
+
+    let currentMinutes = startH * 60 + startM;
+    let dayOffset = 0; // days added from midnight crossovers
+
+    for (const child of children) {
+      const hourStart = currentMinutes % 1440; // minutes within the day
+      const hourEnd = (currentMinutes + 60) % 1440;
+      const crossesMidnight = currentMinutes + 60 >= (dayOffset + 1) * 1440 && hourStart > hourEnd;
+
+      // Calculate date for this hour
+      const childDate = new Date(baseD);
+      childDate.setDate(childDate.getDate() + dayOffset);
+      const dateStr = childDate.toISOString().slice(0, 10);
+
+      const formatTime = (mins: number) => {
+        const h = Math.floor(mins / 60) % 24;
+        const m = mins % 60;
+        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      };
+
+      let endTimeStr: string;
+      if (crossesMidnight) {
+        // Session can't cross midnight, cap at 23:59
+        endTimeStr = "23:59";
+      } else {
+        endTimeStr = formatTime(hourEnd);
+      }
+
+      await supabase.from("v2_sessions").update({
+        date: dateStr,
+        start_time: formatTime(hourStart),
+        end_time: endTimeStr,
+      } as any).eq("id", child.id);
+
+      // Advance to next hour start
+      currentMinutes += 60;
+      // Track day offset
+      const newDayOffset = Math.floor(currentMinutes / 1440);
+      if (newDayOffset > dayOffset) {
+        dayOffset = newDayOffset;
+      }
+    }
+    toast.success(`Updated times for ${children.length} hour sessions`);
+  };
 
   const deleteSession = useMutation({
     mutationFn: async (sessionId: string) => {

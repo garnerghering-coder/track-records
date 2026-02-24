@@ -71,9 +71,42 @@ const CircuitProfile = () => {
             .is("parent_session_id", null);
 
           if (raceSessions && raceSessions.length > 0) {
-            const sIds = raceSessions.map(rs => rs.id);
             const sessionEventMap: Record<string, string> = {};
             raceSessions.forEach(rs => { sessionEventMap[rs.id] = rs.event_id; });
+
+            // For endurance races, use the last hour sub-session instead of the parent
+            const enduranceParentIds = raceSessions.filter(rs => rs.session_type === "endurance_race").map(rs => rs.id);
+            let lastHourSessionMap: Record<string, string> = {};
+
+            if (enduranceParentIds.length > 0) {
+              const { data: childSessions } = await supabase
+                .from("v2_sessions")
+                .select("id, event_id, parent_session_id, sort_order")
+                .in("parent_session_id", enduranceParentIds)
+                .eq("status", "published" as any)
+                .order("sort_order", { ascending: false });
+
+              if (childSessions && childSessions.length > 0) {
+                for (const cs of childSessions as any[]) {
+                  if (!lastHourSessionMap[cs.event_id]) {
+                    lastHourSessionMap[cs.event_id] = cs.id;
+                  }
+                }
+              }
+            }
+
+            const sIds: string[] = [];
+            const finalSessionEventMap: Record<string, string> = {};
+            for (const rs of raceSessions) {
+              if (rs.session_type === "endurance_race" && lastHourSessionMap[rs.event_id]) {
+                const lastHourId = lastHourSessionMap[rs.event_id];
+                sIds.push(lastHourId);
+                finalSessionEventMap[lastHourId] = rs.event_id;
+              } else {
+                sIds.push(rs.id);
+                finalSessionEventMap[rs.id] = rs.event_id;
+              }
+            }
 
             const { data: topResults } = await supabase
               .from("v2_race_results" as any)
@@ -84,7 +117,7 @@ const CircuitProfile = () => {
 
             const podiumMap: Record<string, PodiumEntry[]> = {};
             for (const r of (topResults || []) as any[]) {
-              const eventId = sessionEventMap[r.session_id];
+              const eventId = finalSessionEventMap[r.session_id];
               if (!eventId) continue;
               if (!podiumMap[eventId]) podiumMap[eventId] = [];
               if (podiumMap[eventId].length < 3 && !podiumMap[eventId].some(p => p.position === r.position)) {
