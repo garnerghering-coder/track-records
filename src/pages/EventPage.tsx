@@ -337,35 +337,24 @@ function SessionResults({
         .order("position");
       if (error) throw error;
       
-      // Patch missing nationalities in extra_data.all_drivers from v2_drivers
-      const missingIds = new Set<string>();
-      for (const row of (data || [])) {
-        const allDrivers = (row as any).extra_data?.all_drivers;
-        if (Array.isArray(allDrivers)) {
-          for (const d of allDrivers) {
-            if (d.id && !d.nationality) missingIds.add(d.id);
-          }
+      // Group co-drivers by car_number for endurance race views
+      const grouped = new Map<string, any>();
+      const ungrouped: any[] = [];
+      
+      for (const row of (data || []) as any[]) {
+        const key = row.car_number ? `${row.car_number}-${row.position}` : null;
+        if (key && grouped.has(key)) {
+          const existing = grouped.get(key);
+          if (!existing._coDrivers) existing._coDrivers = [{ id: existing.driver_id, name: existing.v2_drivers?.full_name, nationality: existing.v2_drivers?.nationality }];
+          existing._coDrivers.push({ id: row.driver_id, name: row.v2_drivers?.full_name, nationality: row.v2_drivers?.nationality });
+        } else if (key) {
+          grouped.set(key, { ...row });
+        } else {
+          ungrouped.push(row);
         }
       }
-      if (missingIds.size > 0) {
-        const { data: driverRows } = await supabase
-          .from("v2_drivers")
-          .select("id, nationality")
-          .in("id", Array.from(missingIds));
-        if (driverRows) {
-          const natMap: Record<string, string> = {};
-          for (const dr of driverRows) { if (dr.nationality) natMap[dr.id] = dr.nationality; }
-          for (const row of (data || [])) {
-            const allDrivers = (row as any).extra_data?.all_drivers;
-            if (Array.isArray(allDrivers)) {
-              for (const d of allDrivers) {
-                if (d.id && !d.nationality && natMap[d.id]) d.nationality = natMap[d.id];
-              }
-            }
-          }
-        }
-      }
-      return data;
+      
+      return [...grouped.values(), ...ungrouped];
     },
   });
 
@@ -445,7 +434,7 @@ function SessionResults({
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
         for (const [k] of Object.entries(ed)) {
-          if (k === "Int" || k === "avg_kmh" || k === "all_drivers") continue;
+          if (k === "Int" || k === "avg_kmh" || k === "all_drivers" || k === "PIC" || k === "Class") continue;
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
             extraDataKeys.push({ key: k, name: k });
@@ -629,11 +618,13 @@ function SessionResults({
                 {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
                 <TableCell className="font-medium">
                   {(() => {
+                    const coDrivers = (r as any)._coDrivers;
                     const allDrivers = (r as any).extra_data?.all_drivers;
-                    if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
+                    const drivers = coDrivers || (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0 ? allDrivers : null);
+                    if (drivers) {
                       return (
                         <div className="flex flex-col">
-                          {allDrivers.map((d: any, idx: number) => (
+                          {drivers.map((d: any, idx: number) => (
                             <span key={idx} className="leading-[22px]">
                               {d.id ? (
                                 <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
@@ -648,11 +639,13 @@ function SessionResults({
                 </TableCell>
                 <TableCell>
                   {(() => {
+                    const coDrivers = (r as any)._coDrivers;
                     const allDrivers = (r as any).extra_data?.all_drivers;
-                    if (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0) {
+                    const drivers = coDrivers || (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0 ? allDrivers : null);
+                    if (drivers) {
                       return (
                         <div className="flex flex-col">
-                          {allDrivers.map((d: any, idx: number) => (
+                          {drivers.map((d: any, idx: number) => (
                             <div key={idx} className="flex items-center leading-[22px] h-[22px]">
                               <FlagImage nationality={d.nationality} size={18} />
                             </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Trophy } from "lucide-react";
+import { ArrowLeft, Trophy, ChevronDown, ChevronUp } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
@@ -55,11 +55,20 @@ function shortenName(full: string): string {
 }
 
 function PodiumDisplay({ standings, className: classLabel }: { standings: StandingEntry[]; className?: string | null }) {
+  const [showFull, setShowFull] = useState(false);
   const top3 = standings.slice(0, 3);
   if (top3.length === 0 || top3[0].totalPoints === 0) return null;
 
   // Reorder for visual: [2nd, 1st, 3rd]
   const ordered = [top3[1], top3[0], top3[2]].filter(Boolean);
+
+  const getPillarLabel = (entry: StandingEntry) => {
+    const isMultiDriver = entry.driverNames.length > 1;
+    if (isMultiDriver) {
+      return { primary: `#${entry.carNumber}`, secondary: entry.teamName };
+    }
+    return { primary: shortenName(entry.driverNames[0] || "Unknown"), secondary: entry.teamName };
+  };
 
   return (
     <div className="mb-4">
@@ -69,30 +78,18 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
       <div className="flex items-end justify-center gap-2">
         {ordered.map((entry) => {
           const pos = entry.position;
+          const label = getPillarLabel(entry);
           return (
             <div key={entry.carNumber} className="flex flex-col items-center" style={{ minWidth: 100, maxWidth: 140 }}>
-              {/* Driver info above pillar */}
+              {/* Info above pillar */}
               <div className="text-center mb-1.5">
-                {entry.driverNames.length > 1 ? (
-                  <div className="flex flex-col gap-0.5">
-                    {entry.driverNames.slice(0, 3).map((name, i) => (
-                      <span key={i} className={`text-[10px] font-medium leading-tight ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                        {shortenName(name)}
-                      </span>
-                    ))}
-                    {entry.driverNames.length > 3 && (
-                      <span className="text-[9px] text-muted-foreground">+{entry.driverNames.length - 3} more</span>
-                    )}
-                  </div>
-                ) : (
-                  <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                    {shortenName(entry.driverNames[0] || "Unknown")}
-                  </span>
+                <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
+                  {label.primary}
+                </span>
+                {label.secondary && (
+                  <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{label.secondary}</p>
                 )}
-                {entry.teamName && (
-                  <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{entry.teamName}</p>
-                )}
-                <p className="text-[10px] text-muted-foreground">#{entry.carNumber} · {entry.totalPoints} pts</p>
+                <p className="text-[10px] text-muted-foreground">{entry.totalPoints} pts</p>
               </div>
               {/* Podium pillar */}
               <div
@@ -106,6 +103,36 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
           );
         })}
       </div>
+
+      {/* Full standings list */}
+      {standings.length > 3 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setShowFull(!showFull)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mx-auto"
+          >
+            {showFull ? "Hide" : "View all"} standings
+            {showFull ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          {showFull && (
+            <div className="mt-2 space-y-0.5">
+              {standings.map((entry) => {
+                const isMultiDriver = entry.driverNames.length > 1;
+                const displayName = isMultiDriver
+                  ? `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`
+                  : entry.driverNames[0] || "Unknown";
+                return (
+                  <div key={entry.carNumber} className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-muted/50">
+                    <span className="font-mono w-6 text-right font-semibold text-muted-foreground">{entry.position}.</span>
+                    <span className="flex-1 truncate text-foreground">{displayName}</span>
+                    <span className="font-mono text-muted-foreground">{entry.totalPoints} pts</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
