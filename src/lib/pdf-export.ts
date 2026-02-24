@@ -116,7 +116,7 @@ function buildSessionTable(s: SessionExportData) {
     if (anyHas(results, "total_time")) addCol("Time", (r) => r.total_time || "");
     if (anyHas(results, "gap_to_leader")) addCol("Gap", (r) => r.gap_to_leader || "");
     if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
-    if (anyHas(results, "fastest_lap_time")) addCol("FL", (r) => r.fastest_lap_time || "");
+    
     if (anyHas(results, "average_lap_time")) addCol("Avg Lap", (r) => r.average_lap_time || "");
     if (results.some((r) => r.pit_stops != null)) addCol("Pits", (r) => String(r.pit_stops ?? ""));
     if (results.some((r) => r.points != null && r.points !== 0)) addCol("Pts", (r) => String(r.points ?? ""));
@@ -282,24 +282,6 @@ export async function exportEventPdf(params: EventExportParams) {
       }
     }
 
-    // Fastest lap highlight for races
-    if (isRace && s.results.length > 0) {
-      const fastest = s.results.reduce((best: any, r: any) => {
-        if (!r.fastest_lap_time) return best;
-        if (!best || r.fastest_lap_time < best.fastest_lap_time) return r;
-        return best;
-      }, null);
-      if (fastest) {
-        let flY = tableFinalY + (isRace && s.incidents.length > 0 ? s.incidents.length * 4 + 14 : 8);
-        if (flY > pageHeight - 10) {
-          doc.addPage();
-          flY = 14;
-        }
-        doc.setFontSize(8);
-        doc.setTextColor(200, 120, 0);
-        doc.text(`Fastest Lap: ${fastest.v2_drivers?.full_name || "Unknown"} — ${fastest.fastest_lap_time}`, 14, flY);
-      }
-    }
 
     // Footer
     doc.setFontSize(6);

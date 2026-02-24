@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown } from "lucide-react";
+
 import type { DriverStandingsResult } from "@/hooks/useDriverStandings";
 
 export interface DriverFingerprintData {
@@ -183,7 +183,6 @@ function InlinePicker({ label, options, value, onChange }: { label: string; opti
       <PopoverTrigger asChild>
         <button className="inline-flex items-center gap-0.5 underline decoration-dotted underline-offset-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
           {label}
-          <ChevronDown className="h-2.5 w-2.5 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto min-w-[120px] p-1" align="center">

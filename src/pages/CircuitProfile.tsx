@@ -107,7 +107,7 @@ const CircuitProfile = () => {
     <div className="min-h-screen bg-background">
       <SEOHead
         title={circuit.name}
-        description={`Circuit profile for ${circuit.name}${circuit.country ? ` in ${circuit.country}` : ""}. View events and track data.`}
+        description={`Circuit profile for ${circuit.name}${circuit.country ? ` in ${circuit.country}` : ""}. View events and circuit data.`}
         canonical={`/circuit/${id}`}
         ogImage={circuit.layout_image_url || undefined}
       />
@@ -134,18 +134,18 @@ const CircuitProfile = () => {
           </div>
         )}
 
-        {/* Track Layouts with Metrics */}
+        {/* Circuit Configurations with Metrics */}
         {layouts.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
-              <h2 className="font-display text-xl font-semibold text-foreground">Track Fingerprint</h2>
+              <h2 className="font-display text-xl font-semibold text-foreground">Circuit Fingerprint</h2>
               <TooltipProvider delayDuration={200}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-[240px] text-xs">
-                    These characteristics are calculated using mathematical formulas derived from track layout data — no AI is used.
+                    These characteristics are calculated using mathematical formulas derived from circuit configuration data — no AI is used.
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
