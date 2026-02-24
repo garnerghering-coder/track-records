@@ -28,6 +28,8 @@ interface StandingEntry {
   totalPoints: number;
   position: number;
   className: string | null;
+  wins: number;
+  podiums: number;
 }
 
 const PODIUM_HEIGHT: Record<number, string> = {
@@ -72,6 +74,15 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
     return { primary: shortenName(entry.driverNames[0] || "Unknown"), secondary: entry.teamName };
   };
 
+  const getDisplayName = (entry: StandingEntry) => {
+    if (anyMultiDriver) {
+      return `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`;
+    }
+    return entry.driverNames[0] || "Unknown";
+  };
+
+  const hasWinsOrPodiums = standings.some(s => s.wins > 0 || s.podiums > 0);
+
   return (
     <div className="mb-4">
       {classLabel && (
@@ -83,7 +94,6 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
           const label = getPillarLabel(entry);
           return (
             <div key={entry.carNumber} className="flex flex-col items-center" style={{ minWidth: 100, maxWidth: 140 }}>
-              {/* Info above pillar */}
               <div className="text-center mb-1.5">
                 <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
                   {label.primary}
@@ -93,7 +103,6 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
                 )}
                 <p className="text-[10px] text-muted-foreground">{entry.totalPoints} pts</p>
               </div>
-              {/* Podium pillar */}
               <div
                 className={`w-full ${PODIUM_HEIGHT[pos] || "h-12"} rounded-t-md border-t border-x bg-gradient-to-b ${PODIUM_BG[pos] || ""} flex items-center justify-center`}
               >
@@ -117,19 +126,40 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
             {showFull ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
           {showFull && (
-            <div className="mt-2 space-y-0.5">
-              {standings.map((entry) => {
-                const displayName = anyMultiDriver
-                  ? `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`
-                  : entry.driverNames[0] || "Unknown";
-                return (
+            <div className="mt-2">
+              {/* Header row */}
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-2 py-1 border-b border-border mb-1">
+                <span className="w-6 text-right">#</span>
+                <span className="flex-1">
+                  {anyMultiDriver ? "Car / Team" : "Driver"}
+                </span>
+                {!anyMultiDriver && <span className="w-20 truncate text-right">Team</span>}
+                {hasWinsOrPodiums && (
+                  <>
+                    <span className="w-8 text-center">W</span>
+                    <span className="w-8 text-center">Pod</span>
+                  </>
+                )}
+                <span className="w-14 text-right">Pts</span>
+              </div>
+              <div className="space-y-0.5">
+                {standings.map((entry) => (
                   <div key={entry.carNumber} className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-muted/50">
                     <span className="font-mono w-6 text-right font-semibold text-muted-foreground">{entry.position}.</span>
-                    <span className="flex-1 truncate text-foreground">{displayName}</span>
-                    <span className="font-mono text-muted-foreground">{entry.totalPoints} pts</span>
+                    <span className="flex-1 truncate text-foreground">{getDisplayName(entry)}</span>
+                    {!anyMultiDriver && (
+                      <span className="w-20 truncate text-right text-muted-foreground text-[10px]">{entry.teamName || ""}</span>
+                    )}
+                    {hasWinsOrPodiums && (
+                      <>
+                        <span className="font-mono w-8 text-center text-muted-foreground">{entry.wins}</span>
+                        <span className="font-mono w-8 text-center text-muted-foreground">{entry.podiums}</span>
+                      </>
+                    )}
+                    <span className="font-mono w-14 text-right text-muted-foreground">{entry.totalPoints} pts</span>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -201,24 +231,32 @@ const SeriesProfile = () => {
 
             const evtIds = seasonEvts.map(e => e.id);
 
-            // Get sessions
+            // Get sessions with type info for wins/podiums filtering
             const { data: sessions } = await supabase
               .from("v2_sessions")
-              .select("id, parent_session_id")
+              .select("id, parent_session_id, session_type, name")
               .in("event_id", evtIds);
 
             if (!sessions || sessions.length === 0) continue;
 
-            const sessIds = sessions.filter(s => !s.parent_session_id).map(s => s.id);
+            const parentSessions = sessions.filter(s => !s.parent_session_id);
+            const sessIds = parentSessions.map(s => s.id);
             if (sessIds.length === 0) continue;
+
+            // Track which sessions are main races (not sprints/quali) for wins/podiums
+            const raceSessionIds = new Set(
+              parentSessions
+                .filter(s => s.session_type === 'race' && !s.name?.toLowerCase().includes('sprint'))
+                .map(s => s.id)
+            );
 
             // Fetch results with points
             const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
               supabase.from("v2_race_results" as any)
-                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
+                .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)")
                 .in("session_id", sessIds),
               supabase.from("v2_qualifying_results" as any)
-                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
+                .select("car_number, driver_id, points, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)")
                 .in("session_id", sessIds),
             ]);
 
@@ -233,22 +271,28 @@ const SeriesProfile = () => {
               teamId: string | null;
               totalPoints: number;
               className: string | null;
+              wins: number;
+              podiums: number;
             }>();
 
             for (const r of allResults) {
               if (!r.car_number) continue;
               const pts = r.points != null ? Number(r.points) : 0;
               const className = r.extra_data?.Class || r.extra_data?.class || null;
+              // Use short_name (alias) if available, fallback to full_name
+              const teamDisplayName = r.v2_teams?.short_name || r.v2_teams?.full_name || null;
 
               if (!carMap.has(r.car_number)) {
                 carMap.set(r.car_number, {
                   carNumber: r.car_number,
                   driverIds: new Set(),
                   driverNames: new Set(),
-                  teamName: r.v2_teams?.full_name || null,
+                  teamName: teamDisplayName,
                   teamId: r.v2_teams?.id || null,
                   totalPoints: 0,
                   className,
+                  wins: 0,
+                  podiums: 0,
                 });
               }
 
@@ -256,11 +300,17 @@ const SeriesProfile = () => {
               entry.totalPoints += pts;
               if (r.driver_id) entry.driverIds.add(r.driver_id);
               if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
-              if (!entry.teamName && r.v2_teams?.full_name) {
-                entry.teamName = r.v2_teams.full_name;
-                entry.teamId = r.v2_teams.id;
+              if (!entry.teamName && teamDisplayName) {
+                entry.teamName = teamDisplayName;
+                entry.teamId = r.v2_teams?.id;
               }
               if (!entry.className && className) entry.className = className;
+
+              // Count wins/podiums only from main race sessions
+              if (r.position != null && r.session_id && raceSessionIds.has(r.session_id)) {
+                if (r.position === 1) entry.wins++;
+                if (r.position <= 3) entry.podiums++;
+              }
             }
 
             const entries = [...carMap.values()].filter(e => e.totalPoints > 0);
@@ -275,6 +325,8 @@ const SeriesProfile = () => {
               totalPoints: e.totalPoints,
               position: i + 1,
               className: e.className,
+              wins: e.wins,
+              podiums: e.podiums,
             }));
 
             if (standings.length > 0) {
