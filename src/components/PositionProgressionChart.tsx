@@ -76,6 +76,8 @@ export default function PositionProgressionChart({
   const [viewMode, setViewMode] = useState<"overall" | "class">("overall");
   const [hoveredCar, setHoveredCar] = useState<string | null>(null);
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
 
   // Fetch all hour results in one batch
   const hourIds = hourSessions.map((h) => h.id);
@@ -313,73 +315,61 @@ export default function PositionProgressionChart({
       </div>
 
       <div
+        ref={chartContainerRef}
         className="w-full relative"
         style={{ height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}
-        onMouseMove={(e) => {
-          // Find nearest car line by Y position
-          const chartArea = e.currentTarget.querySelector('.recharts-cartesian-grid') as SVGElement | null;
-          if (!chartArea) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const mouseY = e.clientY - rect.top;
-          const mouseX = e.clientX - rect.left;
-
-          // Get the plot area bounds from the responsive container
-          const plotArea = e.currentTarget.querySelector('.recharts-surface') as SVGElement | null;
-          if (!plotArea) return;
-
-          // Find the nearest hour (X snap)
-          const totalHours = hourSessions.length;
-          // Approximate plot area from margins
-          const svgRect = plotArea.getBoundingClientRect();
-          const plotLeft = svgRect.left - rect.left + 50; // ~left margin
-          const plotRight = svgRect.right - rect.left - 20; // ~right margin
-          const plotTop = svgRect.top - rect.top + 10;
-          const plotBottom = svgRect.bottom - rect.top - 30;
-          const plotWidth = plotRight - plotLeft;
-          const plotHeight = plotBottom - plotTop;
-
-          if (mouseX < plotLeft || mouseX > plotRight || mouseY < plotTop || mouseY > plotBottom) {
-            setHoveredCar(null);
-            return;
-          }
-
-          // Determine hour
-          const hourFrac = (mouseX - plotLeft) / plotWidth;
-          const hourIdx = Math.round(hourFrac * (totalHours - 1));
-          const hour = Math.max(1, Math.min(totalHours, hourIdx + 1));
-
-          // Determine mouse position value (Y -> position, reversed)
-          const yFrac = (mouseY - plotTop) / plotHeight;
-          const mousePos = 1 + yFrac * (maxPosition - 1);
-
-          // Find nearest car at this hour
-          const hourData = tooltipLookup[hour] || {};
-          let nearestCar: string | null = null;
-          let nearestDist = Infinity;
-
-          for (const cn of Object.keys(hourData)) {
-            const pt = hourData[cn];
-            const pos = viewMode === "class" && pt.classPosition ? parseInt(pt.classPosition, 10) : pt.position;
-            if (pos === null) continue;
-            const dist = Math.abs(pos - mousePos);
-            if (dist < nearestDist) {
-              nearestDist = dist;
-              nearestCar = cn;
-            }
-          }
-
-          // Only snap if within ~2 positions
-          if (nearestCar && nearestDist < 3) {
-            setHoveredCar(nearestCar);
-            setHoveredHour(hour);
-          } else {
-            setHoveredCar(null);
-          }
-        }}
-        onMouseLeave={() => setHoveredCar(null)}
+        onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 50 }}>
+          <LineChart
+            data={chartData}
+            margin={{ top: 10, right: 20, bottom: 10, left: 50 }}
+            onMouseMove={(state: any) => {
+              if (!state || state.activeTooltipIndex == null || !state.chartX || !state.chartY) {
+                return;
+              }
+              const hourIdx = state.activeTooltipIndex;
+              const hour = hourIdx + 1;
+              if (hour < 1 || hour > hourSessions.length) return;
+
+              // Map chartY to position using the Y axis scale (reversed)
+              // Fallback: estimate from chart dimensions
+              const containerEl = chartContainerRef.current;
+              const containerH = containerEl?.clientHeight || 400;
+              // Recharts margins: top 10, bottom 10 + axis ~20
+              const plotTop = 10;
+              const plotBottom = containerH - 40;
+              const plotHeight = plotBottom - plotTop;
+              const yFrac = Math.max(0, Math.min(1, (state.chartY - plotTop) / plotHeight));
+              const mousePos = 1 + yFrac * ((maxPosition || 1) - 1);
+
+              // Find nearest car at this hour
+              const hourData = tooltipLookup[hour] || {};
+              let nearestCar: string | null = null;
+              let nearestDist = Infinity;
+
+              for (const cn of Object.keys(hourData)) {
+                const pt = hourData[cn];
+                const pos = viewMode === "class" && pt.classPosition ? parseInt(pt.classPosition, 10) : pt.position;
+                if (pos === null) continue;
+                const dist = Math.abs(pos - mousePos);
+                if (dist < nearestDist) {
+                  nearestDist = dist;
+                  nearestCar = cn;
+                }
+              }
+
+              if (nearestCar && nearestDist < 3) {
+                setHoveredCar(nearestCar);
+                setHoveredHour(hour);
+                setTooltipPos({ x: state.chartX + 60, y: state.chartY });
+              } else {
+                setHoveredCar(null);
+                setTooltipPos(null);
+              }
+            }}
+            onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
+          >
             <XAxis
               dataKey="hourLabel"
               tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
@@ -395,13 +385,7 @@ export default function PositionProgressionChart({
               allowDecimals={false}
               label={{ value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } }}
             />
-            <Tooltip
-              content={() => {
-                // Custom tooltip rendered outside via hoveredCar state
-                return null;
-              }}
-              wrapperStyle={{ display: "none" }}
-            />
+            <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
             {activeHourIndex && activeHourIndex > 0 && (
               <ReferenceLine
                 x={hourSessions[activeHourIndex - 1]?.name}
@@ -436,16 +420,17 @@ export default function PositionProgressionChart({
           </LineChart>
         </ResponsiveContainer>
 
-        {/* Custom tooltip */}
-        {hoveredCar && hoveredHour && tooltipLookup[hoveredHour]?.[hoveredCar] && (() => {
+        {/* Custom tooltip near cursor */}
+        {hoveredCar && hoveredHour && tooltipPos && tooltipLookup[hoveredHour]?.[hoveredCar] && (() => {
           const pt = tooltipLookup[hoveredHour][hoveredCar];
+          const containerWidth = chartContainerRef.current?.clientWidth || 600;
+          const flipX = tooltipPos.x > containerWidth - 200;
           return (
             <div
               className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
               style={{
-                left: "50%",
-                bottom: 60,
-                transform: "translateX(-50%)",
+                left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10,
+                top: Math.max(10, tooltipPos.y - 40),
                 zIndex: 50,
               }}
             >
