@@ -85,14 +85,25 @@ export default function PositionProgressionChart({
     queryKey: ["position_progression", hourIds.join(",")],
     queryFn: async () => {
       if (hourIds.length === 0) return [];
-      const { data } = await supabase
-        .from("v2_race_results" as any)
-        .select(
-          "session_id, car_number, position, driver_id, team_id, laps_completed, status, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)"
-        )
-        .in("session_id", hourIds)
-        .order("position");
-      return (data || []) as any[];
+      // Fetch in batches to avoid Supabase's 1000-row default limit
+      const allResults: any[] = [];
+      const batchSize = 1000;
+      let offset = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("v2_race_results" as any)
+          .select(
+            "session_id, car_number, position, driver_id, team_id, laps_completed, status, extra_data, v2_drivers(full_name), v2_teams(id, full_name, short_name)"
+          )
+          .in("session_id", hourIds)
+          .order("position")
+          .range(offset, offset + batchSize - 1);
+        const batch = (data || []) as any[];
+        allResults.push(...batch);
+        if (batch.length < batchSize) break;
+        offset += batchSize;
+      }
+      return allResults;
     },
     enabled: hourIds.length > 0,
   });

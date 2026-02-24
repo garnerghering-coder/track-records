@@ -870,14 +870,15 @@ serve(async (req) => {
       }
     };
 
-    /** Parse session_date "22/01/2026 10:05" → { date: "2026-01-22", startTime: "10:05" } */
+    /** Parse session_date "22/01/2026 10:05" → { date: "2026-01-22", startTime: null }
+     * Note: We only extract the date; start times from IMSA data are unreliable and are omitted.
+     */
     const parseSessionDateTime = (sessionData: any): { date: string | null; startTime: string | null } => {
       if (!sessionData.session_date) return { date: null, startTime: null };
       const parts = sessionData.session_date.split(" ");
       const dateParts = parts[0]?.split("/");
       const date = dateParts && dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : null;
-      const startTime = parts[1] || null; // "10:05" (24h local time)
-      return { date, startTime };
+      return { date, startTime: null };
     };
 
     const createSession = async (
