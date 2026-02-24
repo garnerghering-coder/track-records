@@ -45,6 +45,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [standings, setStandings] = useState<StandingEntry[]>([]);
+  const [totalCarsCount, setTotalCarsCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const selectedSeason = useMemo(
@@ -361,7 +362,10 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
         }
       }
 
-      // Filter to only entries with points > 0
+      // Count total unique cars (including those with 0 points) for the denominator
+      const totalCarsInSeason = [...carMap.values()].length;
+
+      // Filter to only entries with points > 0 for ranking
       entries = entries.filter((e) => e.totalPoints > 0);
 
       // Sort by total points desc
@@ -379,6 +383,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
       }));
 
       setStandings(standingsResult);
+      setTotalCarsCount(totalCarsInSeason);
     })();
   }, [selectedSeasonId, selectedClass, driverId, seasons]);
 
@@ -394,7 +399,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
     standings,
     driverPosition: driverEntry?.position ?? null,
     driverPoints: driverEntry?.totalPoints ?? null,
-    totalEntries: standings.length,
+    totalEntries: totalCarsCount > 0 ? totalCarsCount : standings.length,
     loading,
     setSelectedSeasonId: (id: string) => {
       setSelectedSeasonId(id);

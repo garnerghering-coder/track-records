@@ -255,7 +255,7 @@ function StandingsGauge({ standingsData }: { standingsData: DriverStandingsResul
     : [];
   const seriesOptions = [...new Map(seriesForYear.map((s) => [s.seriesId, { value: s.seasonId, label: s.seriesAlias }])).values()];
 
-  const classOptions = selectedSeason?.isMulticlass && selectedSeason.classes.length > 0
+  const classOptions = selectedSeason?.isMulticlass && selectedSeason.classes.length > 1
     ? selectedSeason.classes.map((c) => ({ value: c.name, label: c.name }))
     : [];
 
@@ -368,9 +368,9 @@ function StandingsGauge({ standingsData }: { standingsData: DriverStandingsResul
           value={selectedSeason?.seasonId || ""}
           onChange={handleSeriesChange}
         />
-        {classOptions.length > 0 && (
+        {classOptions.length > 0 && selectedClass && (
           <InlinePicker
-            label={selectedClass || "All"}
+            label={selectedClass}
             options={classOptions}
             value={selectedClass || ""}
             onChange={(v) => setSelectedClass(v)}
@@ -378,6 +378,10 @@ function StandingsGauge({ standingsData }: { standingsData: DriverStandingsResul
         )}
         <span className="text-muted-foreground uppercase tracking-widest">Standings</span>
       </div>
+      {/* Category text to match the other gauges */}
+      <span className="text-muted-foreground uppercase tracking-widest text-center" style={{ fontSize: 10 }}>
+        {hasData ? (driverPosition === 1 ? "Championship Leader" : driverPosition != null && driverPosition <= 3 ? "Podium Contender" : "Championship") : "Standings"}
+      </span>
     </div>
   );
 }

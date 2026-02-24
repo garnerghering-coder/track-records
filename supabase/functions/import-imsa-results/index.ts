@@ -487,20 +487,31 @@ function buildResultRows(
     if (raceClass) extraData["Class"] = raceClass;
     if (raceClass) extraData["PIC"] = pic;
 
-    // Store all drivers for any race with multiple drivers per car
-    if (drivers.length > 1) {
-      const allDrivers: Array<{ id: string | null; name: string; nationality: string | null }> = [];
+    // For endurance races (overall/parent view) with multiple drivers per car,
+    // insert one row per driver sharing the same car_number, position, etc.
+    if (isRace && isOverallEndurance && drivers.length > 1) {
       for (const d of drivers) {
         const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
         if (!dn) continue;
         const did = driverMap.get(dn.toLowerCase()) || null;
-        const iso2 = (d.country || d.nationality) ? (country3to2[(d.country || d.nationality || "").toUpperCase()] || null) : null;
-        allDrivers.push({ id: did, name: dn, nationality: iso2 });
+        raceRows.push({
+          session_id: sessionId,
+          driver_id: did,
+          team_id: teamId,
+          car_id: carId,
+          car_number: carNumber ? String(carNumber) : null,
+          position,
+          status: status as any,
+          laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
+          gap_to_leader: gapToLeader ? String(gapToLeader) : null,
+          pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
+          fastest_lap_time: bestLap ? String(bestLap) : null,
+          total_time: totalTime ? String(totalTime) : null,
+          extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+        });
+        summary.total_entries++;
       }
-      if (allDrivers.length > 0) extraData["all_drivers"] = allDrivers;
-    }
-
-    if (isRace) {
+    } else if (isRace) {
       raceRows.push({
         session_id: sessionId,
         driver_id: driverId,
@@ -516,6 +527,7 @@ function buildResultRows(
         total_time: totalTime ? String(totalTime) : null,
         extra_data: Object.keys(extraData).length > 0 ? extraData : {},
       });
+      summary.total_entries++;
     } else if (sessionType === "qualifying") {
       qualifyingRows.push({
         session_id: sessionId,
@@ -542,8 +554,8 @@ function buildResultRows(
         laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
         extra_data: Object.keys(extraData).length > 0 ? extraData : {},
       });
+      summary.total_entries++;
     }
-    summary.total_entries++;
   }
   return { raceRows, qualifyingRows, practiceRows };
 }

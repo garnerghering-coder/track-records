@@ -81,6 +81,13 @@ function buildSessionTable(s: SessionExportData) {
 
   // Common leading columns
   addCol("Pos", (r) => String(r.position || ""));
+
+  // PIC and Class right after Pos (before No./Driver)
+  const hasPIC = results.some((r) => r.extra_data?.PIC);
+  const hasClass = results.some((r) => r.extra_data?.Class);
+  if (hasPIC) addCol("PIC", (r) => String(r.extra_data?.PIC || ""));
+  if (hasClass) addCol("Class", (r) => r.extra_data?.Class || "");
+
   if (anyHas(results, "car_number")) addCol("No.", (r) => r.car_number || "");
   addCol("Driver", (r) => r.v2_drivers?.full_name || "");
   if (results.some((r) => r.v2_teams)) addCol("Team", (r) => {
@@ -116,8 +123,9 @@ function buildSessionTable(s: SessionExportData) {
     if (results.some((r) => r.status && r.status !== "finished")) addCol("Status", (r) => r.status && r.status !== "finished" ? r.status.toUpperCase() : "");
   }
 
-  // Custom extra_data columns (only if they have data)
+  // Custom extra_data columns (only if they have data) — skip PIC/Class already added above
   for (const col of customColumns) {
+    if (col.key === "PIC" || col.key === "Class") continue;
     if (anyHasExtra(results, col.key)) {
       addCol(col.name, (r) => String(r.extra_data?.[col.key] ?? ""));
     }
@@ -154,40 +162,51 @@ export async function exportEventPdf(params: EventExportParams) {
     const s = sessions[i];
 
     // --- Header: Event (left) | Logo (center) | Session (right) ---
+    // All elements start at same topY for vertical alignment
     const topY = 10;
     const centerX = pageWidth / 2;
     const margin = 14;
-    const colMaxWidth = (pageWidth - 28) / 3; // each column gets ~1/3 width
 
-    // Col 1: Event info (left) — title + series on one line, circuit on next
+    // Col 1: Event info (left)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(30);
-    doc.text(eventName, margin, topY);
+    doc.text(eventName, margin, topY + 4);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(100);
-    if (seriesName) doc.text(seriesName, margin, topY + 5);
+    if (seriesName) doc.text(seriesName, margin, topY + 9);
     const locationStr = [circuitName, circuitCountry].filter(Boolean).join(", ");
-    if (locationStr) doc.text(locationStr, margin, topY + 9);
+    if (locationStr) doc.text(locationStr, margin, topY + 13);
 
-    // Col 3: Session info (right-aligned)
+    // Col 2: Logo (centered, vertically aligned to topY)
+    if (logoData) {
+      const imgProps = doc.getImageProperties(logoData);
+      const logoHeight = 12;
+      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
+      doc.addImage(logoData, "PNG", centerX - logoWidth / 2, topY, logoWidth, logoHeight);
+    } else {
+      doc.setFontSize(12);
+      doc.setTextColor(30);
+      doc.text("TRACK RECORDS", centerX, topY + 4, { align: "center" });
+    }
+
+    // Col 3: Session info (right-aligned, starting at same topY)
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(50);
     const sessionLabel = s.sessionName + (s.sessionDate ? ` — ${new Date(s.sessionDate).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}` : "");
-    doc.text(sessionLabel, pageWidth - margin, topY, { align: "right" });
+    doc.text(sessionLabel, pageWidth - margin, topY + 4, { align: "right" });
     doc.setFont("helvetica", "normal");
 
-    // Weather below session name (right-aligned, split across lines)
-    let rightLineY = topY + 5;
+    // Weather below session name (right-aligned)
+    let rightLineY = topY + 9;
     if (s.weather) {
       const w = s.weather;
       doc.setFontSize(7);
       doc.setTextColor(120);
 
-      // Strip unicode emojis from condition summary
       const cleanSummary = (w.condition_summary || "").replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").trim();
       if (cleanSummary) {
         doc.text(cleanSummary, pageWidth - margin, rightLineY, { align: "right" });
@@ -217,20 +236,7 @@ export async function exportEventPdf(params: EventExportParams) {
       }
     }
 
-    const bottomY = Math.max(topY + 9, rightLineY);
-
-    // Col 2: Logo (horizontally centered, vertically centered in header)
-    if (logoData) {
-      const imgProps = doc.getImageProperties(logoData);
-      const logoHeight = 12;
-      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-      const logoCenterY = topY + (bottomY - topY) / 2 - logoHeight / 2;
-      doc.addImage(logoData, "PNG", centerX - logoWidth / 2, logoCenterY, logoWidth, logoHeight);
-    } else {
-      doc.setFontSize(12);
-      doc.setTextColor(30);
-      doc.text("TRACK RECORDS", centerX, topY + 4, { align: "center" });
-    }
+    const bottomY = Math.max(topY + 13, rightLineY);
 
     let tableStartY = bottomY + 4;
 

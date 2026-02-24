@@ -64,6 +64,7 @@ const Index = () => {
         description="Search drivers, teams, series, circuits, and race results — all in one place."
         canonical="/"
       />
+      <Header />
       <WelcomeLightbox />
 
       {/* Hero */}
