@@ -15,6 +15,7 @@ import PdfExportDialog from "@/components/PdfExportDialog";
 import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
 import WeatherBubble from "@/components/WeatherBubble";
+import PositionProgressionChart from "@/components/PositionProgressionChart";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -268,6 +269,16 @@ function EnduranceRaceView({
         isOverallEnduranceView={!isHourView}
         isMulticlass={isMulticlass}
       />
+
+      {/* Position Progression Chart */}
+      {hourSessions.length > 0 && (
+        <PositionProgressionChart
+          hourSessions={hourSessions}
+          teamNameMap={teamNameMap}
+          activeHourId={isHourView ? displaySessionId : undefined}
+          isMulticlass={isMulticlass}
+        />
+      )}
     </div>
   );
 }
