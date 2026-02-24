@@ -77,7 +77,7 @@ const Header = () => {
   const navLinks = [
   { to: "/series", label: "Series", match: "/series" },
   { to: "/search?tab=drivers", label: "Drivers", match: "/search" },
-  { to: "/teams", label: "Teams", match: "/teams" },
+  { to: "/search?tab=circuits", label: "Circuits", match: "/circuit" },
   { to: "/results", label: "Results", match: "/results" },
   { to: "/calendar", label: "Calendar", match: "/calendar" }];
 

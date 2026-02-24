@@ -180,13 +180,13 @@ export default function ManageCircuits() {
                       <TableCell colSpan={6} className="bg-muted/30 p-0">
                         <div className="px-8 py-3 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Track Layouts</span>
+                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Configurations</span>
                             <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => openNewLayout(c.id)}>
                               <Plus className="h-3 w-3 mr-1" />Add Layout
                             </Button>
                           </div>
                           {circuitLayouts.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">No layouts defined. Add one to specify different track configurations.</p>
+                            <p className="text-xs text-muted-foreground">No configurations defined. Add one to specify different circuit configurations.</p>
                           ) : (
                             <div className="space-y-1">
                               {circuitLayouts.map((l: any) => {

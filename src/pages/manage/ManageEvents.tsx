@@ -228,7 +228,7 @@ export default function ManageEvents() {
             </div>
             {circuit && createLayouts.length > 0 && (
               <div>
-                <Label>Default Track Layout</Label>
+                <Label>Circuit Configuration</Label>
                 <Select value={layoutId || ""} onValueChange={v => setLayoutId(v || null)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select layout…" /></SelectTrigger>
                   <SelectContent>
@@ -273,7 +273,7 @@ export default function ManageEvents() {
             </div>
             {editCircuit && editLayouts.length > 0 && (
               <div>
-                <Label>Default Track Layout</Label>
+                <Label>Circuit Configuration</Label>
                 <Select value={editLayoutId || ""} onValueChange={v => setEditLayoutId(v || null)}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select layout…" /></SelectTrigger>
                   <SelectContent>

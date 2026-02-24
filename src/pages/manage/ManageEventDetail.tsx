@@ -522,7 +522,7 @@ export default function ManageEventDetail() {
             </div>
             {circuitLayouts.length > 0 && (
               <div>
-                <Label>Track Layout</Label>
+                <Label>Circuit Configuration</Label>
                 <Select value={sessionForm.layout_id} onValueChange={v => setSessionForm(f => ({ ...f, layout_id: v === "_none" ? "" : v }))}>
                   <SelectTrigger><SelectValue placeholder="Select layout…" /></SelectTrigger>
                   <SelectContent>

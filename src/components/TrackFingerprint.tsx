@@ -28,8 +28,8 @@ const CATEGORY_EXPLANATIONS: Record<string, string> = {
 };
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
-  "Track Demand": "An overall difficulty rating combining track character, elevation, and braking severity.",
-  "Track Character": "Classifies the layout from power-focused straights to tight technical sections based on corner density and straight ratio.",
+  "Circuit Demand": "An overall difficulty rating combining circuit character, elevation, and braking severity.",
+  "Circuit Character": "Classifies the configuration from power-focused straights to tight technical sections based on corner density and straight ratio.",
   "Corner Severity": "Measures the proportion of corners that require heavy braking effort.",
   "Elevation": "Rates the total elevation change relative to track length.",
 };
@@ -112,9 +112,9 @@ export default function TrackFingerprint({ metrics }: { metrics: TrackMetrics })
   const gauges: { value: number; category: string; title: string; key: string }[] = [];
 
   if (metrics.tdi != null && metrics.tdiCategory)
-    gauges.push({ value: metrics.tdi, category: metrics.tdiCategory, title: "Track Demand", key: "tdi" });
+    gauges.push({ value: metrics.tdi, category: metrics.tdiCategory, title: "Circuit Demand", key: "tdi" });
   if (metrics.tcs100 != null && metrics.tcsCategory)
-    gauges.push({ value: metrics.tcs100, category: metrics.tcsCategory, title: "Track Character", key: "tcs" });
+    gauges.push({ value: metrics.tcs100, category: metrics.tcsCategory, title: "Circuit Character", key: "tcs" });
   if (metrics.csi != null && metrics.csiCategory)
     gauges.push({ value: metrics.csi, category: metrics.csiCategory, title: "Corner Severity", key: "csi" });
   if (metrics.ei != null && metrics.eiCategory)
