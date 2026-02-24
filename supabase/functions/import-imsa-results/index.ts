@@ -439,9 +439,16 @@ function buildResultRows(
       if (carTimeCard) {
         const activeDriverName = carTimeCard.get(hourNumber);
         if (activeDriverName) {
+          const activeLower = activeDriverName.toLowerCase().trim();
           const matched = drivers.find((d: any) => {
-            const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
-            return dn.toLowerCase() === activeDriverName.toLowerCase();
+            const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim().toLowerCase();
+            if (dn === activeLower) return true;
+            // CSV may have "LASTNAME Firstname" or partial matches
+            const surname = (d.surname || d.last_name || "").toLowerCase();
+            const firstname = (d.firstname || d.first_name || "").toLowerCase();
+            if (activeLower.startsWith(surname) && activeLower.includes(firstname)) return true;
+            if (activeLower.includes(surname) && activeLower.includes(firstname)) return true;
+            return false;
           });
           if (matched) selectedDriver = matched;
         }
@@ -615,7 +622,7 @@ serve(async (req) => {
     }
 
     // Also collect Time Card CSV links for endurance driver detection
-    const timeCardRegex = /href="([^"]+23_Time[_%\s]Cards[^"]*\.CSV)"/gi;
+    const timeCardRegex = /href="([^"]+23_Time(?:%20|[_%\s])*Cards?[^"]*\.CSV)"/gi;
     const allTimeCardLinks: string[] = [];
     while ((match = timeCardRegex.exec(html)) !== null) {
       allTimeCardLinks.push(match[1]);
@@ -1242,34 +1249,9 @@ serve(async (req) => {
         if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
       }
 
-      // 5. Update overall race driver_id from final hour's results (finishing driver)
-      if (parentSessionId && sortedHours.length > 0) {
-        const lastHourName = `Hour ${sortedHours[sortedHours.length - 1].hour}`;
-        const { data: lastHourSession } = await adminClient
-          .from("v2_sessions")
-          .select("id")
-          .eq("event_id", event_id)
-          .eq("name", lastHourName)
-          .single();
-        if (lastHourSession) {
-          const { data: lastHourResults } = await adminClient
-            .from("v2_race_results")
-            .select("car_number, driver_id")
-            .eq("session_id", lastHourSession.id);
-          if (lastHourResults && lastHourResults.length > 0) {
-            for (const lhr of lastHourResults) {
-              if (lhr.car_number && lhr.driver_id) {
-                await adminClient
-                  .from("v2_race_results")
-                  .update({ driver_id: lhr.driver_id })
-                  .eq("session_id", parentSessionId)
-                  .eq("car_number", lhr.car_number);
-              }
-            }
-            console.log(`Updated ${lastHourResults.length} overall race driver_ids from final hour`);
-          }
-        }
-      }
+      // Note: Step 5 (updating parent race driver_ids) removed.
+      // The parent endurance_race session now stores one row per driver in the car,
+      // so there's no need to overwrite them with the final hour's driver.
     } else {
       // Standard flow - use all fetched results
       // For non-endurance, we may have fetched under nonRaceLinks but they include all
