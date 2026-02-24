@@ -16,7 +16,7 @@ import DriverFingerprint, { DriverFingerprintData } from "@/components/DriverFin
 import { formatDateRange } from "@/lib/date-utils";
 
 const DriverProfilePage = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams<{id: string;}>();
   const [driver, setDriver] = useState<any>(null);
   const [raceHistory, setRaceHistory] = useState<any[]>([]);
   const [allSessionResults, setAllSessionResults] = useState<any[]>([]);
@@ -27,7 +27,7 @@ const DriverProfilePage = () => {
   const [loading, setLoading] = useState(true);
 
   // Derive season years and compute averages
-  const qualifyingResults = useMemo(() => allSessionResults.filter(r => r._source === "qualifying"), [allSessionResults]);
+  const qualifyingResults = useMemo(() => allSessionResults.filter((r) => r._source === "qualifying"), [allSessionResults]);
 
   const seasonYears = useMemo(() => {
     const years = new Set<number>();
@@ -40,10 +40,10 @@ const DriverProfilePage = () => {
 
   const stats = useMemo(() => {
     const filterBySeason = (rows: any[]) =>
-      selectedSeason === "all" ? rows : rows.filter(r => String(r.event?.v2_seasons?.year) === selectedSeason);
+    selectedSeason === "all" ? rows : rows.filter((r) => String(r.event?.v2_seasons?.year) === selectedSeason);
 
-    const raceRows = filterBySeason(raceHistory).filter(r => r.position != null && (!r.status || r.status === "finished" || r.status === "classified"));
-    const qualRows = filterBySeason(qualifyingResults).filter(r => r.position != null);
+    const raceRows = filterBySeason(raceHistory).filter((r) => r.position != null && (!r.status || r.status === "finished" || r.status === "classified"));
+    const qualRows = filterBySeason(qualifyingResults).filter((r) => r.position != null);
 
     const avg = (arr: any[]) => arr.length === 0 ? null : arr.reduce((s, r) => s + r.position, 0) / arr.length;
 
@@ -51,7 +51,7 @@ const DriverProfilePage = () => {
       avgRace: avg(raceRows),
       raceCount: raceRows.length,
       avgQual: avg(qualRows),
-      qualCount: qualRows.length,
+      qualCount: qualRows.length
     };
   }, [raceHistory, qualifyingResults, selectedSeason]);
 
@@ -63,14 +63,14 @@ const DriverProfilePage = () => {
 
       // Fetch fingerprint data
       if (d) {
-        supabase
-          .from("v2_driver_fingerprints" as any)
-          .select("dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included, adps, adps_band")
-          .eq("driver_id", id)
-          .maybeSingle()
-          .then(({ data: fp }) => {
-            if (fp) setFingerprint(fp as any);
-          });
+        supabase.
+        from("v2_driver_fingerprints" as any).
+        select("dps, dps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included, adps, adps_band").
+        eq("driver_id", id).
+        maybeSingle().
+        then(({ data: fp }) => {
+          if (fp) setFingerprint(fp as any);
+        });
       }
 
       if (d) {
@@ -82,21 +82,21 @@ const DriverProfilePage = () => {
         });
 
         // Fetch race results where this driver is the primary driver
-        const { data: raceResults } = await supabase
-          .from("v2_race_results" as any)
-          .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-          .eq("driver_id", id)
-          .order("created_at", { ascending: false })
-          .limit(200);
+        const { data: raceResults } = await supabase.
+        from("v2_race_results" as any).
+        select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`).
+        eq("driver_id", id).
+        order("created_at", { ascending: false }).
+        limit(200);
 
         const primaryResults = (raceResults || []) as any[];
-        
+
         // Find car_numbers this driver uses (from qualifying/practice)
         const [{ data: qualForDriver }, { data: pracForDriver }] = await Promise.all([
-          supabase.from("v2_qualifying_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id),
-          supabase.from("v2_practice_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id),
-        ]);
-        
+        supabase.from("v2_qualifying_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id),
+        supabase.from("v2_practice_results" as any).select("session_id, car_number, v2_sessions(event_id)").eq("driver_id", id)]
+        );
+
         // Build map of event_id -> car_numbers this driver uses
         const driverCarsByEvent = new Map<string, Set<string>>();
         for (const r of [...(qualForDriver || []), ...(pracForDriver || [])] as any[]) {
@@ -116,38 +116,38 @@ const DriverProfilePage = () => {
 
         // For events where this driver has NO direct race result, fetch co-driver results by event+car_number
         const directEventIds = new Set(primaryResults.map((r: any) => r.v2_sessions?.v2_events?.id).filter(Boolean));
-        const coDriverEventIds = [...driverCarsByEvent.keys()].filter(eid => !directEventIds.has(eid));
-        
+        const coDriverEventIds = [...driverCarsByEvent.keys()].filter((eid) => !directEventIds.has(eid));
+
         const coDriverResults: any[] = [];
         // Fetch in chunks of 20 event IDs
         for (let i = 0; i < coDriverEventIds.length; i += 20) {
           const chunk = coDriverEventIds.slice(i, i + 20);
           // Get all session IDs for these events
-          const { data: eventSessions } = await supabase
-            .from("v2_sessions" as any)
-            .select("id, event_id")
-            .in("event_id", chunk)
-            .is("parent_session_id", null);
-          
+          const { data: eventSessions } = await supabase.
+          from("v2_sessions" as any).
+          select("id, event_id").
+          in("event_id", chunk).
+          is("parent_session_id", null);
+
           if (!eventSessions || eventSessions.length === 0) continue;
-          
+
           // Collect car_numbers to filter for
           const sessionIdsForChunk = (eventSessions as any[]).map((s: any) => s.id);
           const carNumbersForChunk = new Set<string>();
           for (const eid of chunk) {
             const cars = driverCarsByEvent.get(eid);
-            if (cars) cars.forEach(c => carNumbersForChunk.add(c));
+            if (cars) cars.forEach((c) => carNumbersForChunk.add(c));
           }
-          
-          const { data: coResults } = await supabase
-            .from("v2_race_results" as any)
-            .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-            .in("session_id", sessionIdsForChunk)
-            .in("car_number", [...carNumbersForChunk]);
-          
+
+          const { data: coResults } = await supabase.
+          from("v2_race_results" as any).
+          select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`).
+          in("session_id", sessionIdsForChunk).
+          in("car_number", [...carNumbersForChunk]);
+
           if (coResults) coDriverResults.push(...coResults);
         }
-        
+
         // Also find co-driver results in events where driver HAS a direct result but in different sessions
         // (e.g. driver has practice but the endurance_race result is under a different driver_id)
         const directPairs = new Set(primaryResults.map((r: any) => `${r.session_id}:${r.car_number}`));
@@ -159,31 +159,31 @@ const DriverProfilePage = () => {
           });
           if (!hasRaceResult) eventsWithDirectButMissingRace.push(eid);
         }
-        
+
         for (let i = 0; i < eventsWithDirectButMissingRace.length; i += 20) {
           const chunk = eventsWithDirectButMissingRace.slice(i, i + 20);
-          const { data: eventSessions } = await supabase
-            .from("v2_sessions" as any)
-            .select("id, event_id, session_type")
-            .in("event_id", chunk)
-            .is("parent_session_id", null)
-            .in("session_type", ["race", "endurance_race", "sprint_race"]);
-          
+          const { data: eventSessions } = await supabase.
+          from("v2_sessions" as any).
+          select("id, event_id, session_type").
+          in("event_id", chunk).
+          is("parent_session_id", null).
+          in("session_type", ["race", "endurance_race", "sprint_race"]);
+
           if (!eventSessions || eventSessions.length === 0) continue;
-          
+
           const sessionIdsForChunk = (eventSessions as any[]).map((s: any) => s.id);
           const carNumbersForChunk = new Set<string>();
           for (const eid of chunk) {
             const cars = driverCarsByEvent.get(eid);
-            if (cars) cars.forEach(c => carNumbersForChunk.add(c));
+            if (cars) cars.forEach((c) => carNumbersForChunk.add(c));
           }
-          
-          const { data: coResults } = await supabase
-            .from("v2_race_results" as any)
-            .select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-            .in("session_id", sessionIdsForChunk)
-            .in("car_number", [...carNumbersForChunk]);
-          
+
+          const { data: coResults } = await supabase.
+          from("v2_race_results" as any).
+          select(`id, position, status, car_number, total_time, gap_to_leader, driver_id, session_id, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`).
+          in("session_id", sessionIdsForChunk).
+          in("car_number", [...carNumbersForChunk]);
+
           if (coResults) coDriverResults.push(...coResults);
         }
 
@@ -191,47 +191,47 @@ const DriverProfilePage = () => {
           ...r,
           event: r.v2_sessions?.v2_events,
           session: r.v2_sessions,
-          _source: source,
+          _source: source
         });
 
         // Combine and filter out hourly sub-sessions (parent_session_id not null)
         // Only show final race/endurance_race results, not individual hour breakdowns
-        const allRaceRows = [...primaryResults, ...coDriverResults]
-          .map((r: any) => mapResult(r, "race"))
-          .filter((r: any) => {
-            const sess = r.session;
-            if (!sess) return true;
-            // Exclude hourly sub-sessions (they have parent_session_id set)
-            if (sess.parent_session_id) return false;
-            return true;
-          });
+        const allRaceRows = [...primaryResults, ...coDriverResults].
+        map((r: any) => mapResult(r, "race")).
+        filter((r: any) => {
+          const sess = r.session;
+          if (!sess) return true;
+          // Exclude hourly sub-sessions (they have parent_session_id set)
+          if (sess.parent_session_id) return false;
+          return true;
+        });
 
         // Deduplicate by session_id + car_number
         const seen = new Set<string>();
-        const uniqueRaceRows = allRaceRows.filter(r => {
+        const uniqueRaceRows = allRaceRows.filter((r) => {
           const key = `${r.session?.id}:${r.car_number}`;
           if (seen.has(key)) return false;
           seen.add(key);
           return true;
         });
-        
+
         setRaceHistory(sortResults([...uniqueRaceRows]));
 
         // Fetch qualifying results (only for this driver directly)
-        const { data: qualResults } = await supabase
-          .from("v2_qualifying_results" as any)
-          .select(`position, car_number, best_time, gap_to_pole, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-          .eq("driver_id", id)
-          .order("created_at", { ascending: false })
-          .limit(200);
+        const { data: qualResults } = await supabase.
+        from("v2_qualifying_results" as any).
+        select(`position, car_number, best_time, gap_to_pole, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`).
+        eq("driver_id", id).
+        order("created_at", { ascending: false }).
+        limit(200);
 
         // Fetch practice results
-        const { data: pracResults } = await supabase
-          .from("v2_practice_results" as any)
-          .select(`position, car_number, best_lap_time, gap_to_p1, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`)
-          .eq("driver_id", id)
-          .order("created_at", { ascending: false })
-          .limit(200);
+        const { data: pracResults } = await supabase.
+        from("v2_practice_results" as any).
+        select(`position, car_number, best_lap_time, gap_to_p1, v2_teams(id, full_name), v2_cars(id, model_name, manufacturer), v2_sessions(${sessionSelect})`).
+        eq("driver_id", id).
+        order("created_at", { ascending: false }).
+        limit(200);
 
         const qualRows = (qualResults || []).map((r: any) => mapResult(r, "qualifying"));
         const pracRows = (pracResults || []).map((r: any) => mapResult(r, "practice"));
@@ -245,10 +245,10 @@ const DriverProfilePage = () => {
           if (sid) seasonIds.add(sid);
         }
         if (seasonIds.size > 0) {
-          const { data: aliases } = await supabase
-            .from("v2_team_season_names" as any)
-            .select("team_id, season_id, display_name")
-            .in("season_id", Array.from(seasonIds));
+          const { data: aliases } = await supabase.
+          from("v2_team_season_names" as any).
+          select("team_id, season_id, display_name").
+          in("season_id", Array.from(seasonIds));
           const map: Record<string, string> = {};
           for (const a of (aliases || []) as any[]) {
             map[`${a.team_id}:${a.season_id}`] = a.display_name;
@@ -269,8 +269,8 @@ const DriverProfilePage = () => {
       <SEOHead
         title={driver.full_name}
         description={`Motorsport profile for ${driver.full_name}${driver.nationality ? ` from ${driver.nationality}` : ""}. View race results and statistics.`}
-        canonical={`/driver/${id}`}
-      />
+        canonical={`/driver/${id}`} />
+
       <Header />
       <section className="pt-24 pb-12" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">
@@ -303,7 +303,7 @@ const DriverProfilePage = () => {
         {/* Driver Fingerprint */}
         <div className="mb-8">
             <div className="flex items-center justify-center gap-2 mb-4">
-              <h2 className="font-display text-xl font-semibold text-foreground">Driver Fingerprint</h2>
+              <h2 className="font-display text-xl font-semibold text-foreground">DRIVER FINGERPRINT (BETA)</h2>
               <TooltipProvider delayDuration={200}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -319,8 +319,8 @@ const DriverProfilePage = () => {
           </div>
 
         {/* Statistics Section */}
-        {(stats.avgQual !== null || stats.avgRace !== null) && (
-          <div className="mb-8">
+        {(stats.avgQual !== null || stats.avgRace !== null) &&
+        <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl font-semibold text-foreground">Statistics</h2>
               <Select value={selectedSeason} onValueChange={setSelectedSeason}>
@@ -329,9 +329,9 @@ const DriverProfilePage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Seasons</SelectItem>
-                  {seasonYears.map(y => (
-                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                  ))}
+                  {seasonYears.map((y) =>
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                )}
                 </SelectContent>
               </Select>
             </div>
@@ -342,9 +342,9 @@ const DriverProfilePage = () => {
                   <p className="text-4xl font-accent font-bold text-foreground">
                     {stats.avgQual !== null ? Math.round(stats.avgQual) : "—"}
                   </p>
-                  {stats.avgQual !== null && (
-                    <p className="text-xs text-muted-foreground mt-1">{stats.avgQual.toFixed(2)} across {stats.qualCount} result{stats.qualCount !== 1 ? "s" : ""}</p>
-                  )}
+                  {stats.avgQual !== null &&
+                <p className="text-xs text-muted-foreground mt-1">{stats.avgQual.toFixed(2)} across {stats.qualCount} result{stats.qualCount !== 1 ? "s" : ""}</p>
+                }
                 </CardContent>
               </Card>
               <Card>
@@ -355,26 +355,26 @@ const DriverProfilePage = () => {
                       {stats.avgRace !== null ? Math.round(stats.avgRace) : "—"}
                     </p>
                     {stats.avgRace !== null && stats.avgQual !== null && (() => {
-                      const diff = stats.avgQual - stats.avgRace;
-                      const rounded = Math.round(diff * 10) / 10;
-                      if (rounded === 0) return null;
-                      const isGain = rounded > 0;
-                      return (
-                        <span className={`inline-flex items-center gap-0.5 text-sm font-medium ${isGain ? "text-green-500" : "text-destructive"}`}>
+                    const diff = stats.avgQual - stats.avgRace;
+                    const rounded = Math.round(diff * 10) / 10;
+                    if (rounded === 0) return null;
+                    const isGain = rounded > 0;
+                    return (
+                      <span className={`inline-flex items-center gap-0.5 text-sm font-medium ${isGain ? "text-green-500" : "text-destructive"}`}>
                           <span className={`text-xs ${isGain ? "" : "rotate-180 inline-block"}`}>▲</span>
                           {Math.abs(rounded)}
-                        </span>
-                      );
-                    })()}
+                        </span>);
+
+                  })()}
                   </div>
-                  {stats.avgRace !== null && (
-                    <p className="text-xs text-muted-foreground mt-1">{stats.avgRace.toFixed(2)} across {stats.raceCount} result{stats.raceCount !== 1 ? "s" : ""}</p>
-                  )}
+                  {stats.avgRace !== null &&
+                <p className="text-xs text-muted-foreground mt-1">{stats.avgRace.toFixed(2)} across {stats.raceCount} result{stats.raceCount !== 1 ? "s" : ""}</p>
+                }
                 </CardContent>
               </Card>
             </div>
           </div>
-        )}
+        }
 
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-display text-xl font-semibold text-foreground">
@@ -383,16 +383,16 @@ const DriverProfilePage = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowAllSessions(!showAllSessions)}
-          >
+            onClick={() => setShowAllSessions(!showAllSessions)}>
+
             {showAllSessions ? "Show Only Races" : "Show All Sessions"}
           </Button>
         </div>
         {(() => {
           const displayResults = showAllSessions ? allSessionResults : raceHistory;
           if (displayResults.length === 0) return (
-            <p className="text-muted-foreground text-sm">No {showAllSessions ? "session" : "race"} results found for this driver.</p>
-          );
+            <p className="text-muted-foreground text-sm">No {showAllSessions ? "session" : "race"} results found for this driver.</p>);
+
           return (
             <div className="rounded-lg border border-border bg-card overflow-hidden">
               <div className="overflow-x-auto">
@@ -409,32 +409,32 @@ const DriverProfilePage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {displayResults.map((r: any, i: number) => (
-                      <TableRow key={r.id || `${r._source}-${i}`}>
+                    {displayResults.map((r: any, i: number) =>
+                    <TableRow key={r.id || `${r._source}-${i}`}>
                         <TableCell>
-                          {r.event ? (
-                            <Link to={`/events/${r.event.id}`} className="text-primary hover:underline font-medium">
+                          {r.event ?
+                        <Link to={`/events/${r.event.id}`} className="text-primary hover:underline font-medium">
                               {r.event.name}
-                            </Link>
-                          ) : "—"}
+                            </Link> :
+                        "—"}
                           <p className="text-xs text-muted-foreground">
                             {r.event?.v2_seasons?.v2_series?.name} {r.event?.v2_seasons?.year && `· ${r.event.v2_seasons.year}`}
                           </p>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {r.session?.date
-                            ? new Date(r.session.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                            : r.event?.start_date
-                              ? formatDateRange(r.event.start_date, r.event.end_date)
-                              : "—"}
+                          {r.session?.date ?
+                        new Date(r.session.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) :
+                        r.event?.start_date ?
+                        formatDateRange(r.event.start_date, r.event.end_date) :
+                        "—"}
                         </TableCell>
                         <TableCell>
-                          {r.v2_teams ? (
-                            <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">
+                          {r.v2_teams ?
+                        <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">
                               {teamAliasMap[`${r.v2_teams.id}:${r.event?.v2_seasons?.id}`] || r.v2_teams.full_name}
-                            </Link>
-                          ) : "—"}
+                            </Link> :
+                        "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}
@@ -443,23 +443,23 @@ const DriverProfilePage = () => {
                           {r.position ?? "—"}
                         </TableCell>
                         <TableCell>
-                          {r._source === "race" ? (
-                            r.status && r.status !== "finished" ? (
-                              <span className="text-destructive text-sm font-medium">{r.status.toUpperCase()}</span>
-                            ) : null
-                          ) : (
-                            <span className="text-muted-foreground text-xs font-mono">
+                          {r._source === "race" ?
+                        r.status && r.status !== "finished" ?
+                        <span className="text-destructive text-sm font-medium">{r.status.toUpperCase()}</span> :
+                        null :
+
+                        <span className="text-muted-foreground text-xs font-mono">
                               {r.best_time || r.best_lap_time || r.gap_to_pole || r.gap_to_p1 || "—"}
                             </span>
-                          )}
+                        }
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </div>
-            </div>
-          );
+            </div>);
+
         })()}
 
         <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
@@ -469,8 +469,8 @@ const DriverProfilePage = () => {
         </div>
       </div>
       <Footer />
-    </div>
-  );
+    </div>);
+
 };
 
 export default DriverProfilePage;
