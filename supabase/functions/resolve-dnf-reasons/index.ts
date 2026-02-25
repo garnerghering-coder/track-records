@@ -25,6 +25,7 @@ FOR DNF, choose exactly one:
 - "Other" — ONLY if none of the above fit.
 
 Also provide a brief explanation (max 15 words) describing what happened. Example: "Powertrain failure caused retirement on Lap 45" or "Spun and collided with wall during rain".
+If an entry already has an existing reason, keep that reason and just provide the explanation.
 
 Respond with ONLY a JSON array. Each element: {"id":"<result_id>","reason":"<exact reason string>","explanation":"<brief description>","confidence":"high"|"medium"|"low"}
 No other text. Prefer "Mechanical Failure" for generic DNFs where specifics are unknown.`;
@@ -34,7 +35,8 @@ async function processBatch(admin: any, batch: any[]): Promise<{ resolved: numbe
     const evt = r.session?.event;
     const season = evt?.season;
     const series = season?.series;
-    return `${i + 1}. [${r.id}] ${r.status.toUpperCase()}, ${r.driver?.full_name || "?"}, ${r.team?.full_name || "?"}, #${r.car_number || "?"}, P${r.position || "?"}, ${evt?.name || "?"}, ${series?.name || "?"} ${season?.year || "?"}`;
+    const existingReason = r.dnf_reason ? ` (existing reason: ${r.dnf_reason})` : "";
+    return `${i + 1}. [${r.id}] ${r.status.toUpperCase()}${existingReason}, ${r.driver?.full_name || "?"}, ${r.team?.full_name || "?"}, #${r.car_number || "?"}, P${r.position || "?"}, ${evt?.name || "?"}, ${series?.name || "?"} ${season?.year || "?"}`;
   }).join("\n");
 
   const resp = await callAI({
@@ -65,8 +67,12 @@ async function processBatch(admin: any, batch: any[]): Promise<{ resolved: numbe
   let skippedLow = 0;
   for (const c of classifications) {
     if (c.confidence === "low") { skippedLow++; continue; }
-    const updates: Record<string, any> = { dnf_reason: c.reason };
+    const original = batch.find((r: any) => r.id === c.id);
+    const updates: Record<string, any> = {};
+    // Only update reason if it was missing
+    if (!original?.dnf_reason) updates.dnf_reason = c.reason;
     if (c.explanation) updates.dnf_explanation = c.explanation;
+    if (Object.keys(updates).length === 0) continue;
     const { error: upErr } = await admin
       .from("v2_race_results")
       .update(updates)
@@ -91,13 +97,13 @@ serve(async (req) => {
     const { data: results, error } = await admin
       .from("v2_race_results")
       .select(`
-        id, status, dnf_reason, car_number, position,
+        id, status, dnf_reason, dnf_explanation, car_number, position,
         driver:v2_drivers(full_name),
         team:v2_teams(full_name),
         session:v2_sessions(id, name, parent_session_id, event:v2_events(name, season:v2_seasons(year, series:v2_series(name))))
       `)
       .in("status", ["dnf", "dsq"])
-      .or("dnf_reason.is.null,dnf_reason.eq.")
+      .or("dnf_reason.is.null,dnf_reason.eq.,dnf_explanation.is.null,dnf_explanation.eq.")
       .limit(CHUNK_LIMIT);
 
     if (error) throw error;
