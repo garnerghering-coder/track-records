@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileDown, TriangleIcon } from "lucide-react";
 import { exportEventPdf, type SessionExportData } from "@/lib/pdf-export";
 import PdfExportDialog from "@/components/PdfExportDialog";
@@ -699,7 +700,19 @@ function SessionResults({
                   {hasPoints && <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>}
                   {hasStatus && <TableCell>
                     {r.status && r.status !== "finished" ? (
-                      <Badge variant="destructive" className="text-[10px]">{r.status.toUpperCase()}</Badge>
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="destructive" className="text-[10px] cursor-default">{r.status.toUpperCase()}</Badge>
+                          </TooltipTrigger>
+                          {(r.dnf_reason || r.dnf_explanation) && (
+                            <TooltipContent side="top" className="max-w-[300px] text-xs">
+                              {r.dnf_reason && <p className="font-semibold">{r.dnf_reason}</p>}
+                              {r.dnf_explanation && <p className="text-muted-foreground mt-0.5">{r.dnf_explanation}</p>}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                     ) : null}
                   </TableCell>}
                 </>}

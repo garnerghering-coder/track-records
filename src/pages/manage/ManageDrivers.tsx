@@ -54,7 +54,7 @@ export default function ManageDrivers() {
   const openNew = () => { setEditing(null); setForm({ full_name: "", nationality: "", date_of_birth: "" }); setOpen(true); };
   const openEdit = (d: Driver) => { setEditing(d); setForm({ full_name: d.full_name, nationality: d.nationality || "", date_of_birth: d.date_of_birth || "" }); setOpen(true); };
 
-  const missingCount = useMemo(() => drivers.filter(d => !d.nationality || !d.date_of_birth).length, [drivers]);
+  const missingCount = useMemo(() => drivers.filter(d => !d.nationality || !d.date_of_birth || (d.nationality && !d.nationality.includes(","))).length, [drivers]);
 
   const handleEnrich = async () => {
     setEnriching(true);
@@ -124,7 +124,7 @@ export default function ManageDrivers() {
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Nationality</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Hometown</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
           <TableBody>
             {filtered.map(d => (
               <TableRow key={d.id}>
@@ -149,7 +149,7 @@ export default function ManageDrivers() {
           <DialogHeader><DialogTitle>{editing ? "Edit" : "New"} Driver</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Full Name *</Label><Input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} /></div>
-            <div><Label>Nationality</Label><Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder="e.g. United States" /></div>
+            <div><Label>Hometown</Label><Input value={form.nationality} onChange={e => setForm(f => ({ ...f, nationality: e.target.value }))} placeholder="e.g. Filksov, Denmark" /></div>
             <div><Label>Date of Birth</Label><Input type="date" value={form.date_of_birth} onChange={e => setForm(f => ({ ...f, date_of_birth: e.target.value }))} /></div>
           </div>
           <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => save.mutate()} disabled={!form.full_name.trim()}>Save</Button></DialogFooter>

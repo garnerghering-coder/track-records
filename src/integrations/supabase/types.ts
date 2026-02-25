@@ -1646,6 +1646,7 @@ export type Database = {
           car_id: string | null
           car_number: string | null
           created_at: string
+          dnf_explanation: string | null
           dnf_reason: string | null
           driver_id: string | null
           extra_data: Json | null
@@ -1666,6 +1667,7 @@ export type Database = {
           car_id?: string | null
           car_number?: string | null
           created_at?: string
+          dnf_explanation?: string | null
           dnf_reason?: string | null
           driver_id?: string | null
           extra_data?: Json | null
@@ -1686,6 +1688,7 @@ export type Database = {
           car_id?: string | null
           car_number?: string | null
           created_at?: string
+          dnf_explanation?: string | null
           dnf_reason?: string | null
           driver_id?: string | null
           extra_data?: Json | null

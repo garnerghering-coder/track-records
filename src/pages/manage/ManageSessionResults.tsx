@@ -45,7 +45,7 @@ const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): R
   const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, additionalDrivers: [], team: null, car: null, _driverNationality: null, _additionalDriverNationalities: [] };
   if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.gap_int = ""; base.laps_run = ""; base.notes = ""; }
   else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.gap_int = ""; base.laps_run = ""; }
-  else if (type === "race" || type === "sprint_race" || type === "endurance_race") { base.laps_completed = ""; base.total_time = ""; base.gap_to_leader = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; base.gap_int = ""; }
+  else if (type === "race" || type === "sprint_race" || type === "endurance_race") { base.laps_completed = ""; base.total_time = ""; base.gap_to_leader = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; base.dnf_explanation = ""; base.gap_int = ""; }
   else { base.notes = ""; }
   for (const col of customCols) {
     base[`_custom_${col.key}`] = "";
@@ -248,7 +248,7 @@ export default function ManageSessionResults() {
           };
           if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
-          else if (t === "race" || t === "sprint_race" || t === "endurance_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.gap_to_leader = r.gap_to_leader || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "race" || t === "sprint_race" || t === "endurance_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.gap_to_leader = r.gap_to_leader || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.dnf_explanation = (r as any).dnf_explanation || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else { row.notes = ""; }
           // Load class/PIC and custom column data from extra_data
           const ed = (r as any).extra_data;
@@ -674,7 +674,7 @@ export default function ManageSessionResults() {
         await supabase.from("v2_race_results").delete().eq("session_id", sessionId!);
         const inserts: any[] = [];
         for (const r of rows.filter(r => r.driver)) {
-          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, extra_data: buildExtraData(r) };
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, dnf_explanation: r.dnf_explanation || null, extra_data: buildExtraData(r) };
           inserts.push({ ...base, driver_id: r.driver?.id || null });
           // Insert additional drivers with same car data
           for (const ad of (r.additionalDrivers || [])) {
@@ -832,15 +832,18 @@ export default function ManageSessionResults() {
       const reasonOptions = row.status === "dnf" ? DNF_REASONS : DSQ_REASONS;
       return (
         <div>
-          <Select value={row.status} onValueChange={v => { updateRow(row._key, "status", v); if (v !== "dnf" && v !== "dsq") updateRow(row._key, "dnf_reason", ""); }}>
+          <Select value={row.status} onValueChange={v => { updateRow(row._key, "status", v); if (v !== "dnf" && v !== "dsq") { updateRow(row._key, "dnf_reason", ""); updateRow(row._key, "dnf_explanation", ""); } }}>
             <SelectTrigger className="h-7 text-xs w-24"><SelectValue /></SelectTrigger>
             <SelectContent>{RACE_STATUSES.map(s => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}</SelectContent>
           </Select>
           {showReason && (
-            <Select value={row.dnf_reason || ""} onValueChange={v => updateRow(row._key, "dnf_reason", v)}>
-              <SelectTrigger className="h-6 text-xs mt-1 w-28"><SelectValue placeholder="Reason…" /></SelectTrigger>
-              <SelectContent>{reasonOptions.map(r => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent>
-            </Select>
+            <>
+              <Select value={row.dnf_reason || ""} onValueChange={v => updateRow(row._key, "dnf_reason", v)}>
+                <SelectTrigger className="h-6 text-xs mt-1 w-28"><SelectValue placeholder="Reason…" /></SelectTrigger>
+                <SelectContent>{reasonOptions.map(r => <SelectItem key={r} value={r} className="text-xs">{r}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input value={row.dnf_explanation || ""} onChange={e => updateRow(row._key, "dnf_explanation", e.target.value)} className="h-6 text-xs mt-1 w-40" placeholder="Brief explanation…" />
+            </>
           )}
         </div>
       );

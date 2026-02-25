@@ -52,11 +52,11 @@ serve(async (req) => {
       });
     }
 
-    // Fetch drivers missing nationality or date_of_birth
+    // Fetch drivers missing nationality, date_of_birth, or with old-format nationality (no comma = no hometown)
     const { data: drivers, error: fetchErr } = await adminClient
       .from("v2_drivers")
       .select("id, full_name, nationality, date_of_birth")
-      .or("nationality.is.null,date_of_birth.is.null")
+      .or("nationality.is.null,date_of_birth.is.null,nationality.not.ilike.%,%")
       .order("full_name")
       .limit(50);
 
@@ -72,8 +72,9 @@ serve(async (req) => {
     const driverList = drivers.map(d => ({
       id: d.id,
       name: d.full_name,
+      current_nationality: d.nationality || null,
       missing: [
-        !d.nationality ? "nationality" : null,
+        !d.nationality ? "nationality" : (d.nationality && !d.nationality.includes(",") ? "hometown_upgrade" : null),
         !d.date_of_birth ? "date_of_birth" : null,
       ].filter(Boolean),
     }));
@@ -82,7 +83,9 @@ serve(async (req) => {
       messages: [
         {
           role: "system",
-          content: `You are a motorsport research assistant. Given a list of racing drivers with missing fields, return a JSON array of objects with "id", "nationality" (full country name like "Danish", "British", or null), and "date_of_birth" (ISO YYYY-MM-DD or null). Only provide values you are confident about. Return ONLY the JSON array, no other text.`,
+          content: `You are a motorsport research assistant. Given a list of racing drivers with missing fields, return a JSON array of objects with "id", "nationality" (in the format "Hometown, Country" where Hometown is the driver's birth city/town and Country is the full country name — e.g. "Filksov, Denmark", "São Paulo, Brazil", "Stevenage, United Kingdom". If you only know the country, just provide the country name like "Germany"), and "date_of_birth" (ISO YYYY-MM-DD or null). Only provide values you are confident about. Return ONLY the JSON array, no other text.
+
+IMPORTANT: If a driver already has a nationality value that is just a country name (e.g. "Denmark"), try to find their hometown and return the full "Town, Country" format. If a driver already has a "Town, Country" format, keep it as-is.`,
         },
         {
           role: "user",
@@ -128,8 +131,13 @@ serve(async (req) => {
       if (!original) continue;
 
       const updates: Record<string, any> = {};
-      if (!original.nationality && item.nationality && typeof item.nationality === "string" && !["null", "unknown", "n/a"].includes(item.nationality.toLowerCase())) {
-        updates.nationality = item.nationality;
+      // Update nationality: accept if missing, or if upgrading from country-only to "Town, Country"
+      if (item.nationality && typeof item.nationality === "string" && !["null", "unknown", "n/a"].includes(item.nationality.toLowerCase())) {
+        if (!original.nationality) {
+          updates.nationality = item.nationality;
+        } else if (!original.nationality.includes(",") && item.nationality.includes(",")) {
+          updates.nationality = item.nationality;
+        }
       }
       if (!original.date_of_birth && item.date_of_birth && typeof item.date_of_birth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.date_of_birth)) {
         updates.date_of_birth = item.date_of_birth;

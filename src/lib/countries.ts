@@ -247,15 +247,32 @@ const DEMONYM_MAP: Record<string, string> = {
   scottish: "GB", welsh: "GB", british: "GB",
 };
 
+/**
+ * Extract the country part from a nationality string.
+ * Supports formats: "Country", "Town, Country", demonyms like "Danish"
+ */
+export function extractCountry(nationality: string | null | undefined): string | null {
+  if (!nationality) return null;
+  const trimmed = nationality.trim();
+  // If "Town, Country" format, extract the country part (last segment after comma)
+  if (trimmed.includes(",")) {
+    const parts = trimmed.split(",").map(s => s.trim());
+    return parts[parts.length - 1] || null;
+  }
+  return trimmed;
+}
+
 /** Get ISO country code from a nationality string, demonym, or country name */
 export function getCountryCode(nationality: string | null | undefined): string | null {
   if (!nationality) return null;
-  const trimmed = nationality.trim();
-  const lower = trimmed.toLowerCase();
+  // Extract country part (handles "Town, Country" format)
+  const country = extractCountry(nationality);
+  if (!country) return null;
+  const lower = country.toLowerCase();
 
   // If it's already a valid 2-letter ISO code, return it directly
-  if (trimmed.length === 2) {
-    const upper = trimmed.toUpperCase();
+  if (country.length === 2) {
+    const upper = country.toUpperCase();
     const directMatch = COUNTRIES.find(c => c.code === upper);
     if (directMatch) return directMatch.code;
   }

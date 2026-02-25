@@ -94,7 +94,7 @@ serve(async (req) => {
 
 Fields:
 - "full_first_name": string or null (the driver's full first name — especially important if the stored name is abbreviated like "F." or "S." — e.g. for "F. Nasr" return "Felipe")
-- "nationality": string or null (e.g. "Danish", "British", "Brazilian")
+- "nationality": string or null — in the format "Hometown, Country" where Hometown is the driver's birth city/town and Country is the full country name (e.g. "Filksov, Denmark", "São Paulo, Brazil", "Stevenage, United Kingdom"). If you only know the country, just provide the country name (e.g. "Germany").
 - "bio": string or null (2-3 sentence biography of their racing career)
 - "date_of_birth": string or null (ISO format YYYY-MM-DD)
 - "primary_category": one of "karting", "single_seater", "gt", "touring_car", "sports_car", "rally", "endurance", "formula", "stock_car", "other", or null
