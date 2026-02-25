@@ -307,7 +307,7 @@ function DataQualitySection() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+      const timeout = setTimeout(() => controller.abort(), 120000);
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resolve-dnf-reasons`,
         {
@@ -326,6 +326,7 @@ function DataQualitySection() {
       const parts: string[] = [];
       if (result.resolved > 0) parts.push(`${result.resolved} resolved`);
       if (result.skippedLow > 0) parts.push(`${result.skippedLow} skipped (low confidence)`);
+      if (result.continuing) parts.push("continuing in background…");
       toast.success(`AI Resolve: ${parts.join(", ") || "Nothing to resolve"}`);
       scanForIssues();
     } catch (e: any) {

@@ -4,10 +4,11 @@ import { callAI } from "../_shared/call-ai.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const BATCH_SIZE = 15;
+const CHUNK_LIMIT = 45; // Process up to 3 AI batches per invocation, then self-chain
 
 const SYSTEM_PROMPT = `You are a motorsport data specialist. Classify DNF/DSQ reasons for race results.
 
@@ -79,10 +80,13 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    const body = await req.json().catch(() => ({}));
+    const isSelfChain = body._selfChain === true;
+
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: results, error } = await admin
       .from("v2_race_results")
@@ -93,14 +97,15 @@ serve(async (req) => {
         session:v2_sessions(id, name, parent_session_id, event:v2_events(name, season:v2_seasons(year, series:v2_series(name))))
       `)
       .in("status", ["dnf", "dsq"])
-      .or("dnf_reason.is.null,dnf_reason.eq.");
+      .or("dnf_reason.is.null,dnf_reason.eq.")
+      .limit(CHUNK_LIMIT);
 
     if (error) throw error;
 
     const toResolve = (results || []).filter((r: any) => !r.session?.parent_session_id);
 
     if (toResolve.length === 0) {
-      return new Response(JSON.stringify({ resolved: 0, skippedLow: 0, total: 0 }), {
+      return new Response(JSON.stringify({ resolved: 0, skippedLow: 0, total: 0, done: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -115,7 +120,21 @@ serve(async (req) => {
       totalSkipped += skippedLow;
     }
 
-    return new Response(JSON.stringify({ resolved: totalResolved, skippedLow: totalSkipped, total: toResolve.length }), {
+    // Self-chain if we had a full chunk (more might remain)
+    let continuing = false;
+    if (toResolve.length >= CHUNK_LIMIT) {
+      continuing = true;
+      fetch(`${SUPABASE_URL}/functions/v1/resolve-dnf-reasons`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ _selfChain: true }),
+      }).catch(err => console.error("Self-chain failed:", err));
+    }
+
+    return new Response(JSON.stringify({ resolved: totalResolved, skippedLow: totalSkipped, total: toResolve.length, continuing }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
