@@ -230,7 +230,7 @@ function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap
     </div>
   );
 }
-
+const SeriesProfile = () => {
 
   const { id } = useParams<{ id: string }>();
   const [series, setSeries] = useState<any>(null);
