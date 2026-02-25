@@ -21,7 +21,7 @@ type Ref = { id: string; label: string } | null;
 interface CustomColumn {
   key: string;
   name: string;
-  type: "text" | "number";
+  type: "text" | "number" | "points";
 }
 
 interface ResultRow {
@@ -132,7 +132,7 @@ export default function ManageSessionResults() {
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const [addColOpen, setAddColOpen] = useState(false);
   const [newColName, setNewColName] = useState("");
-  const [newColType, setNewColType] = useState<"text" | "number">("text");
+  const [newColType, setNewColType] = useState<"text" | "number" | "points">("text");
   const [jsonDialogOpen, setJsonDialogOpen] = useState(false);
   const [jsonText, setJsonText] = useState("");
   const [jsonApplying, setJsonApplying] = useState(false);
@@ -192,14 +192,23 @@ export default function ManageSessionResults() {
         // Extract custom columns from extra_data (excluding "Int" which is built-in)
         const foundCustomCols: CustomColumn[] = [];
         const seenKeys = new Set<string>();
+        // Detect which columns are "points" type from _points_columns metadata
+        const pointsColumnNames = new Set<string>();
+        for (const r of data) {
+          const ed = (r as any).extra_data;
+          if (ed?._points_columns && Array.isArray(ed._points_columns)) {
+            for (const p of ed._points_columns) pointsColumnNames.add(p);
+          }
+        }
         for (const r of data) {
           const ed = (r as any).extra_data;
           if (ed && typeof ed === "object") {
             for (const k of Object.keys(ed)) {
-              if (k === "Int" || k === "Class" || k === "PIC") continue; // built-in
+              if (k === "Int" || k === "Class" || k === "PIC" || k === "_points_columns") continue; // built-in / metadata
               if (!seenKeys.has(k)) {
                 seenKeys.add(k);
-                foundCustomCols.push({ key: k, name: k, type: typeof ed[k] === "number" ? "number" : "text" });
+                const colType = pointsColumnNames.has(k) ? "points" : (typeof ed[k] === "number" ? "number" : "text");
+                foundCustomCols.push({ key: k, name: k, type: colType });
               }
             }
           }
@@ -369,7 +378,7 @@ export default function ManageSessionResults() {
     setNewColName("");
     setNewColType("text");
     setAddColOpen(false);
-    toast.success(`Column "${col.name}" added`);
+    toast.success(`Column "${col.name}" added${col.type === "points" ? " (counts toward standings)" : ""}`);
   };
 
   // --- JSON Template Import ---
@@ -638,6 +647,18 @@ export default function ManageSessionResults() {
     if (changed) setRows(updated);
   }, [rows, isMulticlass, recalcPIC]);
 
+  // Compute points total from custom "points" columns for a row
+  const computeCustomPoints = (row: ResultRow): number => {
+    let total = 0;
+    for (const col of customColumns) {
+      if (col.type === "points") {
+        const val = row[`_custom_${col.key}`];
+        if (val !== undefined && val !== "") total += parseFloat(val) || 0;
+      }
+    }
+    return total;
+  };
+
   // Build extra_data from custom columns + gap_int for a row
   const buildExtraData = (row: ResultRow): Record<string, any> => {
     const ed: Record<string, any> = {};
@@ -651,9 +672,12 @@ export default function ManageSessionResults() {
     for (const col of customColumns) {
       const val = row[`_custom_${col.key}`];
       if (val !== undefined && val !== "") {
-        ed[col.name] = col.type === "number" ? parseFloat(val) || 0 : val;
+        ed[col.name] = (col.type === "number" || col.type === "points") ? parseFloat(val) || 0 : val;
       }
     }
+    // Store column type metadata so "points" columns are restored correctly on reload
+    const pointsCols = customColumns.filter(c => c.type === "points").map(c => c.name);
+    if (pointsCols.length > 0) ed["_points_columns"] = pointsCols;
     return ed;
   };
 
@@ -664,17 +688,41 @@ export default function ManageSessionResults() {
       const t = session.session_type;
       if (t === "practice" || t === "warmup" || t === "other") {
         await supabase.from("v2_practice_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, extra_data: buildExtraData(r) }));
-        if (inserts.length) { const { error } = await supabase.from("v2_practice_results").insert(inserts as any); if (error) throw error; }
+        const inserts = rows.filter(r => r.driver).map(r => {
+          const customPts = computeCustomPoints(r);
+          return { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: customPts || null, extra_data: buildExtraData(r) };
+        });
+        // Duplicate rows for additional drivers (same car gets same points)
+        const allInserts: any[] = [];
+        for (const r of rows.filter(r => r.driver)) {
+          const customPts = computeCustomPoints(r);
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: customPts || null, extra_data: buildExtraData(r) };
+          allInserts.push({ ...base, driver_id: r.driver?.id || null });
+          for (const ad of (r.additionalDrivers || [])) {
+            if (ad) allInserts.push({ ...base, driver_id: ad.id });
+          }
+        }
+        if (allInserts.length) { const { error } = await supabase.from("v2_practice_results").insert(allInserts as any); if (error) throw error; }
       } else if (t === "qualifying" || t === "sprint_qualifying") {
         await supabase.from("v2_qualifying_results").delete().eq("session_id", sessionId!);
-        const inserts = rows.filter(r => r.driver).map(r => ({ session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, driver_id: r.driver?.id || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, extra_data: buildExtraData(r) }));
-        if (inserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(inserts as any); if (error) throw error; }
+        const qualInserts: any[] = [];
+        for (const r of rows.filter(r => r.driver)) {
+          const customPts = computeCustomPoints(r);
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: customPts || null, extra_data: buildExtraData(r) };
+          qualInserts.push({ ...base, driver_id: r.driver?.id || null });
+          for (const ad of (r.additionalDrivers || [])) {
+            if (ad) qualInserts.push({ ...base, driver_id: ad.id });
+          }
+        }
+        if (qualInserts.length) { const { error } = await supabase.from("v2_qualifying_results").insert(qualInserts as any); if (error) throw error; }
       } else {
         await supabase.from("v2_race_results").delete().eq("session_id", sessionId!);
         const inserts: any[] = [];
         for (const r of rows.filter(r => r.driver)) {
-          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: r.points ? parseFloat(r.points) : null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, dnf_explanation: r.dnf_explanation || null, extra_data: buildExtraData(r) };
+          const customPts = computeCustomPoints(r);
+          const basePts = r.points ? parseFloat(r.points) : 0;
+          const totalPts = basePts + customPts;
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, laps_completed: r.laps_completed ? parseInt(r.laps_completed) : null, total_time: r.total_time || null, gap_to_leader: r.gap_to_leader || null, fastest_lap_time: r.fastest_lap_time || null, average_lap_time: r.average_lap_time || null, pit_stops: r.pit_stops ? parseInt(r.pit_stops) : null, points: totalPts || null, status: (r.status || "finished") as any, dnf_reason: r.dnf_reason || null, dnf_explanation: r.dnf_explanation || null, extra_data: buildExtraData(r) };
           inserts.push({ ...base, driver_id: r.driver?.id || null });
           // Insert additional drivers with same car data
           for (const ad of (r.additionalDrivers || [])) {
@@ -1059,13 +1107,17 @@ export default function ManageSessionResults() {
             </div>
             <div>
               <Label>Type</Label>
-              <Select value={newColType} onValueChange={v => setNewColType(v as "text" | "number")}>
+              <Select value={newColType} onValueChange={v => setNewColType(v as "text" | "number" | "points")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="text">Text</SelectItem>
                   <SelectItem value="number">Number</SelectItem>
+                  <SelectItem value="points">Points</SelectItem>
                 </SelectContent>
               </Select>
+              {newColType === "points" && (
+                <p className="text-xs text-muted-foreground mt-1">Values in this column will count toward championship standings for the car number (all drivers sharing the car get the same points).</p>
+              )}
             </div>
           </div>
           <DialogFooter>
