@@ -95,9 +95,9 @@ const CalendarPage = () => {
 
   // Group by month
   const monthGroups = events.reduce<Record<string, RaceEvent[]>>((acc, ev) => {
-    const date = ev.event_date ? new Date(ev.event_date) : null;
+    const date = ev.event_date ? new Date(ev.event_date + "T00:00:00Z") : null;
     const key = date
-      ? date.toLocaleDateString("en-US", { year: "numeric", month: "long" })
+      ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", timeZone: "UTC" })
       : "Date TBD";
     if (!acc[key]) acc[key] = [];
     acc[key].push(ev);
@@ -160,17 +160,17 @@ const CalendarPage = () => {
                 <h2 className="font-display text-lg font-semibold text-foreground mb-4 border-b border-border pb-2">{month}</h2>
                 <div className="space-y-3">
                   {monthEvents.map(ev => {
-                    const date = ev.event_date ? new Date(ev.event_date) : null;
+                    const date = ev.event_date ? new Date(ev.event_date + "T00:00:00Z") : null;
                     return (
                       <div key={ev.id} className="flex gap-4 items-start rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-colors">
                         {/* Date badge */}
                         {date && (
                           <div className="flex flex-col items-center justify-center w-14 shrink-0 text-center">
                             <span className="text-xs font-medium text-muted-foreground uppercase">
-                              {date.toLocaleDateString("en-US", { weekday: "short" })}
+                              {date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}
                             </span>
                             <span className="font-display text-2xl font-bold text-foreground leading-none">
-                              {date.getDate()}
+                              {date.getUTCDate()}
                             </span>
                           </div>
                         )}

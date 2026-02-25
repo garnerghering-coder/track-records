@@ -290,7 +290,7 @@ const DriverProfilePage = () => {
                 </h1>
                 <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
                   {driver.nationality && <span className="inline-flex items-center gap-1"><FlagImage nationality={driver.nationality} size={16} /> {driver.nationality}</span>}
-                  {driver.date_of_birth && <span>Born: {new Date(driver.date_of_birth).toLocaleDateString()}</span>}
+                  {driver.date_of_birth && <span>Born: {new Date(driver.date_of_birth + "T00:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC" })}</span>}
                 </div>
               </div>
             </div>
@@ -426,7 +426,7 @@ const DriverProfilePage = () => {
                         <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
                           {r.session?.date ?
-                        new Date(r.session.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) :
+                        new Date(r.session.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) :
                         r.event?.start_date ?
                         formatDateRange(r.event.start_date, r.event.end_date) :
                         "—"}
