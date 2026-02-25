@@ -281,7 +281,34 @@ export default function ManageCircuits() {
             <div><Label>Total Straight Length in km (&gt;200m)</Label><Input type="number" step="0.001" value={layoutForm.total_straight_length_km} onChange={e => setLayoutForm(f => ({ ...f, total_straight_length_km: e.target.value }))} placeholder="e.g. 1.85" /></div>
             <div><Label>Total Elevation Change (m)</Label><Input type="number" step="0.1" value={layoutForm.total_elevation_change_m} onChange={e => setLayoutForm(f => ({ ...f, total_elevation_change_m: e.target.value }))} placeholder="e.g. 42.5" /></div>
             <div><Label>Heavy Braking Corner Count</Label><Input type="number" value={layoutForm.heavy_braking_corners} onChange={e => setLayoutForm(f => ({ ...f, heavy_braking_corners: e.target.value }))} placeholder="e.g. 6" /></div>
-            <div><Label>Layout Image URL</Label><Input value={layoutForm.layout_image_url} onChange={e => setLayoutForm(f => ({ ...f, layout_image_url: e.target.value }))} /></div>
+            <div>
+              <Label>Layout Image</Label>
+              {layoutForm.layout_image_url && (
+                <div className="mb-2">
+                  <img src={layoutForm.layout_image_url} alt="Layout preview" className="max-h-24 rounded border border-border object-contain" />
+                </div>
+              )}
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const ext = file.name.split('.').pop() || 'png';
+                  const path = `${crypto.randomUUID()}.${ext}`;
+                  const { error: uploadError } = await supabase.storage.from('circuit-layouts').upload(path, file, { upsert: true });
+                  if (uploadError) { toast.error(uploadError.message); return; }
+                  const { data: { publicUrl } } = supabase.storage.from('circuit-layouts').getPublicUrl(path);
+                  setLayoutForm(f => ({ ...f, layout_image_url: publicUrl }));
+                  toast.success("Image uploaded");
+                }}
+              />
+              {layoutForm.layout_image_url && (
+                <Button variant="ghost" size="sm" className="mt-1 text-xs text-destructive" onClick={() => setLayoutForm(f => ({ ...f, layout_image_url: "" }))}>
+                  Remove image
+                </Button>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setLayoutOpen(false); setEditingLayout(null); }}>Cancel</Button>
