@@ -1,5 +1,6 @@
 import { TrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 const CATEGORY_EXPLANATIONS: Record<string, string> = {
   // TCS
@@ -108,7 +109,15 @@ function SemiCircleGauge({ value, category, title, large }: GaugeProps) {
   );
 }
 
-export default function TrackFingerprint({ metrics }: { metrics: TrackMetrics }) {
+interface TrackFingerprintProps {
+  metrics: TrackMetrics;
+  layoutImageUrl?: string | null;
+  layoutName?: string | null;
+  lengthKm?: number | null;
+  turns?: number | null;
+}
+
+export default function TrackFingerprint({ metrics, layoutImageUrl, layoutName, lengthKm, turns }: TrackFingerprintProps) {
   const gauges: { value: number; category: string; title: string; key: string }[] = [];
 
   if (metrics.tdi != null && metrics.tdiCategory)
@@ -124,6 +133,30 @@ export default function TrackFingerprint({ metrics }: { metrics: TrackMetrics })
 
   return (
     <div className="flex items-center gap-6">
+      {layoutImageUrl && (
+        <div className="shrink-0 flex items-center gap-4">
+          <div className="w-[120px]">
+            <AspectRatio ratio={5 / 3}>
+              <img
+                src={layoutImageUrl}
+                alt={layoutName ? `${layoutName} layout` : "Circuit layout"}
+                className="w-full h-full object-contain"
+              />
+            </AspectRatio>
+          </div>
+          {(layoutName || lengthKm || turns) && (
+            <div className="shrink-0">
+              {layoutName && (
+                <span className="font-display text-sm font-semibold text-card-foreground">{layoutName}</span>
+              )}
+              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                {lengthKm && <span>{Number(lengthKm).toFixed(3)} km</span>}
+                {turns != null && <span>{turns} turns</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {gauges.map(g => (
         <SemiCircleGauge key={g.key} value={g.value} category={g.category} title={g.title} large={g.key === "tdi"} />
       ))}

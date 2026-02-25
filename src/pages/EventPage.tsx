@@ -17,6 +17,8 @@ import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
 import WeatherBubble from "@/components/WeatherBubble";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
+import TrackFingerprint from "@/components/TrackFingerprint";
+import { computeTrackMetrics } from "@/lib/track-calculations";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -28,7 +30,7 @@ export default function EventPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v2_events")
-        .select("*, v2_seasons(id, year, is_multiclass, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url)")
+        .select("*, v2_seasons(id, year, is_multiclass, v2_series(name, short_name)), v2_circuits(name, country, layout_image_url, v2_circuit_layouts(*))")
         .eq("id", slug!)
         .eq("status", "published" as any)
         .single();
@@ -178,9 +180,10 @@ export default function EventPage() {
                       activeSubTab={activeSubTab}
                       setActiveSubTab={setActiveSubTab}
                       isMulticlass={isMulticlass}
+                      layout={(event as any).v2_circuits?.v2_circuit_layouts}
                     />
                   ) : (
-                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} />
+                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} layout={(event as any).v2_circuits?.v2_circuit_layouts} />
                   )}
                 </TabsContent>
               ))}
@@ -205,6 +208,7 @@ function EnduranceRaceView({
   activeSubTab,
   setActiveSubTab,
   isMulticlass,
+  layout,
 }: {
   parentSession: any;
   hourSessions: any[];
@@ -215,6 +219,7 @@ function EnduranceRaceView({
   activeSubTab: string;
   setActiveSubTab: (v: string) => void;
   isMulticlass?: boolean;
+  layout?: any;
 }) {
   // The sub-tabs: "Race Results" + each hour
   const subTabs = [
@@ -319,6 +324,7 @@ function SessionResults({
   hideStatus,
   isOverallEnduranceView,
   isMulticlass,
+  layout,
 }: {
   session: any;
   event: any;
@@ -330,6 +336,7 @@ function SessionResults({
   hideStatus?: boolean;
   isOverallEnduranceView?: boolean;
   isMulticlass?: boolean;
+  layout?: any;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -761,6 +768,36 @@ function SessionResults({
           </div>
         );
       })}
+
+      {/* Circuit Configuration Fingerprint */}
+      {(() => {
+        // Use session-level layout_id override, or event-level layout
+        const layoutId = (session as any).layout_id || (event as any).layout_id;
+        const layoutData = layout && Array.isArray(layout)
+          ? layout.find((l: any) => l.id === layoutId) || (layout.length === 1 ? layout[0] : null)
+          : null;
+        if (!layoutData) return null;
+        const m = computeTrackMetrics(
+          layoutData.length_km ? Number(layoutData.length_km) : null,
+          layoutData.turns,
+          layoutData.total_straight_length_km ? Number(layoutData.total_straight_length_km) : null,
+          layoutData.total_elevation_change_m ? Number(layoutData.total_elevation_change_m) : null,
+          layoutData.heavy_braking_corners
+        );
+        if (m.tcs100 == null && m.ei == null && m.csi == null) return null;
+        return (
+          <div className="mt-6 rounded-lg border border-border bg-card p-5">
+            <h4 className="text-sm font-semibold mb-3">Circuit Fingerprint</h4>
+            <TrackFingerprint
+              metrics={m}
+              layoutImageUrl={layoutData.layout_image_url}
+              layoutName={layoutData.name}
+              lengthKm={layoutData.length_km}
+              turns={layoutData.turns}
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }
