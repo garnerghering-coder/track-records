@@ -132,10 +132,10 @@ export default function TrackFingerprint({ metrics, layoutImageUrl, layoutName, 
   if (gauges.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-6">
+    <div className="flex items-center gap-6 w-full">
       {layoutImageUrl && (
         <div className="shrink-0 flex items-center gap-4">
-          <div className="w-[120px]">
+          <div className="w-[160px]">
             <AspectRatio ratio={5 / 3}>
               <img
                 src={layoutImageUrl}
@@ -157,9 +157,11 @@ export default function TrackFingerprint({ metrics, layoutImageUrl, layoutName, 
           )}
         </div>
       )}
-      {gauges.map(g => (
-        <SemiCircleGauge key={g.key} value={g.value} category={g.category} title={g.title} large={g.key === "tdi"} />
-      ))}
+      <div className="flex items-center gap-6 ml-auto">
+        {gauges.map(g => (
+          <SemiCircleGauge key={g.key} value={g.value} category={g.category} title={g.title} large={g.key === "tdi"} />
+        ))}
+      </div>
     </div>
   );
 }
