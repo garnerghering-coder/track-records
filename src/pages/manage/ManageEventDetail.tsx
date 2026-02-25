@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -405,6 +405,15 @@ export default function ManageEventDetail() {
     handleF1Import({ drivers: driverResolutions, teams: teamResolutions }, saveAliases);
   };
 
+  // Trigger F1 import when URL is set from ImportDataDialog
+  const pendingF1Import = useRef(false);
+  useEffect(() => {
+    if (importUrl && !importLoading && !importOpen && !resolveOpen && !pendingF1Import.current) {
+      pendingF1Import.current = true;
+      handleF1Import().finally(() => { pendingF1Import.current = false; });
+    }
+  }, [importUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // IMSA import is now handled by ImportDataDialog
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
@@ -628,7 +637,7 @@ export default function ManageEventDetail() {
         eventId={id!}
         seriesAliases={seriesAliases}
         onImportComplete={() => qc.invalidateQueries({ queryKey: ["v2_sessions", id] })}
-        onF1Import={(f1Url) => { setImportOpen(false); setImportUrl(f1Url); setTimeout(() => handleF1Import(), 100); }}
+        onF1Import={(f1Url) => { setImportOpen(false); setImportUrl(f1Url); }}
       />
 
       {/* Duplicate Resolution Dialog */}
