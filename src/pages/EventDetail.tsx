@@ -183,7 +183,7 @@ const EventDetailPage = () => {
                   <span>{event.series_name}</span>
                 )}
                 <span>• {event.event_date
-                  ? new Date(event.event_date + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
+                  ? new Date(event.event_date + "T00:00:00Z").toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
                   : event.season_year}</span>
                 {event.category && (
                   <Badge variant="secondary" className="text-xs">{categoryLabels[event.category] || event.category}</Badge>
@@ -200,7 +200,7 @@ const EventDetailPage = () => {
                   )
                 )}
                 {event.event_date && (
-                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(event.event_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span>
+                  <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" /> {new Date(event.event_date + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}</span>
                 )}
                 {event.ticket_url && (
                   <a href={event.ticket_url} target="_blank" rel="noopener" className="text-primary hover:underline text-xs">Tickets</a>
