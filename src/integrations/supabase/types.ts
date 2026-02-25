@@ -473,6 +473,75 @@ export type Database = {
         }
         Relationships: []
       }
+      import_runs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          entries_created: number | null
+          error_message: string | null
+          event_id: string | null
+          extracted_data: Json | null
+          id: string
+          log: Json | null
+          mapped_data: Json | null
+          raw_content_preview: string | null
+          sessions_created: number | null
+          source_definition_id: string | null
+          status: string
+          url: string | null
+          validation_errors: Json | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          entries_created?: number | null
+          error_message?: string | null
+          event_id?: string | null
+          extracted_data?: Json | null
+          id?: string
+          log?: Json | null
+          mapped_data?: Json | null
+          raw_content_preview?: string | null
+          sessions_created?: number | null
+          source_definition_id?: string | null
+          status?: string
+          url?: string | null
+          validation_errors?: Json | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          entries_created?: number | null
+          error_message?: string | null
+          event_id?: string | null
+          extracted_data?: Json | null
+          id?: string
+          log?: Json | null
+          mapped_data?: Json | null
+          raw_content_preview?: string | null
+          sessions_created?: number | null
+          source_definition_id?: string | null
+          status?: string
+          url?: string | null
+          validation_errors?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_runs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v2_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "import_runs_source_definition_id_fkey"
+            columns: ["source_definition_id"]
+            isOneToOne: false
+            referencedRelation: "source_definitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       import_sources: {
         Row: {
           created_at: string
@@ -926,6 +995,51 @@ export type Database = {
           name?: string
           updated_at?: string
           website?: string | null
+        }
+        Relationships: []
+      }
+      source_definitions: {
+        Row: {
+          config: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          parser_type: string
+          status: string
+          test_snapshot: Json | null
+          updated_at: string
+          url_pattern: string
+          version: number
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          parser_type?: string
+          status?: string
+          test_snapshot?: Json | null
+          updated_at?: string
+          url_pattern?: string
+          version?: number
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          parser_type?: string
+          status?: string
+          test_snapshot?: Json | null
+          updated_at?: string
+          url_pattern?: string
+          version?: number
         }
         Relationships: []
       }
