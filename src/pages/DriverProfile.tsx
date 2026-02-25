@@ -117,6 +117,7 @@ const DriverProfilePage = () => {
         }
 
         // For events where this driver has NO direct race result, fetch co-driver results by event+car_number
+        // ONLY for endurance races — in standard races, if the driver isn't listed they didn't race
         const directEventIds = new Set(primaryResults.map((r: any) => r.v2_sessions?.v2_events?.id).filter(Boolean));
         const coDriverEventIds = [...driverCarsByEvent.keys()].filter((eid) => !directEventIds.has(eid));
 
@@ -124,16 +125,15 @@ const DriverProfilePage = () => {
         // Fetch in chunks of 20 event IDs
         for (let i = 0; i < coDriverEventIds.length; i += 20) {
           const chunk = coDriverEventIds.slice(i, i + 20);
-          // Get all session IDs for these events
           const { data: eventSessions } = await supabase.
           from("v2_sessions" as any).
-          select("id, event_id").
+          select("id, event_id, session_type").
           in("event_id", chunk).
-          is("parent_session_id", null);
+          is("parent_session_id", null).
+          in("session_type", ["endurance_race"]);
 
           if (!eventSessions || eventSessions.length === 0) continue;
 
-          // Collect car_numbers to filter for
           const sessionIdsForChunk = (eventSessions as any[]).map((s: any) => s.id);
           const carNumbersForChunk = new Set<string>();
           for (const eid of chunk) {
@@ -151,7 +151,7 @@ const DriverProfilePage = () => {
         }
 
         // Also find co-driver results in events where driver HAS a direct result but in different sessions
-        // (e.g. driver has practice but the endurance_race result is under a different driver_id)
+        // Only for endurance races where drivers rotate
         const directPairs = new Set(primaryResults.map((r: any) => `${r.session_id}:${r.car_number}`));
         const eventsWithDirectButMissingRace: string[] = [];
         for (const eid of directEventIds) {
@@ -169,7 +169,7 @@ const DriverProfilePage = () => {
           select("id, event_id, session_type").
           in("event_id", chunk).
           is("parent_session_id", null).
-          in("session_type", ["race", "endurance_race", "sprint_race"]);
+          in("session_type", ["endurance_race"]);
 
           if (!eventSessions || eventSessions.length === 0) continue;
 
@@ -425,11 +425,14 @@ const DriverProfilePage = () => {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {r.session?.date ?
-                        new Date(r.session.date + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) :
-                        r.event?.start_date ?
-                        formatDateRange(r.event.start_date, r.event.end_date) :
-                        "—"}
+                          {(() => {
+                            if (r.session?.date) {
+                              const d = new Date(r.session.date + (r.session.date.length === 10 ? "T00:00:00Z" : ""));
+                              if (!isNaN(d.getTime())) return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+                            }
+                            if (r.event?.start_date) return formatDateRange(r.event.start_date, r.event.end_date);
+                            return "—";
+                          })()}
                         </TableCell>
                         <TableCell>
                           {r.v2_teams ?
