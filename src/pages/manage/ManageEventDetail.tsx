@@ -158,9 +158,17 @@ export default function ManageEventDetail() {
       .order("sort_order", { ascending: true });
     if (!children || children.length === 0) return;
 
-    // Parse base date
-    const baseD = new Date(baseDate + "T00:00:00");
-    if (isNaN(baseD.getTime())) return;
+    // Parse base date parts (avoid Date object timezone issues)
+    const dateParts = baseDate.split("-").map(Number); // [YYYY, MM, DD]
+    if (dateParts.length !== 3 || dateParts.some(isNaN)) return;
+    let [baseYear, baseMonth, baseDay] = dateParts;
+
+    // Helper to add days and return YYYY-MM-DD string without timezone issues
+    const addDaysToDate = (y: number, m: number, d: number, offset: number): string => {
+      // Use UTC to avoid timezone shifts
+      const dt = new Date(Date.UTC(y, m - 1, d + offset));
+      return dt.toISOString().slice(0, 10);
+    };
 
     // If no start_time, just update dates without touching times
     if (!startTime) {
@@ -178,27 +186,24 @@ export default function ManageEventDetail() {
     if (isNaN(startH) || isNaN(startM)) return;
 
     let currentMinutes = startH * 60 + startM;
-    let dayOffset = 0; // days added from midnight crossovers
+    let dayOffset = 0;
+
+    const formatTime = (mins: number) => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+    };
 
     for (const child of children) {
-      const hourStart = currentMinutes % 1440; // minutes within the day
-      const hourEnd = (currentMinutes + 60) % 1440;
-      const crossesMidnight = currentMinutes + 60 >= (dayOffset + 1) * 1440 && hourStart > hourEnd;
+      const hourStart = currentMinutes % 1440;
+      const hourEndAbsolute = currentMinutes + 60;
+      const hourEnd = hourEndAbsolute % 1440;
+      const crossesMidnight = hourStart > hourEnd; // wraps past 1440
 
-      // Calculate date for this hour — starts from the Race date
-      const childDate = new Date(baseD);
-      childDate.setDate(childDate.getDate() + dayOffset);
-      const dateStr = childDate.toISOString().slice(0, 10);
-
-      const formatTime = (mins: number) => {
-        const h = Math.floor(mins / 60) % 24;
-        const m = mins % 60;
-        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-      };
+      const dateStr = addDaysToDate(baseYear, baseMonth, baseDay, dayOffset);
 
       let endTimeStr: string;
       if (crossesMidnight) {
-        // Session can't cross midnight, cap at 23:59
         endTimeStr = "23:59";
       } else {
         endTimeStr = formatTime(hourEnd);
@@ -210,12 +215,9 @@ export default function ManageEventDetail() {
         end_time: endTimeStr,
       } as any).eq("id", child.id);
 
-      // Advance to next hour start
       currentMinutes += 60;
-      // Track day offset
-      const newDayOffset = Math.floor(currentMinutes / 1440);
-      if (newDayOffset > dayOffset) {
-        dayOffset = newDayOffset;
+      if (crossesMidnight) {
+        dayOffset++;
       }
     }
     toast.success(`Updated times for ${children.length} hour sessions`);
