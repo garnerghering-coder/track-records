@@ -1232,18 +1232,74 @@ serve(async (req) => {
       }
 
       // 4. Hour sub-sessions (using Time Card data for driver detection)
+      // IMPORTANT: Derive hour dates/times from the parent Race date, NOT from individual JSON files.
+      // The JSON files can have inconsistent dates. The Race date is the single source of truth.
       const sortedHours = fetchedResults
         .filter(f => f.kind === "hour")
         .sort((a, b) => (a.hour || 0) - (b.hour || 0));
+
+      // Look up the parent Race session's date to use as base for all hours
+      let raceDateForHours: string | null = raceDate;
+      let raceStartForHours: string | null = raceStartTime;
+      if (!raceDateForHours && parentSessionId) {
+        const { data: parentRow } = await adminClient
+          .from("v2_sessions")
+          .select("date, start_time")
+          .eq("id", parentSessionId)
+          .single();
+        if (parentRow) {
+          raceDateForHours = parentRow.date ? (parentRow.date as string).split("T")[0] : null;
+          raceStartForHours = parentRow.start_time || null;
+        }
+      }
 
       for (const f of sortedHours) {
         const hourSessionName = `Hour ${f.hour}`;
         if (existingSessionNames.has(hourSessionName)) { summary.sessions_skipped++; continue; }
         const entries = f.data.classification || [];
         if (entries.length === 0) continue;
-        const { date: sessionDate, startTime: hourStartTime } = parseSessionDateTime(f.data.session || {});
-        const childSessionId = await createSession(hourSessionName, "race", f.url, sessionDate, hourStartTime, parentSessionId);
+
+        // Calculate this hour's date and time from the Race base date + start time
+        let hourDate = raceDateForHours;
+        let hourStart: string | null = null;
+        let hourEnd: string | null = null;
+
+        if (raceDateForHours && raceStartForHours) {
+          const [sH, sM] = raceStartForHours.split(":").map(Number);
+          if (!isNaN(sH) && !isNaN(sM)) {
+            const hourOffset = (f.hour! - 1); // Hour 1 = offset 0
+            const startMinutes = sH * 60 + sM + hourOffset * 60;
+            const endMinutes = startMinutes + 60;
+
+            const startInDay = startMinutes % 1440;
+            const endInDay = endMinutes % 1440;
+            const dayOffset = Math.floor(startMinutes / 1440);
+            const crossesMidnight = startInDay > endInDay;
+
+            // Calculate date with day offset
+            const dp = raceDateForHours.split("-").map(Number);
+            const dt = new Date(Date.UTC(dp[0], dp[1] - 1, dp[2] + dayOffset));
+            hourDate = dt.toISOString().slice(0, 10);
+
+            const fmt = (m: number) => {
+              const h = Math.floor(m / 60) % 24;
+              const min = m % 60;
+              return `${h.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+            };
+            hourStart = fmt(startInDay);
+            hourEnd = crossesMidnight ? "23:59" : fmt(endInDay);
+          }
+        } else if (!hourDate) {
+          // Fallback: use the hour JSON's own date if we have no race date at all
+          const { date: fallbackDate } = parseSessionDateTime(f.data.session || {});
+          hourDate = fallbackDate;
+        }
+
+        const childSessionId = await createSession(hourSessionName, "race", f.url, hourDate, hourStart, parentSessionId);
         if (!childSessionId) continue;
+        if (hourEnd) {
+          await adminClient.from("v2_sessions").update({ end_time: hourEnd } as any).eq("id", childSessionId);
+        }
         await insertResults(childSessionId, entries, "race", false, f.hour, timeCardMap.size > 0 ? timeCardMap : undefined);
         // Process weather for this hour session (use hour-specific weather)
         const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
