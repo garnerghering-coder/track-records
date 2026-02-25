@@ -32,7 +32,7 @@ function namesAreSimilar(a: string, b: string): boolean {
 
 interface DataIssue {
   id: string;
-  type: "missing_reason" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality" | "missing_position" | "missing_class";
+  type: "missing_reason" | "missing_explanation" | "missing_driver" | "missing_team" | "missing_car" | "missing_nationality" | "missing_position" | "missing_class";
   severity: "warning" | "error";
   title: string;
   description: string;
@@ -87,7 +87,7 @@ function DataQualitySection() {
     // 1. Race results with DNF/DSQ but no reason — exclude endurance hourly sub-sessions
     const { data: badResults } = await supabase
       .from("v2_race_results" as any)
-      .select("id, status, dnf_reason, session_id, car_number, position, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
+      .select("id, status, dnf_reason, dnf_explanation, session_id, car_number, position, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
       .in("status", ["dnf", "dsq"])
       .or("dnf_reason.is.null,dnf_reason.eq.");
 
@@ -100,6 +100,30 @@ function DataQualitySection() {
         type: "missing_reason",
         severity: "warning",
         title: `${(r.status as string).toUpperCase()} without reason — P${r.position || "?"} #${r.car_number || "?"}`,
+        description: `${evt?.name || "Unknown event"} → ${sess?.name || "Unknown session"}`,
+        linkTo: evt && sess ? `/manage/events/${evt.id}/session/${sess.id}` : undefined,
+        linkLabel: "Edit Session",
+      });
+    }
+
+    // 1b. Race results with reason but no explanation
+    const { data: noExplResults } = await supabase
+      .from("v2_race_results" as any)
+      .select("id, status, dnf_reason, dnf_explanation, session_id, car_number, position, v2_sessions(id, name, event_id, parent_session_id, v2_events(id, name))")
+      .in("status", ["dnf", "dsq"])
+      .not("dnf_reason", "is", null)
+      .neq("dnf_reason", "")
+      .or("dnf_explanation.is.null,dnf_explanation.eq.");
+
+    for (const r of (noExplResults || []) as any[]) {
+      const sess = r.v2_sessions;
+      if (sess?.parent_session_id) continue;
+      const evt = sess?.v2_events;
+      found.push({
+        id: `expl-${r.id}`,
+        type: "missing_explanation",
+        severity: "warning",
+        title: `Missing explanation for ${(r.status as string).toUpperCase()} (${r.dnf_reason}) — P${r.position || "?"} #${r.car_number || "?"}`,
         description: `${evt?.name || "Unknown event"} → ${sess?.name || "Unknown session"}`,
         linkTo: evt && sess ? `/manage/events/${evt.id}/session/${sess.id}` : undefined,
         linkLabel: "Edit Session",
@@ -343,7 +367,7 @@ function DataQualitySection() {
   const errors = issues.filter(i => i.severity === "error");
   const warnings = issues.filter(i => i.severity === "warning");
   const fixableCount = issues.filter(i => i.autoFixable).length;
-  const missingReasonCount = issues.filter(i => i.type === "missing_reason").length;
+  const missingReasonCount = issues.filter(i => i.type === "missing_reason" || i.type === "missing_explanation").length;
 
   return (
     <div className="space-y-4">

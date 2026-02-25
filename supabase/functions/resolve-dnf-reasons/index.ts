@@ -23,7 +23,9 @@ FOR DNF, choose exactly one:
 - "At Fault – Self-Inflicted (No Penalty)" — single-car accident, loss of control, spin into barrier/gravel, self-caused retirement without penalty.
 - "Other" — ONLY if none of the above fit.
 
-Respond with ONLY a JSON array. Each element: {"id":"<result_id>","reason":"<exact reason string>","confidence":"high"|"medium"|"low"}
+Also provide a brief explanation (max 15 words) describing what happened. Example: "Powertrain failure caused retirement on Lap 45" or "Spun and collided with wall during rain".
+
+Respond with ONLY a JSON array. Each element: {"id":"<result_id>","reason":"<exact reason string>","explanation":"<brief description>","confidence":"high"|"medium"|"low"}
 No other text. Prefer "Mechanical Failure" for generic DNFs where specifics are unknown.`;
 
 async function processBatch(admin: any, batch: any[]): Promise<{ resolved: number; skippedLow: number }> {
@@ -56,15 +58,17 @@ async function processBatch(admin: any, batch: any[]): Promise<{ resolved: numbe
     return { resolved: 0, skippedLow: 0 };
   }
 
-  const classifications: { id: string; reason: string; confidence: string }[] = JSON.parse(jsonMatch[0]);
+  const classifications: { id: string; reason: string; explanation?: string; confidence: string }[] = JSON.parse(jsonMatch[0]);
 
   let resolved = 0;
   let skippedLow = 0;
   for (const c of classifications) {
     if (c.confidence === "low") { skippedLow++; continue; }
+    const updates: Record<string, any> = { dnf_reason: c.reason };
+    if (c.explanation) updates.dnf_explanation = c.explanation;
     const { error: upErr } = await admin
       .from("v2_race_results")
-      .update({ dnf_reason: c.reason })
+      .update(updates)
       .eq("id", c.id);
     if (!upErr) resolved++;
   }

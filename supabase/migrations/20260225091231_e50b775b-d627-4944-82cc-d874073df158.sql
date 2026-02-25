@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_race_results ADD COLUMN IF NOT EXISTS dnf_explanation text;
