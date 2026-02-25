@@ -139,8 +139,8 @@ export default function ManageEventDetail() {
       } as any).eq("id", editingSession.id);
       if (error) throw error;
 
-      // Auto-cascade hour times when an endurance_race session's start_time is set/changed
-      if (editingSession.session_type === "endurance_race" && sessionForm.start_time) {
+      // Auto-cascade hour times/dates when an endurance_race session is updated
+      if (editingSession.session_type === "endurance_race" && sessionForm.date) {
         await cascadeHourTimes(editingSession.id, sessionForm.date, sessionForm.start_time);
       }
     },
@@ -148,7 +148,7 @@ export default function ManageEventDetail() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  /** Auto-populate hour sub-session start/end times from parent race start time */
+  /** Auto-populate hour sub-session dates and start/end times from parent race */
   const cascadeHourTimes = async (parentSessionId: string, baseDate: string, startTime: string) => {
     // Fetch child hour sessions
     const { data: children } = await (supabase
@@ -158,13 +158,24 @@ export default function ManageEventDetail() {
       .order("sort_order", { ascending: true });
     if (!children || children.length === 0) return;
 
-    // Parse base start time
-    const [startH, startM] = startTime.split(":").map(Number);
-    if (isNaN(startH) || isNaN(startM)) return;
-
     // Parse base date
     const baseD = new Date(baseDate + "T00:00:00");
     if (isNaN(baseD.getTime())) return;
+
+    // If no start_time, just update dates without touching times
+    if (!startTime) {
+      for (const child of children) {
+        await supabase.from("v2_sessions").update({
+          date: baseDate,
+        } as any).eq("id", child.id);
+      }
+      toast.success(`Updated dates for ${children.length} hour sessions`);
+      return;
+    }
+
+    // Parse base start time
+    const [startH, startM] = startTime.split(":").map(Number);
+    if (isNaN(startH) || isNaN(startM)) return;
 
     let currentMinutes = startH * 60 + startM;
     let dayOffset = 0; // days added from midnight crossovers
@@ -174,7 +185,7 @@ export default function ManageEventDetail() {
       const hourEnd = (currentMinutes + 60) % 1440;
       const crossesMidnight = currentMinutes + 60 >= (dayOffset + 1) * 1440 && hourStart > hourEnd;
 
-      // Calculate date for this hour
+      // Calculate date for this hour — starts from the Race date
       const childDate = new Date(baseD);
       childDate.setDate(childDate.getDate() + dayOffset);
       const dateStr = childDate.toISOString().slice(0, 10);
