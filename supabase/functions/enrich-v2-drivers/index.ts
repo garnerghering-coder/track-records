@@ -8,6 +8,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const CHUNK_SIZE = 30;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -17,52 +19,98 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify admin
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const body = await req.json().catch(() => ({}));
+    const offset = body.offset || 0;
+    const isSelfChain = body._selfChain === true;
 
-    const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Verify admin (skip detailed check on self-chain calls that use service role)
+    const authHeader = req.headers.get("Authorization");
+    let token = "";
+    if (!isSelfChain) {
+      if (!authHeader?.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } },
       });
+      token = authHeader.replace("Bearer ", "");
+      const { data: claimsData, error: claimsError } = await anonClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const userId = claimsData.claims.sub as string;
+
+      const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: roleData } = await adminClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin");
+      if (!roleData || roleData.length === 0) {
+        return new Response(JSON.stringify({ error: "Admin access required" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
-    const userId = claimsData.claims.sub as string;
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const { data: roleData } = await adminClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("role", "admin");
-    if (!roleData || roleData.length === 0) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
-    // Fetch drivers missing nationality, date_of_birth, or with old-format nationality (no comma = no hometown)
-    const { data: drivers, error: fetchErr } = await adminClient
+    // Fetch drivers needing enrichment — use separate queries to avoid PostgREST comma parsing issues
+    const { data: nullNat } = await adminClient
       .from("v2_drivers")
       .select("id, full_name, nationality, date_of_birth")
-      .or("nationality.is.null,date_of_birth.is.null,nationality.not.ilike.%,%")
+      .is("nationality", null)
       .order("full_name")
-      .limit(50);
+      .range(offset, offset + CHUNK_SIZE - 1);
 
-    if (fetchErr) throw fetchErr;
-    if (!drivers || drivers.length === 0) {
-      return new Response(JSON.stringify({ success: true, enriched: 0, message: "No drivers need enrichment" }), {
+    const { data: nullDob } = await adminClient
+      .from("v2_drivers")
+      .select("id, full_name, nationality, date_of_birth")
+      .is("date_of_birth", null)
+      .not("nationality", "is", null)
+      .order("full_name")
+      .range(offset, offset + CHUNK_SIZE - 1);
+
+    // Merge and deduplicate
+    const seen = new Set<string>();
+    const candidates: any[] = [];
+    for (const d of [...(nullNat || []), ...(nullDob || [])]) {
+      if (seen.has(d.id)) continue;
+      seen.add(d.id);
+      candidates.push(d);
+    }
+
+    // Also find drivers with country-only nationality (no comma = no hometown) — filter in code
+    if (candidates.length < CHUNK_SIZE) {
+      const { data: allWithNat } = await adminClient
+        .from("v2_drivers")
+        .select("id, full_name, nationality, date_of_birth")
+        .not("nationality", "is", null)
+        .order("full_name")
+        .range(offset, offset + 200);
+
+      for (const d of (allWithNat || [])) {
+        if (seen.has(d.id)) continue;
+        if (d.nationality && !d.nationality.includes(",")) {
+          seen.add(d.id);
+          candidates.push(d);
+          if (candidates.length >= CHUNK_SIZE) break;
+        }
+      }
+    }
+
+    const drivers = candidates.slice(0, CHUNK_SIZE);
+
+    if (drivers.length === 0) {
+      return new Response(JSON.stringify({ success: true, enriched: 0, message: "No drivers need enrichment", done: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -131,7 +179,6 @@ IMPORTANT: If a driver already has a nationality value that is just a country na
       if (!original) continue;
 
       const updates: Record<string, any> = {};
-      // Update nationality: accept if missing, or if upgrading from country-only to "Town, Country"
       if (item.nationality && typeof item.nationality === "string" && !["null", "unknown", "n/a"].includes(item.nationality.toLowerCase())) {
         if (!original.nationality) {
           updates.nationality = item.nationality;
@@ -149,7 +196,23 @@ IMPORTANT: If a driver already has a nationality value that is just a country na
       }
     }
 
-    return new Response(JSON.stringify({ success: true, enriched: updated, total: drivers.length }), {
+    // Self-chain: if we processed a full chunk, there may be more
+    let continuing = false;
+    if (drivers.length >= CHUNK_SIZE) {
+      continuing = true;
+      const nextOffset = offset + CHUNK_SIZE;
+      // Fire-and-forget self-chain
+      fetch(`${SUPABASE_URL}/functions/v1/enrich-v2-drivers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ offset: nextOffset, _selfChain: true }),
+      }).catch(err => console.error("Self-chain failed:", err));
+    }
+
+    return new Response(JSON.stringify({ success: true, enriched: updated, total: drivers.length, continuing, offset }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

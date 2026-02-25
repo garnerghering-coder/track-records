@@ -61,7 +61,9 @@ export default function ManageDrivers() {
     try {
       const { data, error } = await supabase.functions.invoke("enrich-v2-drivers");
       if (error) throw error;
-      toast.success(`Enriched ${data.enriched} of ${data.total} drivers`);
+      const parts: string[] = [`Enriched ${data.enriched} of ${data.total} drivers`];
+      if (data.continuing) parts.push("— continuing in background…");
+      toast.success(parts.join(" "));
       qc.invalidateQueries({ queryKey: ["v2_drivers"] });
     } catch (e: any) {
       toast.error(e.message || "Enrichment failed");
