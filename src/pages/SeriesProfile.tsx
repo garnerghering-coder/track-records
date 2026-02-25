@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Trophy, ChevronDown, ChevronUp } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { formatDateRange } from "@/lib/date-utils";
-import FlagImage from "@/components/FlagImage";
+import EventCard from "@/components/EventCard";
+import { useEventPodiums } from "@/hooks/useEventPodiums";
 
 interface DisplayEvent {
   id: string;
@@ -168,7 +168,70 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
   );
 }
 
-const SeriesProfile = () => {
+function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap }: {
+  events: DisplayEvent[];
+  seasonsGrouped: Record<number, { events: DisplayEvent[]; seasonId: string }>;
+  seasonStandings: Record<string, StandingEntry[]>;
+  seasonClassMap: Record<string, { id: string; name: string }[]>;
+}) {
+  const eventIds = useMemo(() => events.map(e => e.id), [events]);
+  const { podiums } = useEventPodiums(eventIds);
+
+  return (
+    <div className="container py-8">
+      <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events</h2>
+      {events.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No events linked to this series yet.</p>
+      ) : (
+        <div className="space-y-10">
+          {Object.entries(seasonsGrouped).sort(([a], [b]) => Number(b) - Number(a)).map(([year, { events: yearEvents, seasonId }]) => {
+            const standings = seasonStandings[seasonId] || [];
+            const classes = seasonClassMap[seasonId] || [];
+            const isMulticlass = classes.length > 0;
+
+            return (
+              <div key={year}>
+                <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
+
+                {standings.length > 0 && (
+                  <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
+                    <h4 className="font-display text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-yellow-500" />
+                      {year} Championship Standings
+                    </h4>
+                    {isMulticlass ? (
+                      <div className="grid gap-6 sm:grid-cols-2">
+                        {classes.map((cls) => {
+                          const classStandings = standings
+                            .filter(s => s.className === cls.name)
+                            .sort((a, b) => b.totalPoints - a.totalPoints)
+                            .map((s, i) => ({ ...s, position: i + 1 }));
+                          return (
+                            <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <PodiumDisplay standings={standings} />
+                    )}
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {yearEvents.map(ev => (
+                    <EventCard key={ev.id} event={ev} podium={podiums[ev.id]} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const { id } = useParams<{ id: string }>();
   const [series, setSeries] = useState<any>(null);
   const [events, setEvents] = useState<DisplayEvent[]>([]);
@@ -382,70 +445,7 @@ const SeriesProfile = () => {
         </div>
       </section>
 
-      <div className="container py-8">
-        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events</h2>
-        {events.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No events linked to this series yet.</p>
-        ) : (
-          <div className="space-y-10">
-            {Object.entries(seasonsGrouped).sort(([a], [b]) => Number(b) - Number(a)).map(([year, { events: yearEvents, seasonId }]) => {
-              const standings = seasonStandings[seasonId] || [];
-              const classes = seasonClassMap[seasonId] || [];
-              const isMulticlass = classes.length > 0;
-
-              return (
-                <div key={year}>
-                  <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
-
-                  {/* Podium standings */}
-                  {standings.length > 0 && (
-                    <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
-                      <h4 className="font-display text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <Trophy className="h-4 w-4 text-yellow-500" />
-                        {year} Championship Standings
-                      </h4>
-                      {isMulticlass ? (
-                        <div className="grid gap-6 sm:grid-cols-2">
-                          {classes.map((cls) => {
-                            const classStandings = standings
-                              .filter(s => s.className === cls.name)
-                              .sort((a, b) => b.totalPoints - a.totalPoints)
-                              .map((s, i) => ({ ...s, position: i + 1 }));
-                            return (
-                              <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <PodiumDisplay standings={standings} />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {yearEvents.map(ev => (
-                      <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
-                        <div className="flex items-start gap-3">
-                          <div className="mt-0.5 shrink-0">
-                            <FlagImage nationality={ev.country} size={24} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h4>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                              {ev.circuitName && <span className="truncate">{ev.circuitName}{ev.country ? `, ${ev.country}` : ""}</span>}
-                              {ev.date && <span className="shrink-0">{formatDateRange(ev.date, ev.endDate)}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <EventsSection events={events} seasonsGrouped={seasonsGrouped} seasonStandings={seasonStandings} seasonClassMap={seasonClassMap} />
       <Footer />
     </div>
   );
