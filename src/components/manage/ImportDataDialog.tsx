@@ -287,6 +287,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
 
   const effectiveParser = getEffectiveParser();
   const activeParsers = parsers.filter((p: any) => p.status === "active" || p.parser_type?.startsWith("builtin"));
+  const dropdownContentClass = "z-[120] border-border bg-popover text-popover-foreground shadow-xl";
 
   return (
     <Dialog
@@ -362,7 +363,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                       <SelectTrigger>
                         <SelectValue placeholder="Choose a parser…" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className={dropdownContentClass}>
                         {activeParsers.map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.name} (v{p.version})
@@ -390,7 +391,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                       <SelectTrigger>
                         <SelectValue placeholder="Choose a parser…" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className={dropdownContentClass}>
                         {activeParsers.map((p: any) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.name} (v{p.version})
@@ -651,7 +652,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a parser…" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className={dropdownContentClass}>
                   {parsers
                     .filter((p) => p.parser_type !== "builtin_f1" && p.parser_type !== "builtin_imsa")
                     .map((p: any) => (
@@ -671,7 +672,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                     <SelectTrigger>
                       <SelectValue placeholder="None" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className={dropdownContentClass}>
                       {recentRuns
                         .filter((r) => r.source_definition_id === selectedParser)
                         .map((r: any) => (
@@ -684,7 +685,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                 </div>
               )}
 
-            <ScrollArea className="flex-1 min-h-[200px] rounded-lg border border-border p-3 space-y-2">
+            <div className="flex-1 min-h-[200px] max-h-[42vh] overflow-y-auto rounded-lg border border-border bg-background p-3">
               {debugMessages.length === 0 && (
                 <p className="text-sm text-muted-foreground">
                   {selectedParser
@@ -731,7 +732,7 @@ export default function ImportDataDialog({ open, onOpenChange, eventId, seriesAl
                   Analyzing…
                 </div>
               )}
-            </ScrollArea>
+            </div>
 
             <div className="flex gap-2">
               <Input
