@@ -64,8 +64,8 @@ const Index = () => {
       <SEOHead
         title="Track Records – The Motorsport Database"
         description="Search drivers, teams, series, circuits, and race results — all in one place."
-        canonical="/"
-      />
+        canonical="/" />
+
       <Header />
       <WelcomeLightbox />
 
@@ -82,8 +82,8 @@ const Index = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}>
 
-            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-foreground">
-              The Motorsport
+            <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-foreground">YOUR MOTORSPORT
+DATABASE.
               <br />
               <span className="text-primary">Database.</span>
             </h1>
