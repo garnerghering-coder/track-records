@@ -44,3 +44,12 @@ verify_jwt = false
 
 [functions.recalculate-driver-fingerprint]
 verify_jwt = false
+
+[functions.induce-parser]
+verify_jwt = false
+
+[functions.execute-parser]
+verify_jwt = false
+
+[functions.repair-parser]
+verify_jwt = false

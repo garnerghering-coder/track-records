@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import AutocompleteField from "@/components/manage/AutocompleteField";
 import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical, Pencil, CloudSun, Loader2, Download } from "lucide-react";
+import ImportDataDialog from "@/components/manage/ImportDataDialog";
 import { Progress } from "@/components/ui/progress";
 
 const SESSION_TYPES = [
@@ -35,17 +36,13 @@ export default function ManageEventDetail() {
   const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "", layout_id: "", qualifying_session_id: "" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
 
-  // F1 import state
+  // Unified import dialog state
   const [importOpen, setImportOpen] = useState(false);
+
+  // Legacy F1 import state (used by ImportDataDialog routing)
   const [importUrl, setImportUrl] = useState("");
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
-
-  // IMSA import state
-  const [imsaImportOpen, setImsaImportOpen] = useState(false);
-  const [imsaUrl, setImsaUrl] = useState("");
-  const [imsaLoading, setImsaLoading] = useState(false);
-  const [imsaResult, setImsaResult] = useState<any>(null);
 
   // Resolution state for duplicate detection
   const [resolveOpen, setResolveOpen] = useState(false);
@@ -408,26 +405,7 @@ export default function ManageEventDetail() {
     handleF1Import({ drivers: driverResolutions, teams: teamResolutions }, saveAliases);
   };
 
-  const handleImsaImport = async () => {
-    if (!imsaUrl.trim()) return;
-    setImsaLoading(true);
-    setImsaResult(null);
-    try {
-      const { data, error } = await supabase.functions.invoke("import-imsa-results", {
-        body: { url: imsaUrl.trim(), event_id: id },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      setImsaResult(data);
-      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
-      toast.success(`Imported ${data.sessions_created} session(s) with ${data.total_entries} entries`);
-    } catch (e: any) {
-      toast.error(e.message || "Import failed");
-      setImsaResult({ error: e.message });
-    } finally {
-      setImsaLoading(false);
-    }
-  };
+  // IMSA import is now handled by ImportDataDialog
 
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
   if (!event) return <div className="p-6 text-muted-foreground">Event not found</div>;
@@ -484,16 +462,9 @@ export default function ManageEventDetail() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Sessions</h2>
           <div className="flex items-center gap-2">
-            {hasAlias("F1") && (
-              <Button size="sm" variant="outline" onClick={() => { setImportOpen(true); setImportUrl(""); setImportResult(null); }}>
-                <Download className="h-4 w-4 mr-1" />Import from F1.com
-              </Button>
-            )}
-            {hasAlias("IMSA") && (
-              <Button size="sm" variant="outline" onClick={() => { setImsaImportOpen(true); setImsaUrl(""); setImsaResult(null); }}>
-                <Download className="h-4 w-4 mr-1" />Import from IMSA
-              </Button>
-            )}
+            <Button size="sm" variant="outline" onClick={() => { setImportOpen(true); setImportUrl(""); setImportResult(null); }}>
+              <Download className="h-4 w-4 mr-1" />Import Data
+            </Button>
             <Button size="sm" onClick={openNewSession}>
               <Plus className="h-4 w-4 mr-1" />Add Session
             </Button>
@@ -650,129 +621,15 @@ export default function ManageEventDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* F1 Import Dialog */}
-      <Dialog open={importOpen} onOpenChange={v => { if (!importLoading) setImportOpen(v); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Import from F1.com</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Paste a Formula 1 race hub URL to automatically create sessions and populate results. Sessions will be created as drafts.
-            </p>
-            <div>
-              <Label>F1.com Race URL</Label>
-              <Input
-                value={importUrl}
-                onChange={e => setImportUrl(e.target.value)}
-                placeholder="https://www.formula1.com/en/racing/2025/bahrain"
-                disabled={importLoading}
-              />
-            </div>
-
-            {importLoading && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Scraping F1.com and parsing results… this may take a minute.
-                </div>
-                <Progress value={undefined} className="h-2" />
-              </div>
-            )}
-
-            {importResult && !importResult.error && (
-              <div className="rounded-lg border border-border bg-muted/50 p-3 space-y-1 text-sm">
-                <p className="font-medium text-foreground">✓ Import complete</p>
-                <p>{importResult.sessions_created} session(s) created, {importResult.sessions_skipped || 0} skipped (duplicate)</p>
-                <p>{importResult.total_entries} total entries imported</p>
-                <p>{importResult.drivers_matched} drivers matched, {importResult.drivers_created} new drivers created</p>
-                <p>{importResult.teams_matched} teams matched, {importResult.teams_created} new teams created</p>
-                {importResult.errors?.length > 0 && (
-                  <div className="mt-2 text-destructive">
-                    {importResult.errors.map((err: string, i: number) => <p key={i}>⚠ {err}</p>)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {importResult?.error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {importResult.error}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importLoading}>
-              {importResult && !importResult.error ? "Done" : "Cancel"}
-            </Button>
-            {(!importResult || importResult.error) && (
-              <Button onClick={() => handleF1Import()} disabled={!importUrl.trim() || importLoading}>
-                {importLoading ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Importing…</> : "Import"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* IMSA Import Dialog */}
-      <Dialog open={imsaImportOpen} onOpenChange={v => { if (!imsaLoading) setImsaImportOpen(v); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>Import from IMSA</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Paste an IMSA results page URL from alkamelcloud.com. The importer will find classification JSON files and create sessions with results.
-            </p>
-            <div>
-              <Label>IMSA Results URL</Label>
-              <Input
-                value={imsaUrl}
-                onChange={e => setImsaUrl(e.target.value)}
-                placeholder="https://results.imsa.com/Results/..."
-                disabled={imsaLoading}
-              />
-            </div>
-
-            {imsaLoading && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Scraping IMSA results… this may take a minute.
-                </div>
-                <Progress value={undefined} className="h-2" />
-              </div>
-            )}
-
-            {imsaResult && !imsaResult.error && (
-              <div className="rounded-lg border border-border bg-muted/50 p-3 space-y-1 text-sm">
-                <p className="font-medium text-foreground">✓ Import complete</p>
-                <p>{imsaResult.sessions_created} session(s) created, {imsaResult.sessions_skipped || 0} skipped (duplicate)</p>
-                <p>{imsaResult.total_entries} total entries imported</p>
-                <p>{imsaResult.drivers_matched} drivers matched, {imsaResult.drivers_created} new drivers created</p>
-                <p>{imsaResult.teams_matched} teams matched, {imsaResult.teams_created} new teams created</p>
-                {imsaResult.errors?.length > 0 && (
-                  <div className="mt-2 text-destructive">
-                    {imsaResult.errors.map((err: string, i: number) => <p key={i}>⚠ {err}</p>)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {imsaResult?.error && (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {imsaResult.error}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImsaImportOpen(false)} disabled={imsaLoading}>
-              {imsaResult && !imsaResult.error ? "Done" : "Cancel"}
-            </Button>
-            {(!imsaResult || imsaResult.error) && (
-              <Button onClick={handleImsaImport} disabled={!imsaUrl.trim() || imsaLoading}>
-                {imsaLoading ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Importing…</> : "Import"}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Unified Import Data Dialog */}
+      <ImportDataDialog
+        open={importOpen}
+        onOpenChange={v => { if (!importLoading) setImportOpen(v); }}
+        eventId={id!}
+        seriesAliases={seriesAliases}
+        onImportComplete={() => qc.invalidateQueries({ queryKey: ["v2_sessions", id] })}
+        onF1Import={(f1Url) => { setImportOpen(false); setImportUrl(f1Url); setTimeout(() => handleF1Import(), 100); }}
+      />
 
       {/* Duplicate Resolution Dialog */}
       <Dialog open={resolveOpen} onOpenChange={v => { if (!importLoading) setResolveOpen(v); }}>
