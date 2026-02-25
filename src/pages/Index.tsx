@@ -83,7 +83,7 @@ const Index = () => {
             transition={{ duration: 0.7 }}>
 
             <h1 className="font-display text-5xl font-bold leading-tight tracking-wide sm:text-6xl lg:text-7xl text-foreground">YOUR MOTORSPORT
-DATABASE.
+
               <br />
               <span className="text-primary">Database.</span>
             </h1>
