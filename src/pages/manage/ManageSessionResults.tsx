@@ -696,7 +696,9 @@ export default function ManageSessionResults() {
         const allInserts: any[] = [];
         for (const r of rows.filter(r => r.driver)) {
           const customPts = computeCustomPoints(r);
-          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: customPts || null, extra_data: buildExtraData(r) };
+          const basePts = r.points ? parseFloat(r.points) : 0;
+          const totalPts = basePts + customPts;
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, best_lap_time: r.best_lap_time || null, gap_to_p1: r.gap_to_p1 || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: totalPts || null, extra_data: buildExtraData(r) };
           allInserts.push({ ...base, driver_id: r.driver?.id || null });
           for (const ad of (r.additionalDrivers || [])) {
             if (ad) allInserts.push({ ...base, driver_id: ad.id });
@@ -708,7 +710,9 @@ export default function ManageSessionResults() {
         const qualInserts: any[] = [];
         for (const r of rows.filter(r => r.driver)) {
           const customPts = computeCustomPoints(r);
-          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: customPts || null, extra_data: buildExtraData(r) };
+          const basePts = r.points ? parseFloat(r.points) : 0;
+          const totalPts = basePts + customPts;
+          const base = { session_id: sessionId!, position: parseInt(r.position) || null, car_number: r.car_number || null, team_id: r.team?.id || null, car_id: r.car?.id || null, q1_time: r.q1_time || null, q2_time: r.q2_time || null, q3_time: r.q3_time || null, best_time: r.best_time || null, gap_to_pole: r.gap_to_pole || null, laps_run: r.laps_run ? parseInt(r.laps_run) : null, points: totalPts || null, extra_data: buildExtraData(r) };
           qualInserts.push({ ...base, driver_id: r.driver?.id || null });
           for (const ad of (r.additionalDrivers || [])) {
             if (ad) qualInserts.push({ ...base, driver_id: ad.id });
