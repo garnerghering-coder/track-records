@@ -338,7 +338,7 @@ export default function PositionProgressionChart({
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
-            margin={{ top: 10, right: 10, bottom: 10, left: compact ? 5 : 50 }}
+            margin={{ top: 10, right: compact ? 25 : 10, bottom: 10, left: compact ? 5 : 50 }}
             onMouseMove={(state: any) => {
               if (!state || state.activeTooltipIndex == null || !state.chartX || !state.chartY) {
                 return;
