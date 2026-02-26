@@ -28,7 +28,8 @@ export interface StandingsPdfParams {
   seriesName: string;
   year: number;
   seasonId: string;
-  className?: string | null;
+  /** Single class, multiple classes, or null/undefined for all */
+  classNames?: string[] | null;
   onProgress?: (pct: number) => void;
 }
 
@@ -48,7 +49,7 @@ interface CarRow {
 }
 
 export async function exportStandingsPdf(params: StandingsPdfParams) {
-  const { seriesName, year, seasonId, className, onProgress } = params;
+  const { seriesName, year, seasonId, classNames, onProgress } = params;
 
   onProgress?.(5);
 
@@ -191,39 +192,37 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     if (!entry.className && resultClass) entry.className = resultClass;
   }
 
-  // 5. Filter by class if specified
-  let rows = [...carMap.values()];
-  if (className) {
-    rows = rows.filter((r) => r.className === className);
-  }
-  rows = rows.filter((r) => r.totalPoints > 0);
-  rows.sort((a, b) => b.totalPoints - a.totalPoints);
+  // 5. Determine which classes to render (each gets its own page)
+  const allRows = [...carMap.values()].filter((r) => r.totalPoints > 0);
 
-  if (rows.length === 0) {
+  if (allRows.length === 0) {
     alert("No standings data to export.");
     return;
   }
 
-  const anyMultiDriver = rows.some((r) => r.driverNames.length > 1);
+  // Build class groups: if classNames specified, one group per class; otherwise one group with all
+  const classGroups: { className: string | null; rows: CarRow[] }[] = [];
+  if (classNames && classNames.length > 0) {
+    for (const cn of classNames) {
+      const filtered = allRows.filter((r) => r.className === cn);
+      if (filtered.length > 0) {
+        filtered.sort((a, b) => b.totalPoints - a.totalPoints);
+        classGroups.push({ className: cn, rows: filtered });
+      }
+    }
+  } else {
+    allRows.sort((a, b) => b.totalPoints - a.totalPoints);
+    classGroups.push({ className: null, rows: allRows });
+  }
+
+  if (classGroups.length === 0) {
+    alert("No standings data to export.");
+    return;
+  }
 
   onProgress?.(60);
 
-  // 6. Filter out session columns with zero points across all rows
-  const activeSessionIds = new Set<string>();
-  for (const row of rows) {
-    for (const sid of Object.keys(row.pointsBySession)) {
-      if (row.pointsBySession[sid] > 0) activeSessionIds.add(sid);
-    }
-  }
-
-  const filteredGroups = eventSessionGroups
-    .map((g) => ({
-      ...g,
-      sessions: g.sessions.filter((s) => activeSessionIds.has(s.sessionId)),
-    }))
-    .filter((g) => g.sessions.length > 0);
-
-  // 7. Build PDF
+  // 6. Build PDF
   let logoData: string | null = null;
   try {
     logoData = (await Promise.race([
@@ -243,150 +242,157 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
 
-  // --- Header ---
-  const topY = 10;
-  const titleLine1 = seriesName;
-  const titleLine2 = `${year} Championship Standings${className ? ` — ${className}` : ""}`;
+  for (let gi = 0; gi < classGroups.length; gi++) {
+    if (gi > 0) doc.addPage();
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.setTextColor(30);
-  doc.text(titleLine1, margin, topY + 5);
+    const group = classGroups[gi];
+    const rows = group.rows;
+    const anyMultiDriver = rows.some((r) => r.driverNames.length > 1);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(80);
-  doc.text(titleLine2, margin, topY + 10);
+    // Filter session columns to only those with points in this class group
+    const activeSessionIds = new Set<string>();
+    for (const row of rows) {
+      for (const sid of Object.keys(row.pointsBySession)) {
+        if (row.pointsBySession[sid] > 0) activeSessionIds.add(sid);
+      }
+    }
 
-  // Logo right-aligned, vertically centered with header
-  if (logoData) {
-    const imgProps = doc.getImageProperties(logoData);
-    const logoHeight = 12;
-    const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
-    const logoY = topY + (10 - logoHeight) / 2 + 1; // vertically center with the two-line header
-    doc.addImage(logoData, "PNG", pageWidth - margin - logoWidth, logoY, logoWidth, logoHeight);
-  }
+    const classFilteredGroups = eventSessionGroups
+      .map((g) => ({
+        ...g,
+        sessions: g.sessions.filter((s) => activeSessionIds.has(s.sessionId)),
+      }))
+      .filter((g) => g.sessions.length > 0);
 
-  // --- Table ---
-  // Build header: two rows
-  // Row 1: "", "Driver/Car", then event name spanning its session columns, then "Total"
-  // Row 2: "Pos", "", then session short names, then ""
+    const flatSessions = classFilteredGroups.flatMap((g) => g.sessions);
 
-  const flatSessions = filteredGroups.flatMap((g) => g.sessions);
+    // --- Header ---
+    const topY = 10;
+    const classLabel = group.className;
+    const titleLine2 = `${year} Championship Standings${classLabel ? ` — ${classLabel}` : ""}`;
 
-  // Format session type for short column headers
-  const shortType = (name: string, type: string): string => {
-    const n = name.toLowerCase();
-    if (n.includes("qualifying") || n.includes("qual")) return "Qual";
-    if (n.includes("sprint") && n.includes("race")) return "Sprint";
-    if (n.includes("race")) return "Race";
-    if (n.includes("practice") || n.includes("fp")) return "Prac";
-    // Fallback to first word
-    return name.length > 8 ? name.slice(0, 7) + "." : name;
-  };
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.text(seriesName, margin, topY + 5);
 
-  // We need to use autoTable's didDrawPage for grouped headers
-  // Build body data
-  const bodyData = rows.map((row, i) => {
-    const pos = String(i + 1);
-    const identifier = anyMultiDriver
-      ? `#${row.carNumber} – ${row.teamName || "Unknown"}`
-      : row.driverNames[0] || "Unknown";
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(80);
+    doc.text(titleLine2, margin, topY + 10);
 
-    const sessionPts = flatSessions.map((s) => {
-      const pts = row.pointsBySession[s.sessionId];
-      return pts ? String(pts) : "";
+    if (logoData) {
+      const imgProps = doc.getImageProperties(logoData);
+      const logoHeight = 12;
+      const logoWidth = (imgProps.width / imgProps.height) * logoHeight;
+      const logoY = topY + (10 - logoHeight) / 2 + 1;
+      doc.addImage(logoData, "PNG", pageWidth - margin - logoWidth, logoY, logoWidth, logoHeight);
+    }
+
+    // --- Table ---
+    const shortType = (name: string): string => {
+      const n = name.toLowerCase();
+      if (n.includes("qualifying") || n.includes("qual")) return "Qual";
+      if (n.includes("sprint") && n.includes("race")) return "Sprint";
+      if (n.includes("race")) return "Race";
+      if (n.includes("practice") || n.includes("fp")) return "Prac";
+      return name.length > 8 ? name.slice(0, 7) + "." : name;
+    };
+
+    const bodyData = rows.map((row, i) => {
+      const pos = String(i + 1);
+      const identifier = anyMultiDriver
+        ? `#${row.carNumber} – ${row.teamName || "Unknown"}`
+        : row.driverNames[0] || "Unknown";
+      const sessionPts = flatSessions.map((s) => {
+        const pts = row.pointsBySession[s.sessionId];
+        return pts ? String(pts) : "";
+      });
+      return [pos, identifier, ...sessionPts, String(row.totalPoints)];
     });
 
-    return [pos, identifier, ...sessionPts, String(row.totalPoints)];
-  });
+    const headRow = [
+      "Pos",
+      anyMultiDriver ? "Car / Team" : "Driver",
+      ...flatSessions.map((s) => shortType(s.sessionName)),
+      "Total",
+    ];
 
-  // Simple header row: Pos, Driver/Car, ...session short names, Total
-  const headRow = [
-    "Pos",
-    anyMultiDriver ? "Car / Team" : "Driver",
-    ...flatSessions.map((s) => shortType(s.sessionName, s.sessionType)),
-    "Total",
-  ];
+    const tableStartY = topY + 16;
+    const groupsRef = classFilteredGroups; // capture for closure
 
-  const tableStartY = topY + 16;
+    autoTable(doc, {
+      startY: tableStartY + 6,
+      head: [headRow],
+      body: bodyData,
+      styles: { fontSize: 6, cellPadding: 1.2, font: "courier" },
+      headStyles: {
+        fillColor: [30, 30, 35],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        font: "helvetica",
+        fontSize: 5.5,
+      },
+      alternateRowStyles: { fillColor: [245, 245, 248] },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 8 },
+        1: { cellWidth: anyMultiDriver ? 52 : 40 },
+        [headRow.length - 1]: { halign: "right", fontStyle: "bold", cellWidth: 12 },
+      },
+      margin: { left: margin, right: margin },
+      didDrawPage: (data) => {
+        // Draw event name brackets above the head row on the current page
+        if (data.settings.startY != null) {
+          const bracketY = data.settings.startY - 3;
+          doc.setFontSize(5);
+          doc.setTextColor(100);
+          doc.setFont("helvetica", "bold");
 
-  // Draw event group brackets above the table after initial draw
-  autoTable(doc, {
-    startY: tableStartY + 6, // leave room for event name brackets
-    head: [headRow],
-    body: bodyData,
-    styles: { fontSize: 6, cellPadding: 1.2, font: "courier" },
-    headStyles: {
-      fillColor: [30, 30, 35],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-      font: "helvetica",
-      fontSize: 5.5,
-    },
-    alternateRowStyles: { fillColor: [245, 245, 248] },
-    columnStyles: {
-      0: { halign: "center", cellWidth: 8 },
-      1: { cellWidth: anyMultiDriver ? 52 : 40 },
-      [headRow.length - 1]: { halign: "right", fontStyle: "bold", cellWidth: 12 },
-    },
-    margin: { left: margin, right: margin },
-    didDrawPage: (data) => {
-      // Draw event name brackets on the first page above the head row
-      if (data.pageNumber === 1 && data.settings.startY != null) {
-        const bracketY = data.settings.startY - 3;
-        doc.setFontSize(5);
-        doc.setTextColor(100);
-        doc.setFont("helvetica", "bold");
-
-        // Calculate x positions for each session column
-        // Columns: 0=Pos, 1=Driver, 2..n-1=sessions, n=Total
-        const colCount = headRow.length;
-        const table = (data as any).table;
-        if (table && table.columns) {
-          let sessionIdx = 0;
-          for (const group of filteredGroups) {
-            const startCol = 2 + sessionIdx;
-            const endCol = startCol + group.sessions.length - 1;
-
-            const startColObj = table.columns[startCol];
-            const endColObj = table.columns[endCol];
-            if (startColObj && endColObj) {
-              const x1 = startColObj.x;
-              const x2 = endColObj.x + endColObj.width;
-              const centerX = (x1 + x2) / 2;
-
-              // Draw bracket line
-              doc.setDrawColor(150);
-              doc.setLineWidth(0.2);
-              doc.line(x1 + 1, bracketY + 1.5, x2 - 1, bracketY + 1.5);
-
-              // Draw circuit/event name
-              const label =
-                group.circuitName.length > 18
-                  ? group.circuitName.slice(0, 17) + "…"
-                  : group.circuitName;
-              doc.text(label, centerX, bracketY, { align: "center" });
+          const table = (data as any).table;
+          if (table && table.columns) {
+            let sessionIdx = 0;
+            for (const evGroup of groupsRef) {
+              const startCol = 2 + sessionIdx;
+              const endCol = startCol + evGroup.sessions.length - 1;
+              const startColObj = table.columns[startCol];
+              const endColObj = table.columns[endCol];
+              if (
+                startColObj && endColObj &&
+                typeof startColObj.x === "number" && typeof endColObj.x === "number" &&
+                isFinite(startColObj.x) && isFinite(endColObj.x)
+              ) {
+                const x1 = startColObj.x;
+                const x2 = endColObj.x + (endColObj.width || 0);
+                if (x2 > x1) {
+                  const centerX = (x1 + x2) / 2;
+                  doc.setDrawColor(150);
+                  doc.setLineWidth(0.2);
+                  doc.line(x1 + 1, bracketY + 1.5, x2 - 1, bracketY + 1.5);
+                  const label = evGroup.circuitName.length > 18
+                    ? evGroup.circuitName.slice(0, 17) + "…"
+                    : evGroup.circuitName;
+                  doc.text(label, centerX, bracketY, { align: "center" });
+                }
+              }
+              sessionIdx += evGroup.sessions.length;
             }
-            sessionIdx += group.sessions.length;
           }
         }
-      }
-    },
-  });
+      },
+    });
 
-  // Footer
-  doc.setFontSize(6);
-  doc.setTextColor(180);
-  doc.text(new Date().toLocaleDateString(), margin, pageHeight - 6);
-  doc.text("track-records.lovable.app", pageWidth - margin, pageHeight - 6, {
-    align: "right",
-  });
+    // Footer per page
+    doc.setFontSize(6);
+    doc.setTextColor(180);
+    doc.text(new Date().toLocaleDateString(), margin, pageHeight - 6);
+    doc.text("track-records.lovable.app", pageWidth - margin, pageHeight - 6, { align: "right" });
+  }
 
   onProgress?.(90);
 
   // Save
-  const fileName = `${seriesName.replace(/\s+/g, "-").toLowerCase()}-${year}-standings${className ? `-${className.replace(/\s+/g, "-").toLowerCase()}` : ""}.pdf`;
+  const allClassLabel = classNames && classNames.length > 0 ? classNames.join("-") : null;
+  const fileName = `${seriesName.replace(/\s+/g, "-").toLowerCase()}-${year}-standings${allClassLabel ? `-${allClassLabel.replace(/[\s,]+/g, "-").toLowerCase()}` : ""}.pdf`;
 
   const blob = doc.output("blob");
   const blobUrl = URL.createObjectURL(blob);
