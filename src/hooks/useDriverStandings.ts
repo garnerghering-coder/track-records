@@ -316,6 +316,9 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
         }
       >();
 
+      // Track which (car_number, session_id) combos we've already counted points for
+      const countedPoints = new Set<string>();
+
       for (const r of allResults) {
         if (!r.car_number) continue;
         const pts = r.points != null ? Number(r.points) : 0;
@@ -334,7 +337,14 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
         }
 
         const entry = carMap.get(r.car_number)!;
-        entry.totalPoints += pts;
+
+        // Only count points once per car per session (endurance cars have multiple driver rows)
+        const pointsKey = `${r.car_number}|${r.session_id}`;
+        if (pts > 0 && !countedPoints.has(pointsKey)) {
+          entry.totalPoints += pts;
+          countedPoints.add(pointsKey);
+        }
+
         if (r.driver_id) entry.driverIds.add(r.driver_id);
         if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
         if (!entry.teamName && r.v2_teams?.full_name) {
