@@ -38,6 +38,14 @@ interface CarInfo {
   position: number | null;
 }
 
+interface HourPosition {
+  carNumber: string;
+  hourNumber: number;
+  elapsed: number; // hour boundary in seconds
+  position: number;
+  gap: string | null;
+}
+
 // ── Constants ───────────────────────────────────────────────────────
 
 const CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
@@ -62,6 +70,7 @@ const FLAG_COLORS: Record<string, { bg: string; strip: string }> = {
 
 const DEFAULT_CARS_PER_CLASS = 3;
 const ROW_HEIGHT = 22;
+const COMPARE_ROW_HEIGHT = 32;
 const ROW_GAP = 2;
 const HEADER_HEIGHT = 20;
 const STRIP_HEIGHT = 18;
@@ -83,6 +92,29 @@ function getClassColor(cls: string): string {
   return CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
 }
 
+/** Compute green-flag duration within a stint by intersecting with flag segments */
+function computeGreenFlagDuration(stint: Stint, flagSegments: FlagSegment[]): number {
+  let greenDuration = 0;
+  for (const seg of flagSegments) {
+    if (seg.flag_state !== "GREEN") continue;
+    const s = Number(seg.start_elapsed);
+    const e = Number(seg.end_elapsed);
+    const overlapStart = Math.max(stint.start_elapsed, s);
+    const overlapEnd = Math.min(stint.end_elapsed, e);
+    if (overlapEnd > overlapStart) {
+      greenDuration += overlapEnd - overlapStart;
+    }
+  }
+  return greenDuration;
+}
+
+function formatLapTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds - m * 60;
+  if (m > 0) return `${m}:${s.toFixed(1).padStart(4, "0")}`;
+  return `${s.toFixed(1)}s`;
+}
+
 // ── Component ───────────────────────────────────────────────────────
 
 interface StrategyTimelineProps {
@@ -102,6 +134,10 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareCars, setCompareCars] = useState<Set<string>>(new Set());
+  const [showPositions, setShowPositions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // ── Data fetching ──────────────────────────────────────────────
 
@@ -165,11 +201,53 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     },
   });
 
+  // Fetch hourly position data for position overlays
+  const { data: hourPositions = [] } = useQuery({
+    queryKey: ["strategy_hour_positions", sessionId],
+    enabled: showPositions,
+    queryFn: async () => {
+      // Get hour sub-sessions
+      const { data: hourSessions } = await supabase
+        .from("v2_sessions" as any)
+        .select("id, name")
+        .eq("parent_session_id", sessionId)
+        .order("name");
+      if (!hourSessions || hourSessions.length === 0) return [];
+
+      const positions: HourPosition[] = [];
+      for (const hs of hourSessions as any[]) {
+        const hourMatch = (hs.name as string).match(/Hour\s*(\d+)/i);
+        if (!hourMatch) continue;
+        const hourNum = parseInt(hourMatch[1]);
+
+        const { data: results } = await supabase
+          .from("v2_race_results" as any)
+          .select("car_number, position, gap_to_leader")
+          .eq("session_id", hs.id)
+          .order("position", { ascending: true });
+
+        if (results) {
+          for (const r of results as any[]) {
+            if (r.car_number && r.position != null) {
+              positions.push({
+                carNumber: r.car_number,
+                hourNumber: hourNum,
+                elapsed: hourNum * 3600,
+                position: r.position,
+                gap: r.gap_to_leader || null,
+              });
+            }
+          }
+        }
+      }
+      return positions;
+    },
+  });
+
   // ── Derived data ───────────────────────────────────────────────
 
   const carInfoMap = useMemo(() => {
     const map = new Map<string, CarInfo>();
-    // Dedupe: use first (best position) per car_number
     for (const r of raceResults) {
       const cn = r.car_number;
       if (!cn || map.has(cn)) continue;
@@ -209,9 +287,31 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     return groups;
   }, [carInfoMap, effectiveClasses]);
 
-  // Build visible cars list (collapsed = top N, expanded = all)
+  // Build position lookup: car_number -> hour -> position
+  const positionLookup = useMemo(() => {
+    const map = new Map<string, Map<number, HourPosition>>();
+    for (const hp of hourPositions) {
+      if (!map.has(hp.carNumber)) map.set(hp.carNumber, new Map());
+      map.get(hp.carNumber)!.set(hp.hourNumber, hp);
+    }
+    return map;
+  }, [hourPositions]);
+
+  // Build visible cars list
   const visibleCars = useMemo(() => {
     const cars: CarInfo[] = [];
+
+    if (compareMode && compareCars.size > 0) {
+      // In compare mode, show only selected cars in class order
+      for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
+        const group = carsByClass[cls] || [];
+        for (const car of group) {
+          if (compareCars.has(car.carNumber)) cars.push(car);
+        }
+      }
+      return cars;
+    }
+
     for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
       const group = carsByClass[cls] || [];
       const isExpanded = expandedClasses.has(cls);
@@ -219,7 +319,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       cars.push(...shown);
     }
     return cars;
-  }, [allClasses, carsByClass, effectiveClasses, expandedClasses]);
+  }, [allClasses, carsByClass, effectiveClasses, expandedClasses, compareMode, compareCars]);
 
   // Time range
   const timeRange = useMemo(() => {
@@ -262,7 +362,26 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     return presets;
   }, [totalDurationH, timeRange]);
 
+  // Filtered cars by search
+  const searchFilteredCars = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const q = searchQuery.toLowerCase().trim();
+    const matching = new Set<string>();
+    for (const [cn, info] of carInfoMap) {
+      if (
+        cn.toLowerCase().includes(q) ||
+        info.teamName.toLowerCase().includes(q) ||
+        info.className.toLowerCase().includes(q)
+      ) {
+        matching.add(cn);
+      }
+    }
+    return matching;
+  }, [searchQuery, carInfoMap]);
+
   // ── Canvas rendering ───────────────────────────────────────────
+
+  const effectiveRowHeight = compareMode ? COMPARE_ROW_HEIGHT : ROW_HEIGHT;
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -276,13 +395,20 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     // Calculate total height
     let totalRows = 0;
     let classHeaders = 0;
-    for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
-      classHeaders++;
-      const group = carsByClass[cls] || [];
-      const shown = expandedClasses.has(cls) ? group.length : Math.min(group.length, DEFAULT_CARS_PER_CLASS);
-      totalRows += shown;
+
+    if (compareMode && compareCars.size > 0) {
+      totalRows = compareCars.size;
+      classHeaders = 0;
+    } else {
+      for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
+        classHeaders++;
+        const group = carsByClass[cls] || [];
+        const shown = expandedClasses.has(cls) ? group.length : Math.min(group.length, DEFAULT_CARS_PER_CLASS);
+        totalRows += shown;
+      }
     }
-    const totalHeight = TOP_MARGIN + STRIP_HEIGHT + 8 + classHeaders * HEADER_HEIGHT + totalRows * (ROW_HEIGHT + ROW_GAP) + 20;
+
+    const totalHeight = TOP_MARGIN + STRIP_HEIGHT + 8 + classHeaders * HEADER_HEIGHT + totalRows * (effectiveRowHeight + ROW_GAP) + 20;
 
     canvas.width = width * dpr;
     canvas.height = totalHeight * dpr;
@@ -325,7 +451,6 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       const x = elapsed2x(t);
       if (x < LABEL_WIDTH || x > LABEL_WIDTH + chartWidth) continue;
       ctx.fillText(formatElapsed(t), x, axisY);
-      // Tick line
       ctx.strokeStyle = "rgba(107, 114, 128, 0.15)";
       ctx.lineWidth = 0.5;
       ctx.beginPath();
@@ -341,7 +466,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       const s = Number(seg.start_elapsed);
       const e = Number(seg.end_elapsed);
       if (e <= viewRange[0] || s >= viewRange[1]) continue;
-      if (seg.flag_state === "GREEN") continue; // skip green bands
+      if (seg.flag_state === "GREEN") continue;
       const x1 = Math.max(elapsed2x(s), LABEL_WIDTH);
       const x2 = Math.min(elapsed2x(e), LABEL_WIDTH + chartWidth);
       const color = FLAG_COLORS[seg.flag_state]?.bg || "rgba(107, 114, 128, 0.05)";
@@ -360,104 +485,174 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       ctx.strokeRect(x1, TOP_MARGIN, x2 - x1, rowsBottom - TOP_MARGIN);
     }
 
-    // ── Car rows by class ──
-    let y = TOP_MARGIN;
-    for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
-      const group = carsByClass[cls] || [];
-      const isExpanded = expandedClasses.has(cls);
-      const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
-      const classColor = getClassColor(cls);
+    // ── Draw car rows ──
+    const drawCarRow = (car: CarInfo, y: number, classColor: string) => {
+      const isHighlighted = highlightedCar === car.carNumber;
+      const isCompared = compareCars.has(car.carNumber);
+      const isFaded = (highlightedCar != null && !isHighlighted) ||
+        (searchFilteredCars != null && !searchFilteredCars.has(car.carNumber));
+      const alpha = isFaded ? 0.15 : 1;
 
-      // Class header
-      ctx.fillStyle = classColor;
-      ctx.font = "bold 10px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText(`${cls} (${group.length})`, 4, y + HEADER_HEIGHT / 2 + 3);
-      if (!isExpanded && group.length > DEFAULT_CARS_PER_CLASS) {
+      // Car label
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#d1d5db";
+      ctx.font = compareMode ? "bold 11px monospace" : "10px monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(`#${car.carNumber}`, LABEL_WIDTH - 6, y + effectiveRowHeight / 2 + 3);
+
+      // Compare mode: show team name below car number
+      if (compareMode) {
         ctx.fillStyle = "#9ca3af";
-        ctx.font = "9px system-ui, sans-serif";
-        ctx.fillText(`+${group.length - DEFAULT_CARS_PER_CLASS} more`, LABEL_WIDTH - 8, y + HEADER_HEIGHT / 2 + 3);
+        ctx.font = "8px system-ui, sans-serif";
+        ctx.fillText(car.teamName.substring(0, 12), LABEL_WIDTH - 6, y + effectiveRowHeight / 2 + 13);
       }
-      y += HEADER_HEIGHT;
 
-      for (const car of shown) {
-        const isHighlighted = highlightedCar === car.carNumber;
-        const isFaded = highlightedCar != null && !isHighlighted;
-        const alpha = isFaded ? 0.25 : 1;
+      // Background
+      ctx.fillStyle = isCompared && !compareMode
+        ? "rgba(59, 130, 246, 0.08)"
+        : "rgba(107, 114, 128, 0.06)";
+      ctx.fillRect(LABEL_WIDTH, y, chartWidth, effectiveRowHeight);
 
-        // Car label
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = "#d1d5db";
-        ctx.font = "10px monospace";
-        ctx.textAlign = "right";
-        ctx.fillText(`#${car.carNumber}`, LABEL_WIDTH - 6, y + ROW_HEIGHT / 2 + 3);
+      // Stints for this car
+      const carStints = stints.filter(s => s.car_number === car.carNumber);
+      for (const stint of carStints) {
+        if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) continue;
+        const x1 = Math.max(elapsed2x(stint.start_elapsed), LABEL_WIDTH);
+        const x2 = Math.min(elapsed2x(stint.end_elapsed), LABEL_WIDTH + chartWidth);
+        const w = Math.max(x2 - x1, 2);
 
-        // Background
-        ctx.fillStyle = "rgba(107, 114, 128, 0.06)";
-        ctx.fillRect(LABEL_WIDTH, y, chartWidth, ROW_HEIGHT);
+        ctx.fillStyle = classColor;
+        ctx.globalAlpha = alpha * 0.75;
 
-        // Stints for this car
-        const carStints = stints.filter(s => s.car_number === car.carNumber);
-        for (const stint of carStints) {
-          if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) continue;
-          const x1 = Math.max(elapsed2x(stint.start_elapsed), LABEL_WIDTH);
-          const x2 = Math.min(elapsed2x(stint.end_elapsed), LABEL_WIDTH + chartWidth);
-          const w = Math.max(x2 - x1, 2);
+        // Rounded rect
+        const r = 2;
+        const ry = y + 2;
+        const rh = effectiveRowHeight - 4;
+        ctx.beginPath();
+        ctx.moveTo(x1 + r, ry);
+        ctx.lineTo(x1 + w - r, ry);
+        ctx.quadraticCurveTo(x1 + w, ry, x1 + w, ry + r);
+        ctx.lineTo(x1 + w, ry + rh - r);
+        ctx.quadraticCurveTo(x1 + w, ry + rh, x1 + w - r, ry + rh);
+        ctx.lineTo(x1 + r, ry + rh);
+        ctx.quadraticCurveTo(x1, ry + rh, x1, ry + rh - r);
+        ctx.lineTo(x1, ry + r);
+        ctx.quadraticCurveTo(x1, ry, x1 + r, ry);
+        ctx.fill();
 
-          ctx.fillStyle = classColor;
-          ctx.globalAlpha = alpha * 0.75;
-
-          // Rounded rect
-          const r = 2;
-          ctx.beginPath();
-          ctx.moveTo(x1 + r, y + 2);
-          ctx.lineTo(x1 + w - r, y + 2);
-          ctx.quadraticCurveTo(x1 + w, y + 2, x1 + w, y + 2 + r);
-          ctx.lineTo(x1 + w, y + ROW_HEIGHT - 2 - r);
-          ctx.quadraticCurveTo(x1 + w, y + ROW_HEIGHT - 2, x1 + w - r, y + ROW_HEIGHT - 2);
-          ctx.lineTo(x1 + r, y + ROW_HEIGHT - 2);
-          ctx.quadraticCurveTo(x1, y + ROW_HEIGHT - 2, x1, y + ROW_HEIGHT - 2 - r);
-          ctx.lineTo(x1, y + 2 + r);
-          ctx.quadraticCurveTo(x1, y + 2, x1 + r, y + 2);
-          ctx.fill();
-        }
-
-        // Pit stop markers
-        const carPits = pitStops.filter(p => p.car_number === car.carNumber);
-        for (const pit of carPits) {
-          if (pit.pit_in_elapsed < viewRange[0] || pit.pit_in_elapsed > viewRange[1]) continue;
-          const px = elapsed2x(pit.pit_in_elapsed);
-
-          // Pit marker color based on flag status
-          const pitFlagColor = pit.flag_status === "Green" ? "#ef4444" :
-            pit.flag_status === "YELLOW" || pit.flag_status === "Yellow" ? "#eab308" :
-            pit.flag_status === "FCY" ? "#fb923c" :
-            pit.flag_status === "RED" || pit.flag_status === "Red" ? "#ff6b6b" : "#ef4444";
-
+        // In compare mode, show driver name inside stint if wide enough
+        if (compareMode && stint.driverName && w > 40) {
           ctx.globalAlpha = alpha;
-          ctx.strokeStyle = pitFlagColor;
-          ctx.lineWidth = 1.5;
-          ctx.setLineDash([2, 2]);
-          ctx.beginPath();
-          ctx.moveTo(px, y + 1);
-          ctx.lineTo(px, y + ROW_HEIGHT - 1);
-          ctx.stroke();
-          ctx.setLineDash([]);
-
-          // If we have pit_out, draw pit duration as thin rect
-          if (pit.pit_out_elapsed != null && pit.pit_out_elapsed > pit.pit_in_elapsed) {
-            const px2 = elapsed2x(pit.pit_out_elapsed);
-            ctx.fillStyle = pitFlagColor;
-            ctx.globalAlpha = alpha * 0.2;
-            ctx.fillRect(px, y + 2, Math.max(px2 - px, 1), ROW_HEIGHT - 4);
-          }
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 8px system-ui, sans-serif";
+          ctx.textAlign = "left";
+          const shortName = stint.driverName.split(" ").pop() || stint.driverName;
+          ctx.fillText(shortName, x1 + 4, y + effectiveRowHeight / 2 + 3);
         }
+      }
 
-        ctx.globalAlpha = 1;
-        y += ROW_HEIGHT + ROW_GAP;
+      // Pit stop markers
+      const carPits = pitStops.filter(p => p.car_number === car.carNumber);
+      for (const pit of carPits) {
+        if (pit.pit_in_elapsed < viewRange[0] || pit.pit_in_elapsed > viewRange[1]) continue;
+        const px = elapsed2x(pit.pit_in_elapsed);
+
+        const pitFlagColor = pit.flag_status === "Green" ? "#ef4444" :
+          pit.flag_status === "YELLOW" || pit.flag_status === "Yellow" ? "#eab308" :
+          pit.flag_status === "FCY" ? "#fb923c" :
+          pit.flag_status === "RED" || pit.flag_status === "Red" ? "#ff6b6b" : "#ef4444";
+
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = pitFlagColor;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.moveTo(px, y + 1);
+        ctx.lineTo(px, y + effectiveRowHeight - 1);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (pit.pit_out_elapsed != null && pit.pit_out_elapsed > pit.pit_in_elapsed) {
+          const px2 = elapsed2x(pit.pit_out_elapsed);
+          ctx.fillStyle = pitFlagColor;
+          ctx.globalAlpha = alpha * 0.2;
+          ctx.fillRect(px, y + 2, Math.max(px2 - px, 1), effectiveRowHeight - 4);
+        }
+      }
+
+      // Position overlays at hour boundaries
+      if (showPositions && positionLookup.has(car.carNumber)) {
+        const carPositions = positionLookup.get(car.carNumber)!;
+        ctx.globalAlpha = alpha;
+        for (const [, hp] of carPositions) {
+          const hx = elapsed2x(hp.elapsed);
+          if (hx < LABEL_WIDTH || hx > LABEL_WIDTH + chartWidth) continue;
+
+          // Position badge
+          const posText = `P${hp.position}`;
+          ctx.font = "bold 7px system-ui, sans-serif";
+          const textW = ctx.measureText(posText).width;
+          const badgeW = textW + 4;
+          const badgeH = 10;
+          const badgeX = hx - badgeW / 2;
+          const badgeY = y + 1;
+
+          // Badge background
+          const posColor = hp.position <= 3 ? "#22c55e" :
+            hp.position <= 10 ? "#3b82f6" : "#6b7280";
+          ctx.fillStyle = posColor;
+          ctx.globalAlpha = alpha * 0.85;
+          ctx.beginPath();
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 2);
+          ctx.fill();
+
+          // Badge text
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.fillText(posText, hx, badgeY + badgeH - 2.5);
+        }
+      }
+
+      ctx.globalAlpha = 1;
+    };
+
+    // ── Render rows ──
+    let y = TOP_MARGIN;
+
+    if (compareMode && compareCars.size > 0) {
+      // Compare mode: flat list, no class headers
+      for (const car of visibleCars) {
+        const classColor = getClassColor(car.className);
+        drawCarRow(car, y, classColor);
+        y += effectiveRowHeight + ROW_GAP;
+      }
+    } else {
+      for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
+        const group = carsByClass[cls] || [];
+        const isExpanded = expandedClasses.has(cls);
+        const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
+        const classColor = getClassColor(cls);
+
+        // Class header
+        ctx.fillStyle = classColor;
+        ctx.font = "bold 10px system-ui, sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(`${cls} (${group.length})`, 4, y + HEADER_HEIGHT / 2 + 3);
+        if (!isExpanded && group.length > DEFAULT_CARS_PER_CLASS) {
+          ctx.fillStyle = "#9ca3af";
+          ctx.font = "9px system-ui, sans-serif";
+          ctx.fillText(`+${group.length - DEFAULT_CARS_PER_CLASS} more`, LABEL_WIDTH - 8, y + HEADER_HEIGHT / 2 + 3);
+        }
+        y += HEADER_HEIGHT;
+
+        for (const car of shown) {
+          drawCarRow(car, y, classColor);
+          y += effectiveRowHeight + ROW_GAP;
+        }
       }
     }
-  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd]);
+  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars]);
 
   useEffect(() => {
     drawCanvas();
@@ -501,59 +696,81 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     let rowY = TOP_MARGIN;
     let found = false;
 
-    for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
-      const group = carsByClass[cls] || [];
-      const isExpanded = expandedClasses.has(cls);
-      const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
-      rowY += HEADER_HEIGHT;
-
-      for (const car of shown) {
-        if (y >= rowY && y < rowY + ROW_HEIGHT && x >= LABEL_WIDTH && x <= LABEL_WIDTH + chartWidth) {
-          // Check if hovering a pit stop
-          const carPits = pitStops.filter(p => p.car_number === car.carNumber);
-          const hitPit = carPits.find(p => Math.abs(elapsed - p.pit_in_elapsed) < viewDuration * 0.005);
-          if (hitPit) {
-            const lines = [
-              `🔧 Pit Stop — #${car.carNumber}`,
-              `Team: ${car.teamName}`,
-              `Class: ${car.className}`,
-              `In: ${formatElapsed(hitPit.pit_in_elapsed)}`,
-              hitPit.pit_out_elapsed != null ? `Out: ${formatElapsed(hitPit.pit_out_elapsed)}` : "",
-              hitPit.stop_duration ? `Duration: ${hitPit.stop_duration}` : "",
-              hitPit.flag_status ? `Flag: ${hitPit.flag_status}` : "",
-            ].filter(Boolean);
-            setTooltip({ x: e.clientX, y: e.clientY, content: lines });
-            found = true;
-            break;
-          }
-
-          // Check stints
-          const carStints = stints.filter(s => s.car_number === car.carNumber);
-          const hitStint = carStints.find(s => elapsed >= s.start_elapsed && elapsed <= s.end_elapsed);
-          if (hitStint) {
-            const duration = hitStint.end_elapsed - hitStint.start_elapsed;
-            const laps = hitStint.start_lap != null && hitStint.end_lap != null
-              ? hitStint.end_lap - hitStint.start_lap
-              : null;
-            const lines = [
-              `📊 Stint — #${car.carNumber}`,
-              `Team: ${car.teamName}`,
-              `Class: ${car.className}`,
-              hitStint.driverName ? `Driver: ${hitStint.driverName}` : "",
-              `Start: ${formatElapsed(hitStint.start_elapsed)}`,
-              `End: ${formatElapsed(hitStint.end_elapsed)}`,
-              `Duration: ${formatElapsed(duration)}`,
-              laps != null ? `Laps: ${laps}` : "",
-            ].filter(Boolean);
-            setTooltip({ x: e.clientX, y: e.clientY, content: lines });
-            found = true;
-            break;
+    const iterateRows = (callback: (car: CarInfo, rowTop: number) => boolean) => {
+      if (compareMode && compareCars.size > 0) {
+        for (const car of visibleCars) {
+          if (callback(car, rowY)) return true;
+          rowY += effectiveRowHeight + ROW_GAP;
+        }
+      } else {
+        for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
+          const group = carsByClass[cls] || [];
+          const isExpanded = expandedClasses.has(cls);
+          const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
+          rowY += HEADER_HEIGHT;
+          for (const car of shown) {
+            if (callback(car, rowY)) return true;
+            rowY += effectiveRowHeight + ROW_GAP;
           }
         }
-        rowY += ROW_HEIGHT + ROW_GAP;
       }
-      if (found) break;
-    }
+      return false;
+    };
+
+    found = iterateRows((car, carY) => {
+      if (y >= carY && y < carY + effectiveRowHeight && x >= LABEL_WIDTH && x <= LABEL_WIDTH + chartWidth) {
+        // Check pit stop hover
+        const carPits = pitStops.filter(p => p.car_number === car.carNumber);
+        const hitPit = carPits.find(p => Math.abs(elapsed - p.pit_in_elapsed) < viewDuration * 0.005);
+        if (hitPit) {
+          const lines = [
+            `🔧 Pit Stop — #${car.carNumber}`,
+            `Team: ${car.teamName}`,
+            `Class: ${car.className}`,
+            `In: ${formatElapsed(hitPit.pit_in_elapsed)}`,
+            hitPit.pit_out_elapsed != null ? `Out: ${formatElapsed(hitPit.pit_out_elapsed)}` : "",
+            hitPit.stop_duration ? `Duration: ${hitPit.stop_duration}` : "",
+            hitPit.flag_status ? `Flag: ${hitPit.flag_status}` : "",
+          ].filter(Boolean);
+          setTooltip({ x: e.clientX, y: e.clientY, content: lines });
+          return true;
+        }
+
+        // Check stint hover — with green-flag analytics
+        const carStints = stints.filter(s => s.car_number === car.carNumber);
+        const hitStint = carStints.find(s => elapsed >= s.start_elapsed && elapsed <= s.end_elapsed);
+        if (hitStint) {
+          const duration = hitStint.end_elapsed - hitStint.start_elapsed;
+          const laps = hitStint.start_lap != null && hitStint.end_lap != null
+            ? hitStint.end_lap - hitStint.start_lap
+            : null;
+
+          // Green-flag performance analytics
+          const greenDuration = computeGreenFlagDuration(hitStint, flagSegments);
+          const greenPct = duration > 0 ? Math.round((greenDuration / duration) * 100) : 0;
+          const avgLapTime = laps && laps > 0 && greenDuration > 30
+            ? greenDuration / laps
+            : null;
+
+          const lines = [
+            `📊 Stint — #${car.carNumber}`,
+            `Team: ${car.teamName}`,
+            hitStint.driverName ? `Driver: ${hitStint.driverName}` : "",
+            `Start: ${formatElapsed(hitStint.start_elapsed)}  →  End: ${formatElapsed(hitStint.end_elapsed)}`,
+            `Duration: ${formatElapsed(duration)}`,
+            laps != null ? `Laps: ${laps}` : "",
+            ``,
+            `🟢 Green-flag: ${formatElapsed(greenDuration)} (${greenPct}%)`,
+            avgLapTime != null && avgLapTime > 30 && avgLapTime < 300
+              ? `⏱ Avg lap (green): ${formatLapTime(avgLapTime)}`
+              : "",
+          ].filter(Boolean);
+          setTooltip({ x: e.clientX, y: e.clientY, content: lines });
+          return true;
+        }
+      }
+      return false;
+    });
 
     // Check flag strip hover
     if (!found && y >= TOP_MARGIN - STRIP_HEIGHT - 4 && y < TOP_MARGIN - 4 && x >= LABEL_WIDTH) {
@@ -578,7 +795,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     }
 
     if (!found) setTooltip(null);
-  }, [getMousePos, x2elapsed, isDragging, dragStart, allClasses, effectiveClasses, carsByClass, expandedClasses, pitStops, stints, flagSegments, viewDuration]);
+  }, [getMousePos, x2elapsed, isDragging, dragStart, allClasses, effectiveClasses, carsByClass, expandedClasses, pitStops, stints, flagSegments, viewDuration, compareMode, compareCars, visibleCars, effectiveRowHeight]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const { x } = getMousePos(e);
@@ -607,6 +824,30 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
   const handleClick = useCallback((e: React.MouseEvent) => {
     const { x, y } = getMousePos(e);
 
+    if (compareMode) {
+      // In compare mode, clicks toggle car selection
+      let rowY = TOP_MARGIN;
+      for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
+        const group = carsByClass[cls] || [];
+        rowY += HEADER_HEIGHT;
+        const isExpanded = expandedClasses.has(cls);
+        const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
+        for (const car of shown) {
+          if (y >= rowY && y < rowY + effectiveRowHeight) {
+            setCompareCars(prev => {
+              const next = new Set(prev);
+              if (next.has(car.carNumber)) next.delete(car.carNumber);
+              else next.add(car.carNumber);
+              return next;
+            });
+            return;
+          }
+          rowY += effectiveRowHeight + ROW_GAP;
+        }
+      }
+      return;
+    }
+
     // Check class header clicks for expand/collapse
     let rowY = TOP_MARGIN;
     for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
@@ -622,7 +863,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       rowY += HEADER_HEIGHT;
       const isExpanded = expandedClasses.has(cls);
       const shown = isExpanded ? group.length : Math.min(group.length, DEFAULT_CARS_PER_CLASS);
-      rowY += shown * (ROW_HEIGHT + ROW_GAP);
+      rowY += shown * (effectiveRowHeight + ROW_GAP);
     }
 
     // Check car row clicks for highlighting
@@ -633,14 +874,14 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
       const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
       rowY += HEADER_HEIGHT;
       for (const car of shown) {
-        if (y >= rowY && y < rowY + ROW_HEIGHT) {
+        if (y >= rowY && y < rowY + effectiveRowHeight) {
           setHighlightedCar(prev => prev === car.carNumber ? null : car.carNumber);
           return;
         }
-        rowY += ROW_HEIGHT + ROW_GAP;
+        rowY += effectiveRowHeight + ROW_GAP;
       }
     }
-  }, [getMousePos, allClasses, effectiveClasses, carsByClass, expandedClasses]);
+  }, [getMousePos, allClasses, effectiveClasses, carsByClass, expandedClasses, compareMode, effectiveRowHeight]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
@@ -665,9 +906,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
 
   return (
     <div className="space-y-3">
-      {/* Controls */}
+      {/* Controls Row 1: Class filters + Zoom presets */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Class filters */}
         {allClasses.length > 1 && (
           <div className="flex flex-wrap gap-1">
             {allClasses.map(cls => {
@@ -679,12 +919,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
                   onClick={() => {
                     setSelectedClasses(prev => {
                       const next = new Set(prev);
-                      if (next.has(cls)) {
-                        next.delete(cls);
-                      } else {
-                        next.add(cls);
-                      }
-                      // If all selected, clear to show all
+                      if (next.has(cls)) next.delete(cls); else next.add(cls);
                       if (next.size === allClasses.length) return new Set();
                       return next;
                     });
@@ -704,7 +939,6 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
           </div>
         )}
 
-        {/* Zoom presets */}
         <div className="flex gap-1 ml-auto">
           {zoomPresets.map((preset, i) => (
             <button
@@ -721,6 +955,51 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Controls Row 2: Feature toggles + Search */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => {
+            setCompareMode(prev => !prev);
+            if (compareMode) setCompareCars(new Set());
+          }}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+            compareMode
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          🔀 Compare {compareMode && compareCars.size > 0 ? `(${compareCars.size})` : ""}
+        </button>
+
+        <button
+          onClick={() => setShowPositions(prev => !prev)}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+            showPositions
+              ? "bg-primary/10 border-primary/30 text-primary"
+              : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          🏆 Positions
+        </button>
+
+        <input
+          type="text"
+          placeholder="Search car # or team..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="px-2 py-1 rounded text-[10px] border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground/60 w-36 focus:outline-none focus:border-primary/40"
+        />
+
+        {compareMode && compareCars.size > 0 && (
+          <button
+            onClick={() => setCompareCars(new Set())}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Clear selection
+          </button>
+        )}
       </div>
 
       {/* Legend */}
@@ -741,7 +1020,9 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
           <span className="w-3 h-0.5 border-t border-dashed border-destructive" /> Pit stop
         </span>
         <span className="text-[9px] text-muted-foreground/60 ml-2">
-          Click class header to expand · Click car row to highlight · Drag to zoom
+          {compareMode
+            ? "Click cars to add/remove from comparison"
+            : "Click class header to expand · Click car row to highlight · Drag to zoom"}
         </span>
       </div>
 
@@ -764,11 +1045,11 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
           style={{
             left: tooltip.x + 12,
             top: tooltip.y - 8,
-            maxWidth: 280,
+            maxWidth: 300,
           }}
         >
           {tooltip.content.map((line, i) => (
-            <div key={i} className={i === 0 ? "font-semibold mb-1" : "text-muted-foreground"}>
+            <div key={i} className={i === 0 ? "font-semibold mb-1" : line === "" ? "h-1" : "text-muted-foreground"}>
               {line}
             </div>
           ))}
