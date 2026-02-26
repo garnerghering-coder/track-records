@@ -42,9 +42,9 @@ function WeatherCard({ weather }: { weather: any }) {
   if (!weather) return null;
   const emoji = weather.condition_emoji || "🌤️";
   return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3 h-full">
-      <div className="flex items-start gap-3">
-        <span className="text-2xl leading-none mt-0.5">{emoji}</span>
+    <div className="rounded-lg border border-border bg-card px-4 py-3 h-full flex items-center">
+      <div className="flex items-center gap-3">
+        <span className="text-2xl leading-none">{emoji}</span>
         <div className="space-y-0.5 text-xs">
           <p className="text-foreground font-medium text-sm">{weather.condition_summary || "No data"}</p>
           {(weather.air_temp_min != null || weather.air_temp_max != null) && (
@@ -97,19 +97,30 @@ function RaceControlMini({ sections }: { sections: any[] }) {
 // ── Winner Card ──────────────────────────────────────────────────────
 
 function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; showGap?: boolean; showPosition?: boolean }) {
-  const posLabel = entry.position === 1 ? "Winner" : `P${entry.position}`;
-
   return (
-    <div className="flex items-center gap-4 py-2.5">
-      <div className="shrink-0 w-8 text-center">
-        {showPosition ? (
-          <span className="text-lg font-bold text-foreground">{entry.position}</span>
-        ) : (
-          <span className="text-xs font-semibold text-primary uppercase">{posLabel}</span>
-        )}
+    <div className="flex items-center gap-4 py-2">
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-col gap-0.5">
+          {entry.drivers.map((d, i) => (
+            <span key={i} className="text-sm font-medium text-foreground whitespace-nowrap flex items-center gap-1">
+              <FlagImage nationality={d.nationality} size={14} />
+              {d.id ? (
+                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
+              ) : d.name}
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+          {entry.car_number && <span className="font-mono">#{entry.car_number}</span>}
+          {entry.team_id ? (
+            <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors">{entry.teamName}</Link>
+          ) : (
+            <span>{entry.teamName}</span>
+          )}
+        </div>
       </div>
 
-      <div className="shrink-0 w-[200px]">
+      <div className="shrink-0 w-[240px]">
         {entry.liveryUrl ? (
           <img
             src={entry.liveryUrl}
@@ -127,33 +138,12 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
         )}
       </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex flex-col gap-0.5">
-          {entry.drivers.map((d, i) => (
-            <span key={i} className="text-sm font-medium text-foreground whitespace-nowrap flex items-center gap-1">
-              <FlagImage nationality={d.nationality} size={14} />
-              {d.id ? (
-                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
-              ) : d.name}
-            </span>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-          {entry.car_number && <span className="font-mono">#{entry.car_number}</span>}
-          {entry.team_id ? (
-            <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors">{entry.teamName}</Link>
-          ) : (
-            <span>{entry.teamName}</span>
-          )}
-        </div>
-      </div>
-
-      <div className="shrink-0 text-right space-y-0.5">
-        {showGap && entry.gap_to_leader && entry.position > 1 && (
-          <p className="text-[11px] text-muted-foreground">{entry.gap_to_leader}</p>
-        )}
+      <div className="shrink-0 text-right space-y-0.5 min-w-[60px]">
         {entry.laps_completed != null && (
           <p className="text-[11px] text-muted-foreground">{entry.laps_completed} laps</p>
+        )}
+        {showGap && entry.gap_to_leader && entry.position > 1 && (
+          <p className="text-[11px] text-muted-foreground">{entry.gap_to_leader}</p>
         )}
       </div>
     </div>
@@ -370,7 +360,7 @@ export default function EventHeroDashboard({
                 {winners
                   .filter(w => w.className === cls)
                   .map((w, i) => (
-                    <WinnerCard key={`${cls}-${i}`} entry={w} showGap={showTop3} showPosition={showTop3} />
+                    <WinnerCard key={`${cls}-${i}`} entry={w} showGap={showTop3} showPosition={false} />
                   ))}
               </div>
             ))}
@@ -458,7 +448,7 @@ export default function EventHeroDashboard({
               </TooltipProvider>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${raceWeather && raceAnnotations.length > 0 ? "grid-cols-[2fr_3fr]" : "grid-cols-1"}`}>
               {raceWeather && <WeatherCard weather={raceWeather} />}
               {raceAnnotations.length > 0 && <RaceControlMini sections={raceAnnotations} />}
             </div>

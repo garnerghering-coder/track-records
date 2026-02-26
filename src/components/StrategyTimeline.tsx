@@ -69,10 +69,12 @@ const FLAG_COLORS: Record<string, { bg: string; strip: string }> = {
 };
 
 const DEFAULT_CARS_PER_CLASS = 5;
+const COMPACT_CARS_PER_CLASS = 3;
 const ROW_HEIGHT = 22;
 const COMPARE_ROW_HEIGHT = 32;
 const ROW_GAP = 2;
 const HEADER_HEIGHT = 20;
+const COMPACT_HEADER_HEIGHT = 14;
 const STRIP_HEIGHT = 18;
 const TOP_MARGIN = 40;
 const LABEL_WIDTH = 70;
@@ -317,7 +319,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
       const group = carsByClass[cls] || [];
       const isExpanded = expandedClasses.has(cls);
-      const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
+      const maxPerClass = compact ? COMPACT_CARS_PER_CLASS : DEFAULT_CARS_PER_CLASS;
+      const shown = isExpanded ? group : group.slice(0, maxPerClass);
       cars.push(...shown);
     }
     return cars;
@@ -392,7 +395,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
 
     const dpr = window.devicePixelRatio || 1;
     const width = container.clientWidth;
-    const chartWidth = width - LABEL_WIDTH - RIGHT_PAD;
+    const chartWidth = width - (compact ? COMPACT_LABEL_WIDTH : LABEL_WIDTH) - RIGHT_PAD;
+    const labelW = compact ? COMPACT_LABEL_WIDTH : LABEL_WIDTH;
 
     // Calculate total height
     let totalRows = 0;
@@ -405,12 +409,14 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
         classHeaders++;
         const group = carsByClass[cls] || [];
-        const shown = expandedClasses.has(cls) ? group.length : Math.min(group.length, DEFAULT_CARS_PER_CLASS);
+        const maxPerClass = compact ? COMPACT_CARS_PER_CLASS : DEFAULT_CARS_PER_CLASS;
+        const shown = expandedClasses.has(cls) ? group.length : Math.min(group.length, maxPerClass);
         totalRows += shown;
       }
     }
 
-    const totalHeight = TOP_MARGIN + STRIP_HEIGHT + 8 + classHeaders * HEADER_HEIGHT + totalRows * (effectiveRowHeight + ROW_GAP) + 20;
+    const hdrH = compact ? COMPACT_HEADER_HEIGHT : HEADER_HEIGHT;
+    const totalHeight = TOP_MARGIN + STRIP_HEIGHT + 8 + classHeaders * hdrH + totalRows * (effectiveRowHeight + ROW_GAP) + 20;
 
     canvas.width = width * dpr;
     canvas.height = totalHeight * dpr;
@@ -422,7 +428,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, totalHeight);
 
-    const elapsed2x = (elapsed: number) => LABEL_WIDTH + ((elapsed - viewRange[0]) / viewDuration) * chartWidth;
+    const elapsed2x = (elapsed: number) => labelW + ((elapsed - viewRange[0]) / viewDuration) * chartWidth;
 
     // ── Race Control Strip (top) ──
     const stripY = TOP_MARGIN - STRIP_HEIGHT - 4;
@@ -430,8 +436,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       const s = Number(seg.start_elapsed);
       const e = Number(seg.end_elapsed);
       if (e <= viewRange[0] || s >= viewRange[1]) continue;
-      const x1 = Math.max(elapsed2x(s), LABEL_WIDTH);
-      const x2 = Math.min(elapsed2x(e), LABEL_WIDTH + chartWidth);
+      const x1 = Math.max(elapsed2x(s), labelW);
+      const x2 = Math.min(elapsed2x(e), labelW + chartWidth);
       const color = FLAG_COLORS[seg.flag_state]?.strip || "#9ca3af";
       ctx.fillStyle = color;
       ctx.fillRect(x1, stripY, Math.max(x2 - x1, 1), STRIP_HEIGHT);
@@ -440,7 +446,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     ctx.fillStyle = "#9ca3af";
     ctx.font = "9px system-ui, sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText("FLAGS", LABEL_WIDTH - 6, stripY + STRIP_HEIGHT / 2 + 3);
+    ctx.fillText("FLAGS", labelW - 6, stripY + STRIP_HEIGHT / 2 + 3);
 
     // ── Time axis ticks ──
     const axisY = TOP_MARGIN - STRIP_HEIGHT - 8;
@@ -453,7 +459,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     const firstTick = Math.ceil(viewRange[0] / tickInterval) * tickInterval;
     for (let t = firstTick; t <= viewRange[1]; t += tickInterval) {
       const x = elapsed2x(t);
-      if (x < LABEL_WIDTH || x > LABEL_WIDTH + chartWidth) continue;
+      if (x < labelW || x > labelW + chartWidth) continue;
       if (!compact) {
         ctx.fillText(formatElapsed(t), x, axisY);
       }
@@ -473,8 +479,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       const e = Number(seg.end_elapsed);
       if (e <= viewRange[0] || s >= viewRange[1]) continue;
       if (seg.flag_state === "GREEN") continue;
-      const x1 = Math.max(elapsed2x(s), LABEL_WIDTH);
-      const x2 = Math.min(elapsed2x(e), LABEL_WIDTH + chartWidth);
+      const x1 = Math.max(elapsed2x(s), labelW);
+      const x2 = Math.min(elapsed2x(e), labelW + chartWidth);
       const color = FLAG_COLORS[seg.flag_state]?.bg || "rgba(107, 114, 128, 0.05)";
       ctx.fillStyle = color;
       ctx.fillRect(x1, rowsTop, Math.max(x2 - x1, 1), rowsBottom - rowsTop);
@@ -504,27 +510,27 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       ctx.fillStyle = "#d1d5db";
       ctx.font = compareMode ? "bold 11px monospace" : "10px monospace";
       ctx.textAlign = "right";
-      ctx.fillText(`#${car.carNumber}`, LABEL_WIDTH - 6, y + effectiveRowHeight / 2 + 3);
+      ctx.fillText(`#${car.carNumber}`, labelW - 6, y + effectiveRowHeight / 2 + 3);
 
       // Compare mode: show team name below car number
       if (compareMode) {
         ctx.fillStyle = "#9ca3af";
         ctx.font = "8px system-ui, sans-serif";
-        ctx.fillText(car.teamName.substring(0, 12), LABEL_WIDTH - 6, y + effectiveRowHeight / 2 + 13);
+        ctx.fillText(car.teamName.substring(0, 12), labelW - 6, y + effectiveRowHeight / 2 + 13);
       }
 
       // Background
       ctx.fillStyle = isCompared && !compareMode
         ? "rgba(59, 130, 246, 0.08)"
         : "rgba(107, 114, 128, 0.06)";
-      ctx.fillRect(LABEL_WIDTH, y, chartWidth, effectiveRowHeight);
+      ctx.fillRect(labelW, y, chartWidth, effectiveRowHeight);
 
       // Stints for this car
       const carStints = stints.filter(s => s.car_number === car.carNumber);
       for (const stint of carStints) {
         if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) continue;
-        const x1 = Math.max(elapsed2x(stint.start_elapsed), LABEL_WIDTH);
-        const x2 = Math.min(elapsed2x(stint.end_elapsed), LABEL_WIDTH + chartWidth);
+        const x1 = Math.max(elapsed2x(stint.start_elapsed), labelW);
+        const x2 = Math.min(elapsed2x(stint.end_elapsed), labelW + chartWidth);
         const w = Math.max(x2 - x1, 2);
 
         ctx.fillStyle = classColor;
@@ -567,8 +573,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
           }
           const isDriverChange = prevDriverId != null && stint.driver_id != null && stint.driver_id !== prevDriverId;
           if (isDriverChange && stint.driverName) {
-            const x1 = Math.max(elapsed2x(stint.start_elapsed), LABEL_WIDTH);
-            const x2 = Math.min(elapsed2x(stint.end_elapsed), LABEL_WIDTH + chartWidth);
+            const x1 = Math.max(elapsed2x(stint.start_elapsed), labelW);
+            const x2 = Math.min(elapsed2x(stint.end_elapsed), labelW + chartWidth);
             const w = Math.max(x2 - x1, 2);
             if (w > 18) {
               const initials = stint.driverName
@@ -592,7 +598,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         ctx.globalAlpha = alpha;
         for (const [, hp] of carPositions) {
           const hx = elapsed2x(hp.elapsed);
-          if (hx < LABEL_WIDTH || hx > LABEL_WIDTH + chartWidth) continue;
+          if (hx < labelW || hx > labelW + chartWidth) continue;
 
           // Position badge
           const posText = `P${hp.position}`;
@@ -637,20 +643,21 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       for (const cls of allClasses.filter(c => effectiveClasses.has(c))) {
         const group = carsByClass[cls] || [];
         const isExpanded = expandedClasses.has(cls);
-        const shown = isExpanded ? group : group.slice(0, DEFAULT_CARS_PER_CLASS);
+        const maxPerClass = compact ? COMPACT_CARS_PER_CLASS : DEFAULT_CARS_PER_CLASS;
+        const shown = isExpanded ? group : group.slice(0, maxPerClass);
         const classColor = getClassColor(cls);
 
         // Class header
         ctx.fillStyle = classColor;
-        ctx.font = "bold 10px system-ui, sans-serif";
+        ctx.font = compact ? "bold 9px system-ui, sans-serif" : "bold 10px system-ui, sans-serif";
         ctx.textAlign = "left";
-        ctx.fillText(`${cls} (${group.length})`, 4, y + HEADER_HEIGHT / 2 + 3);
-        if (!isExpanded && group.length > DEFAULT_CARS_PER_CLASS) {
+        ctx.fillText(`${cls} (${group.length})`, 4, y + hdrH / 2 + 3);
+        if (!isExpanded && group.length > maxPerClass) {
           ctx.fillStyle = "#9ca3af";
           ctx.font = "9px system-ui, sans-serif";
-          ctx.fillText(`+${group.length - DEFAULT_CARS_PER_CLASS} more`, LABEL_WIDTH - 8, y + HEADER_HEIGHT / 2 + 3);
+          ctx.fillText(`+${group.length - maxPerClass} more`, labelW - 8, y + hdrH / 2 + 3);
         }
-        y += HEADER_HEIGHT;
+        y += hdrH;
 
         for (const car of shown) {
           drawCarRow(car, y, classColor);
