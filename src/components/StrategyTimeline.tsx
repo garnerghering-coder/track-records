@@ -68,7 +68,7 @@ const FLAG_COLORS: Record<string, { bg: string; strip: string }> = {
   SC: { bg: "rgba(251, 146, 60, 0.10)", strip: "#fb923c" },
 };
 
-const DEFAULT_CARS_PER_CLASS = 3;
+const DEFAULT_CARS_PER_CLASS = 5;
 const ROW_HEIGHT = 22;
 const COMPARE_ROW_HEIGHT = 32;
 const ROW_GAP = 2;
@@ -551,32 +551,32 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
         }
       }
 
-      // Pit stop markers
-      const carPits = pitStops.filter(p => p.car_number === car.carNumber);
-      for (const pit of carPits) {
-        if (pit.pit_in_elapsed < viewRange[0] || pit.pit_in_elapsed > viewRange[1]) continue;
-        const px = elapsed2x(pit.pit_in_elapsed);
-
-        const pitFlagColor = pit.flag_status === "Green" ? "#ef4444" :
-          pit.flag_status === "YELLOW" || pit.flag_status === "Yellow" ? "#eab308" :
-          pit.flag_status === "FCY" ? "#fb923c" :
-          pit.flag_status === "RED" || pit.flag_status === "Red" ? "#ff6b6b" : "#ef4444";
-
-        ctx.globalAlpha = alpha;
-        ctx.strokeStyle = pitFlagColor;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath();
-        ctx.moveTo(px, y + 1);
-        ctx.lineTo(px, y + effectiveRowHeight - 1);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        if (pit.pit_out_elapsed != null && pit.pit_out_elapsed > pit.pit_in_elapsed) {
-          const px2 = elapsed2x(pit.pit_out_elapsed);
-          ctx.fillStyle = pitFlagColor;
-          ctx.globalAlpha = alpha * 0.2;
-          ctx.fillRect(px, y + 2, Math.max(px2 - px, 1), effectiveRowHeight - 4);
+      // Driver change initials (non-compare mode)
+      if (!compareMode) {
+        let prevDriverId: string | null = null;
+        for (const stint of carStints) {
+          if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) {
+            prevDriverId = stint.driver_id;
+            continue;
+          }
+          const isDriverChange = prevDriverId != null && stint.driver_id != null && stint.driver_id !== prevDriverId;
+          if (isDriverChange && stint.driverName) {
+            const x1 = Math.max(elapsed2x(stint.start_elapsed), LABEL_WIDTH);
+            const x2 = Math.min(elapsed2x(stint.end_elapsed), LABEL_WIDTH + chartWidth);
+            const w = Math.max(x2 - x1, 2);
+            if (w > 18) {
+              const initials = stint.driverName
+                .split(/\s+/)
+                .map(p => p[0]?.toUpperCase() || "")
+                .join("");
+              ctx.globalAlpha = alpha * 0.9;
+              ctx.fillStyle = "#fff";
+              ctx.font = "bold 7px system-ui, sans-serif";
+              ctx.textAlign = "left";
+              ctx.fillText(initials, x1 + 3, y + effectiveRowHeight / 2 + 2.5);
+            }
+          }
+          prevDriverId = stint.driver_id;
         }
       }
 
@@ -724,9 +724,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
         const hitPit = carPits.find(p => Math.abs(elapsed - p.pit_in_elapsed) < viewDuration * 0.005);
         if (hitPit) {
           const lines = [
-            `🔧 Pit Stop — #${car.carNumber}`,
-            `Team: ${car.teamName}`,
-            `Class: ${car.className}`,
+            `🔧 Pit Stop — #${car.carNumber} ${car.teamName}`,
             `In: ${formatElapsed(hitPit.pit_in_elapsed)}`,
             hitPit.pit_out_elapsed != null ? `Out: ${formatElapsed(hitPit.pit_out_elapsed)}` : "",
             hitPit.stop_duration ? `Duration: ${hitPit.stop_duration}` : "",
@@ -753,8 +751,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
             : null;
 
           const lines = [
-            `📊 Stint — #${car.carNumber}`,
-            `Team: ${car.teamName}`,
+            `📊 #${car.carNumber} ${car.teamName}`,
             hitStint.driverName ? `Driver: ${hitStint.driverName}` : "",
             `Start: ${formatElapsed(hitStint.start_elapsed)}  →  End: ${formatElapsed(hitStint.end_elapsed)}`,
             `Duration: ${formatElapsed(duration)}`,
