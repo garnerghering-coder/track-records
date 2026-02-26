@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Calendar, Users, Car, Flag, MapPin, Trophy, Menu, AlertTriangle, ShieldAlert } from "lucide-react";
+import { Calendar, Users, Car, Flag, MapPin, Trophy, Menu, AlertTriangle, ShieldAlert, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ const navItems = [
   { to: "/manage/series", label: "Series", icon: Trophy, match: ["/manage/series"] },
   { to: "/manage/reports", label: "Reports", icon: AlertTriangle, match: ["/manage/reports"] },
   { to: "/manage/issues", label: "Potential Issues", icon: ShieldAlert, match: ["/manage/issues"] },
+  { to: "/manage/liveries", label: "Car Liveries", icon: Image, match: ["/manage/liveries"] },
 ];
 
 export default function ManageLayout() {

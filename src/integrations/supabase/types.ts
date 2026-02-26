@@ -1173,6 +1173,41 @@ export type Database = {
           },
         ]
       }
+      v2_car_liveries: {
+        Row: {
+          car_number: string
+          created_at: string
+          id: string
+          image_url: string
+          season_id: string
+          updated_at: string
+        }
+        Insert: {
+          car_number: string
+          created_at?: string
+          id?: string
+          image_url: string
+          season_id: string
+          updated_at?: string
+        }
+        Update: {
+          car_number?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          season_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_car_liveries_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "v2_seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_cars: {
         Row: {
           created_at: string

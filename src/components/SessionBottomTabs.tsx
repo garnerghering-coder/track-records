@@ -200,7 +200,7 @@ export default function SessionBottomTabs({
   if (tabs.length === 0) return null;
 
   return (
-    <div className="mt-6">
+    <div className="mt-6" data-session-bottom-tabs>
       {/* Manila folder tabs */}
       <div className="flex items-end gap-0.5">
         {tabs.map(tab => {
