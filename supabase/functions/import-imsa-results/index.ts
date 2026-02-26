@@ -404,6 +404,30 @@ async function bulkResolveCars(
   return resolved;
 }
 
+// ── IMSA Points calculation ──────────────────────────────────────────
+
+const IMSA_RACE_POINTS = [350, 320, 300, 280, 260, 250, 240, 230, 220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+
+function getIMSARacePoints(classPosition: number): number {
+  if (classPosition < 1) return 0;
+  if (classPosition <= IMSA_RACE_POINTS.length) return IMSA_RACE_POINTS[classPosition - 1];
+  return 10; // minimum
+}
+
+function getIMSAQualifyingPoints(classPosition: number): number {
+  return Math.max(1, Math.round(getIMSARacePoints(classPosition) / 10));
+}
+
+function isWeatherTechSeries(seriesName: string): boolean {
+  const lower = seriesName.toLowerCase();
+  return lower.includes("weathertech") || lower.includes("sportscar championship") || (lower.includes("imsa") && !lower.includes("pilot") && !lower.includes("michelin"));
+}
+
+function isPilotChallengeSeries(seriesName: string): boolean {
+  const lower = seriesName.toLowerCase();
+  return lower.includes("pilot") || lower.includes("michelin");
+}
+
 // ── Build result rows for batch insert ───────────────────────────────
 
 function buildResultRows(
@@ -416,7 +440,8 @@ function buildResultRows(
   isOverallEndurance: boolean,
   summary: any,
   hourNumber?: number,
-  timeCardMap?: Map<string, Map<number, string>>
+  timeCardMap?: Map<string, Map<number, string>>,
+  seriesName?: string
 ): { raceRows: any[]; qualifyingRows: any[]; practiceRows: any[] } {
   const raceRows: any[] = [];
   const qualifyingRows: any[] = [];
@@ -494,6 +519,13 @@ function buildResultRows(
     if (raceClass) extraData["Class"] = raceClass;
     if (raceClass) extraData["PIC"] = pic;
 
+    // Calculate IMSA points based on class position
+    const isIMSA = seriesName ? (isWeatherTechSeries(seriesName) || isPilotChallengeSeries(seriesName)) : false;
+    const shouldAwardRacePoints = isIMSA && isRace && !hourNumber; // Only on parent/overall race, not hour sub-sessions
+    const shouldAwardQualifyingPoints = isIMSA && sessionType === "qualifying" && isWeatherTechSeries(seriesName || "");
+    const racePoints = shouldAwardRacePoints ? getIMSARacePoints(pic) : null;
+    const qualifyingPoints = shouldAwardQualifyingPoints ? getIMSAQualifyingPoints(pic) : null;
+
     // For endurance races (overall/parent view) with multiple drivers per car,
     // insert one row per driver sharing the same car_number, position, etc.
     if (isRace && isOverallEndurance && drivers.length > 1) {
@@ -508,6 +540,7 @@ function buildResultRows(
           car_id: carId,
           car_number: carNumber ? String(carNumber) : null,
           position,
+          points: racePoints,
           status: status as any,
           laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
           gap_to_leader: gapToLeader ? String(gapToLeader) : null,
@@ -526,6 +559,7 @@ function buildResultRows(
         car_id: carId,
         car_number: carNumber ? String(carNumber) : null,
         position,
+        points: racePoints,
         status: status as any,
         laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
         gap_to_leader: gapToLeader ? String(gapToLeader) : null,
@@ -543,6 +577,7 @@ function buildResultRows(
         car_id: carId,
         car_number: carNumber ? String(carNumber) : null,
         position,
+        points: qualifyingPoints,
         best_time: bestLap ? String(bestLap) : null,
         gap_to_pole: gapToLeader ? String(gapToLeader) : null,
         laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
@@ -912,7 +947,7 @@ serve(async (req) => {
     ) => {
       const { raceRows, qualifyingRows, practiceRows } = buildResultRows(
         sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary,
-        hourNumber, timeCardMap
+        hourNumber, timeCardMap, seriesName
       );
       // Batch insert all at once
       const inserts: Promise<any>[] = [];
