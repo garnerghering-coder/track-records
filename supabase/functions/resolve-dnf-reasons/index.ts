@@ -100,15 +100,16 @@ serve(async (req) => {
         id, status, dnf_reason, dnf_explanation, car_number, position,
         driver:v2_drivers(full_name),
         team:v2_teams(full_name),
-        session:v2_sessions(id, name, parent_session_id, event:v2_events(name, season:v2_seasons(year, series:v2_series(name))))
+        session:v2_sessions!inner(id, name, parent_session_id, event:v2_events(name, season:v2_seasons(year, series:v2_series(name))))
       `)
       .in("status", ["dnf", "dsq"])
       .or("dnf_reason.is.null,dnf_reason.eq.,dnf_explanation.is.null,dnf_explanation.eq.")
+      .is("session.parent_session_id", null)
       .limit(CHUNK_LIMIT);
 
     if (error) throw error;
 
-    const toResolve = (results || []).filter((r: any) => !r.session?.parent_session_id);
+    const toResolve = results || [];
 
     if (toResolve.length === 0) {
       return new Response(JSON.stringify({ resolved: 0, skippedLow: 0, total: 0, done: true }), {
