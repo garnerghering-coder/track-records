@@ -150,10 +150,8 @@ export default function SessionBottomTabs({
   isMulticlass,
   activeHourId,
 }: SessionBottomTabsProps) {
-  // Determine which tabs are available
+  // Determine which tabs are available (ordered: Strategy, Progression, Race Control, Fingerprint)
   const tabs: { id: string; label: string }[] = [];
-
-  // 1. Circuit Fingerprint
   const layoutId = session?.layout_id || event?.layout_id;
   const layoutData = layout && Array.isArray(layout)
     ? layout.find((l: any) => l.id === layoutId) || (layout.length === 1 ? layout[0] : null)
@@ -168,18 +166,14 @@ export default function SessionBottomTabs({
       )
     : null;
   const hasFingerprint = trackMetrics && (trackMetrics.tcs100 != null || trackMetrics.ei != null || trackMetrics.csi != null);
-  if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit Fingerprint" });
-
-  // 2. Race Control (annotation sections)
+  // Race Control (annotation sections)
   const raceControlSections = annotationSections.filter((s: any) => {
     const items = s.v2_annotation_items || [];
     return items.length > 0;
   });
-  if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race Control" });
 
-  // 3. Position Progression (only for endurance with hour sessions)
+  // Position Progression (only for endurance with hour sessions)
   const hasProgression = hourSessions && hourSessions.length > 0;
-  if (hasProgression) tabs.push({ id: "progression", label: "Position Progression" });
 
   // 4. Strategy Chart (check if stint data exists)
   const { data: stintCount = 0 } = useQuery({
@@ -192,7 +186,11 @@ export default function SessionBottomTabs({
       return count || 0;
     },
   });
+  // Build tabs in desired order: Strategy, Progression, Race Control, Fingerprint
   if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy Timeline" });
+  if (hasProgression) tabs.push({ id: "progression", label: "Position Progression" });
+  if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race Control" });
+  if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit Fingerprint" });
 
   const [activeTab, setActiveTab] = useState<string>("");
 
