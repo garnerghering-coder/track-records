@@ -350,28 +350,31 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
           doc.setTextColor(100);
           doc.setFont("helvetica", "bold");
 
-          const table = (data as any).table;
+          const table = data.table;
           if (table && table.columns) {
+            // Calculate x positions from margin + cumulative column widths
+            const cols = table.columns;
+            const colXPositions: number[] = [];
+            let cx = margin;
+            for (const col of cols) {
+              colXPositions.push(cx);
+              cx += col.width;
+            }
+
             let sessionIdx = 0;
             for (const evGroup of groupsRef) {
               const startCol = 2 + sessionIdx;
               const endCol = startCol + evGroup.sessions.length - 1;
-              const startColObj = table.columns[startCol];
-              const endColObj = table.columns[endCol];
-              if (
-                startColObj && endColObj &&
-                typeof startColObj.x === "number" && typeof endColObj.x === "number" &&
-                isFinite(startColObj.x) && isFinite(endColObj.x)
-              ) {
-                const x1 = startColObj.x;
-                const x2 = endColObj.x + (endColObj.width || 0);
+              if (startCol < cols.length && endCol < cols.length) {
+                const x1 = colXPositions[startCol];
+                const x2 = colXPositions[endCol] + cols[endCol].width;
                 if (x2 > x1) {
                   const centerX = (x1 + x2) / 2;
                   doc.setDrawColor(150);
                   doc.setLineWidth(0.2);
                   doc.line(x1 + 1, bracketY + 1.5, x2 - 1, bracketY + 1.5);
-                    const rawLabel = evGroup.shortName || evGroup.circuitName;
-                    const label = rawLabel.length > 18
+                  const rawLabel = evGroup.shortName || evGroup.circuitName;
+                  const label = rawLabel.length > 18
                     ? rawLabel.slice(0, 17) + "…"
                     : rawLabel;
                   doc.text(label, centerX, bracketY, { align: "center" });
