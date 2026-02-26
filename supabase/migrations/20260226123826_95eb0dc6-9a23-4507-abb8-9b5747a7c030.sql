@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_events ADD COLUMN short_name text;

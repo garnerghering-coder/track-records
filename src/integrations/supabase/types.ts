@@ -1404,6 +1404,7 @@ export type Database = {
           name: string
           round_number: number | null
           season_id: string
+          short_name: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["event_status_enum"]
           updated_at: string
@@ -1418,6 +1419,7 @@ export type Database = {
           name: string
           round_number?: number | null
           season_id: string
+          short_name?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
@@ -1432,6 +1434,7 @@ export type Database = {
           name?: string
           round_number?: number | null
           season_id?: string
+          short_name?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["event_status_enum"]
           updated_at?: string
