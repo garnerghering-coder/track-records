@@ -44,12 +44,12 @@ export default function ManageEvents() {
   const [season, setSeason] = useState<Ref>(null);
   const [circuit, setCircuit] = useState<Ref>(null);
   const [layoutId, setLayoutId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
+  const [form, setForm] = useState({ name: "", short_name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" as "draft" | "published" });
 
   // Edit event state
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
+  const [editForm, setEditForm] = useState({ name: "", short_name: "", round_number: "", start_date: "", end_date: "", description: "" });
   const [editCircuit, setEditCircuit] = useState<Ref>(null);
   const [editLayoutId, setEditLayoutId] = useState<string | null>(null);
 
@@ -96,6 +96,7 @@ export default function ManageEvents() {
         circuit_id: circuit?.id || null,
         layout_id: layoutId || null,
         name: form.name,
+        short_name: (form.short_name || null) as any,
         round_number: form.round_number ? parseInt(form.round_number) : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
@@ -114,6 +115,7 @@ export default function ManageEvents() {
       if (!editId) throw new Error("No event selected");
       const { error } = await supabase.from("v2_events").update({
         name: editForm.name,
+        short_name: (editForm.short_name || null) as any,
         round_number: editForm.round_number ? parseInt(editForm.round_number) : null,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
@@ -131,6 +133,7 @@ export default function ManageEvents() {
     setEditId(e.id);
     setEditForm({
       name: e.name,
+      short_name: e.short_name || "",
       round_number: e.round_number ? String(e.round_number) : "",
       start_date: e.start_date || "",
       end_date: e.end_date || "",
@@ -143,7 +146,7 @@ export default function ManageEvents() {
 
   const openNew = () => {
     setSeries(null); setSeason(null); setCircuit(null); setLayoutId(null);
-    setForm({ name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" });
+    setForm({ name: "", short_name: "", round_number: "", start_date: "", end_date: "", description: "", status: "draft" });
     setOpen(true);
   };
 
@@ -222,6 +225,7 @@ export default function ManageEvents() {
               <div><Label>Round #</Label><Input type="number" value={form.round_number} onChange={e => setForm(f => ({ ...f, round_number: e.target.value }))} /></div>
               <div><Label>Event Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             </div>
+            <div><Label>Short Name</Label><Input value={form.short_name} onChange={e => setForm(f => ({ ...f, short_name: e.target.value.slice(0, 20) }))} placeholder="e.g. Daytona" maxLength={20} /><p className="text-xs text-muted-foreground mt-1">Max 20 chars. Used in standings PDF.</p></div>
             <div>
               <Label>Circuit</Label>
               <AutocompleteField entityType="circuit" value={circuit} onChange={v => { setCircuit(v); setLayoutId(null); }} />
@@ -267,6 +271,7 @@ export default function ManageEvents() {
               <div><Label>Round #</Label><Input type="number" value={editForm.round_number} onChange={e => setEditForm(f => ({ ...f, round_number: e.target.value }))} /></div>
               <div><Label>Event Name *</Label><Input value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
             </div>
+            <div><Label>Short Name</Label><Input value={editForm.short_name} onChange={e => setEditForm(f => ({ ...f, short_name: e.target.value.slice(0, 20) }))} placeholder="e.g. Daytona" maxLength={20} /><p className="text-xs text-muted-foreground mt-1">Max 20 chars. Used in standings PDF.</p></div>
             <div>
               <Label>Circuit</Label>
               <AutocompleteField entityType="circuit" value={editCircuit} onChange={v => { setEditCircuit(v); setEditLayoutId(null); }} />
