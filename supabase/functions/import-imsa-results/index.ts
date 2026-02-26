@@ -1235,14 +1235,14 @@ serve(async (req) => {
       // 3. Parent endurance_race session
       const raceSessionName = "Race";
       let parentSessionId: string | null = null;
+      let raceDate: string | null = null;
+      let raceStartTime: string | null = null;
       if (!existingSessionNames.has(raceSessionName)) {
         const sortedHourLinks = fetchedResults
           .filter(f => f.kind === "hour")
           .sort((a, b) => (a.hour || 0) - (b.hour || 0));
         const overallData = fetchedResults.find(f => f.kind === "overall");
         const raceDataSource = overallData || (sortedHourLinks.length > 0 ? sortedHourLinks[sortedHourLinks.length - 1] : null);
-        let raceDate: string | null = null;
-        let raceStartTime: string | null = null;
         if (raceDataSource) {
           const parsed = parseSessionDateTime(raceDataSource.data.session || {});
           raceDate = parsed.date;
