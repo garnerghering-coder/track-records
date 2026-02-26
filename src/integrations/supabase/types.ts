@@ -1508,6 +1508,41 @@ export type Database = {
           },
         ]
       }
+      v2_flag_segments: {
+        Row: {
+          created_at: string
+          end_elapsed: number
+          flag_state: string
+          id: string
+          session_id: string
+          start_elapsed: number
+        }
+        Insert: {
+          created_at?: string
+          end_elapsed?: number
+          flag_state?: string
+          id?: string
+          session_id: string
+          start_elapsed?: number
+        }
+        Update: {
+          created_at?: string
+          end_elapsed?: number
+          flag_state?: string
+          id?: string
+          session_id?: string
+          start_elapsed?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_flag_segments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_incidents: {
         Row: {
           created_at: string

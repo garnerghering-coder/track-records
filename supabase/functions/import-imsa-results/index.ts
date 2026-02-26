@@ -360,6 +360,22 @@ function formatDurationFromSeconds(seconds: number | null): string | null {
   return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
 }
 
+function deriveFlagSegments(flagEvents: StrategyFlagEvent[], maxElapsed: number): Array<{ flag_state: string; start_elapsed: number; end_elapsed: number }> {
+  if (flagEvents.length === 0) return [{ flag_state: "GREEN", start_elapsed: 0, end_elapsed: round3(maxElapsed) }];
+  const segments: Array<{ flag_state: string; start_elapsed: number; end_elapsed: number }> = [];
+  for (let i = 0; i < flagEvents.length; i++) {
+    const endElapsed = i + 1 < flagEvents.length ? flagEvents[i + 1].elapsedSec : maxElapsed;
+    if (endElapsed > flagEvents[i].elapsedSec) {
+      segments.push({ flag_state: flagEvents[i].state, start_elapsed: round3(flagEvents[i].elapsedSec), end_elapsed: round3(endElapsed) });
+    }
+  }
+  // Ensure coverage from 0
+  if (segments.length === 0 || segments[0].start_elapsed > 0) {
+    segments.unshift({ flag_state: "GREEN", start_elapsed: 0, end_elapsed: segments.length > 0 ? segments[0].start_elapsed : round3(maxElapsed) });
+  }
+  return segments;
+}
+
 function deriveStrategyRowsFromTimeCard(
   lapsByCar: Map<string, TimeCardLapRow[]>,
   driverMap: Map<string, string>,
@@ -1779,13 +1795,31 @@ serve(async (req) => {
             strategyFlagEvents
           );
 
+          // Derive flag segments for the timeline visualization
+          const maxElapsed = Math.max(...Array.from(timeCardLapsByCar.values()).flatMap(laps => laps.map(l => l.elapsedSec)), 0);
+          const flagSegments = deriveFlagSegments(strategyFlagEvents, maxElapsed);
+
           if (parentSessionId) {
             await replaceStrategyRowsForSession(adminClient, parentSessionId, baseStrategyStints, baseStrategyPits);
+            // Persist flag segments for parent
+            await adminClient.from("v2_flag_segments").delete().eq("session_id", parentSessionId);
+            if (flagSegments.length > 0) {
+              await insertRowsInChunks(adminClient, "v2_flag_segments", flagSegments.map(s => ({ ...s, session_id: parentSessionId })));
+            }
+            console.log(`Flag segments saved for parent ${parentSessionId}: ${flagSegments.length} segments`);
           }
 
           for (const [hourNumber, sessionId] of hourSessionIdByHour.entries()) {
             const hourStrategy = bucketStrategyRowsForHour(baseStrategyStints, baseStrategyPits, hourNumber);
             await replaceStrategyRowsForSession(adminClient, sessionId, hourStrategy.stints, hourStrategy.pitStops);
+            // Clip flag segments for this hour
+            const hStart = (hourNumber - 1) * 3600;
+            const hEnd = hStart + 3600;
+            const hourFlags = flagSegments
+              .filter(s => s.end_elapsed > hStart && s.start_elapsed < hEnd)
+              .map(s => ({ flag_state: s.flag_state, start_elapsed: round3(Math.max(s.start_elapsed, hStart)), end_elapsed: round3(Math.min(s.end_elapsed, hEnd)), session_id: sessionId }));
+            await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+            if (hourFlags.length > 0) await insertRowsInChunks(adminClient, "v2_flag_segments", hourFlags);
           }
         } catch (strategyErr) {
           console.error("Strategy derivation failed:", strategyErr);
