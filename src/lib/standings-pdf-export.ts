@@ -56,7 +56,7 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
   // 1. Fetch events for this season, sorted chronologically
   const { data: eventsData } = await supabase
     .from("v2_events")
-    .select("id, name, start_date, v2_circuits(name)")
+    .select("id, name, short_name, start_date, v2_circuits(name)")
     .eq("season_id", seasonId)
     .eq("status", "published" as any)
     .order("start_date", { ascending: true });
@@ -84,7 +84,8 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
   onProgress?.(25);
 
   // Build event -> sessions grouping
-  const eventSessionGroups: EventSessionGroup[] = [];
+  interface EventSessionGroupFull extends EventSessionGroup { shortName: string | null; }
+  const eventSessionGroups: EventSessionGroupFull[] = [];
   const sessionEventMap: Record<string, string> = {};
   for (const ev of events) {
     const evSessions = sessions
@@ -98,6 +99,7 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
       eventSessionGroups.push({
         eventName: ev.name,
         circuitName: ev.v2_circuits?.name || ev.name,
+        shortName: ev.short_name || null,
         sessions: evSessions,
       });
       for (const s of evSessions) {
@@ -368,9 +370,10 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
                   doc.setDrawColor(150);
                   doc.setLineWidth(0.2);
                   doc.line(x1 + 1, bracketY + 1.5, x2 - 1, bracketY + 1.5);
-                  const label = evGroup.circuitName.length > 18
-                    ? evGroup.circuitName.slice(0, 17) + "…"
-                    : evGroup.circuitName;
+                    const rawLabel = evGroup.shortName || evGroup.circuitName;
+                    const label = rawLabel.length > 18
+                    ? rawLabel.slice(0, 17) + "…"
+                    : rawLabel;
                   doc.text(label, centerX, bracketY, { align: "center" });
                 }
               }

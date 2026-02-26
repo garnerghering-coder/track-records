@@ -55,7 +55,7 @@ export default function ManageEventDetail() {
 
   // Event edit state
   const [editEventOpen, setEditEventOpen] = useState(false);
-  const [eventForm, setEventForm] = useState({ name: "", round_number: "", start_date: "", end_date: "", description: "" });
+  const [eventForm, setEventForm] = useState({ name: "", short_name: "", round_number: "", start_date: "", end_date: "", description: "" });
   const [editCircuit, setEditCircuit] = useState<{ id: string; label: string } | null>(null);
 
   const [fetchingWeather, setFetchingWeather] = useState<string | null>(null);
@@ -280,6 +280,7 @@ export default function ManageEventDetail() {
     mutationFn: async () => {
       const { error } = await supabase.from("v2_events").update({
         name: eventForm.name,
+        short_name: (eventForm.short_name || null) as any,
         round_number: eventForm.round_number ? parseInt(eventForm.round_number) : null,
         start_date: eventForm.start_date || null,
         end_date: eventForm.end_date || null,
@@ -331,6 +332,7 @@ export default function ManageEventDetail() {
     if (!event) return;
     setEventForm({
       name: event.name,
+      short_name: (event as any).short_name || "",
       round_number: event.round_number ? String(event.round_number) : "",
       start_date: event.start_date || "",
       end_date: event.end_date || "",
@@ -625,6 +627,7 @@ export default function ManageEventDetail() {
           <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div><Label>Event Name *</Label><Input value={eventForm.name} onChange={e => setEventForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div><Label>Short Name</Label><Input value={eventForm.short_name} onChange={e => setEventForm(f => ({ ...f, short_name: e.target.value.slice(0, 20) }))} placeholder="e.g. Daytona" maxLength={20} /><p className="text-xs text-muted-foreground mt-1">Max 20 chars. Used as label in standings PDF.</p></div>
             <div><Label>Round #</Label><Input type="number" value={eventForm.round_number} onChange={e => setEventForm(f => ({ ...f, round_number: e.target.value }))} /></div>
             <div>
               <Label>Circuit</Label>
