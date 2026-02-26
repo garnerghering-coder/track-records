@@ -1551,28 +1551,40 @@ export type Database = {
       }
       v2_pit_stops: {
         Row: {
+          car_number: string | null
           created_at: string
           driver_id: string | null
+          flag_status: string | null
           id: string
           lap_number: number | null
+          pit_in_elapsed: number | null
+          pit_out_elapsed: number | null
           session_id: string
           stop_duration: string | null
           total_pit_time: string | null
         }
         Insert: {
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          flag_status?: string | null
           id?: string
           lap_number?: number | null
+          pit_in_elapsed?: number | null
+          pit_out_elapsed?: number | null
           session_id: string
           stop_duration?: string | null
           total_pit_time?: string | null
         }
         Update: {
+          car_number?: string | null
           created_at?: string
           driver_id?: string | null
+          flag_status?: string | null
           id?: string
           lap_number?: number | null
+          pit_in_elapsed?: number | null
+          pit_out_elapsed?: number | null
           session_id?: string
           stop_duration?: string | null
           total_pit_time?: string | null
@@ -2123,6 +2135,57 @@ export type Database = {
           {
             foreignKeyName: "v2_sessions_qualifying_session_id_fkey"
             columns: ["qualifying_session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v2_stints: {
+        Row: {
+          car_number: string
+          created_at: string
+          driver_id: string | null
+          end_elapsed: number | null
+          end_lap: number | null
+          id: string
+          session_id: string
+          start_elapsed: number | null
+          start_lap: number | null
+        }
+        Insert: {
+          car_number: string
+          created_at?: string
+          driver_id?: string | null
+          end_elapsed?: number | null
+          end_lap?: number | null
+          id?: string
+          session_id: string
+          start_elapsed?: number | null
+          start_lap?: number | null
+        }
+        Update: {
+          car_number?: string
+          created_at?: string
+          driver_id?: string | null
+          end_elapsed?: number | null
+          end_lap?: number | null
+          id?: string
+          session_id?: string
+          start_elapsed?: number | null
+          start_lap?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_stints_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "v2_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_stints_session_id_fkey"
+            columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "v2_sessions"
             referencedColumns: ["id"]
