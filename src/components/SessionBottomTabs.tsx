@@ -76,14 +76,14 @@ function RaceControlContent({ sections }: { sections: any[] }) {
 
   const showAll = activeFilters.size === 0;
 
-  const filterLabels: Record<RaceControlFilter, { label: string; emoji: string }> = {
-    flags: { label: "Flags", emoji: "🏁" },
-    penalties: { label: "Penalties", emoji: "⚠️" },
-    incidents: { label: "Incidents", emoji: "💥" },
+  const filterLabels: Record<RaceControlFilter, { label: string }> = {
+    flags: { label: "Flags" },
+    penalties: { label: "Penalties" },
+    incidents: { label: "Incidents" },
   };
 
   return (
-    <div className="p-5 space-y-3">
+    <div className="px-5 py-3 space-y-2">
       {/* Filter chips */}
       {availableFilters.size > 1 && (
         <div className="flex flex-wrap gap-1.5">
@@ -103,27 +103,27 @@ function RaceControlContent({ sections }: { sections: any[] }) {
                     }
                   `}
                 >
-                  {filterLabels[f].emoji} {filterLabels[f].label}
+                  {filterLabels[f].label}
                 </button>
               );
             })}
         </div>
       )}
 
-      {/* Items */}
-      <div className="space-y-4">
+      {/* Items — scrollable compact list */}
+      <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
         {classifiedSections.map((section: any) => {
           const filteredItems = section._classifiedItems.filter(
             (item: any) => showAll || activeFilters.has(item._category)
           );
           if (filteredItems.length === 0) return null;
           return (
-            <div key={section.id} className="space-y-1">
+            <div key={section.id} className="space-y-0.5">
               {classifiedSections.length > 1 && (
-                <h4 className="text-xs font-semibold text-muted-foreground mb-1">{section.title}</h4>
+                <h4 className="text-xs font-semibold text-muted-foreground mb-0.5">{section.title}</h4>
               )}
               {filteredItems.map((item: any) => (
-                <div key={item.id} className="text-xs text-muted-foreground border-l-2 pl-3 py-1" style={{ borderColor: item.color }}>
+                <div key={item.id} className="text-xs text-muted-foreground border-l-2 pl-3 py-0.5" style={{ borderColor: item.color }}>
                   {item.description}
                 </div>
               ))}

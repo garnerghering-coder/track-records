@@ -724,7 +724,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
         const hitPit = carPits.find(p => Math.abs(elapsed - p.pit_in_elapsed) < viewDuration * 0.005);
         if (hitPit) {
           const lines = [
-            `🔧 Pit Stop — #${car.carNumber} ${car.teamName}`,
+            `Pit Stop — #${car.carNumber} ${car.teamName}`,
             `In: ${formatElapsed(hitPit.pit_in_elapsed)}`,
             hitPit.pit_out_elapsed != null ? `Out: ${formatElapsed(hitPit.pit_out_elapsed)}` : "",
             hitPit.stop_duration ? `Duration: ${hitPit.stop_duration}` : "",
@@ -751,15 +751,15 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
             : null;
 
           const lines = [
-            `📊 #${car.carNumber} ${car.teamName}`,
+            `#${car.carNumber} ${car.teamName}`,
             hitStint.driverName ? `Driver: ${hitStint.driverName}` : "",
             `Start: ${formatElapsed(hitStint.start_elapsed)}  →  End: ${formatElapsed(hitStint.end_elapsed)}`,
             `Duration: ${formatElapsed(duration)}`,
             laps != null ? `Laps: ${laps}` : "",
             ``,
-            `🟢 Green-flag: ${formatElapsed(greenDuration)} (${greenPct}%)`,
+            `Green-flag: ${formatElapsed(greenDuration)} (${greenPct}%)`,
             avgLapTime != null && avgLapTime > 30 && avgLapTime < 300
-              ? `⏱ Avg lap (green): ${formatLapTime(avgLapTime)}`
+              ? `Avg lap (green): ${formatLapTime(avgLapTime)}`
               : "",
           ].filter(Boolean);
           setTooltip({ x: e.clientX, y: e.clientY, content: lines });
@@ -781,7 +781,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
         setTooltip({
           x: e.clientX, y: e.clientY,
           content: [
-            `🏁 ${seg.flag_state}`,
+            `${seg.flag_state}`,
             `Start: ${formatElapsed(Number(seg.start_elapsed))}`,
             `End: ${formatElapsed(Number(seg.end_elapsed))}`,
             `Duration: ${formatElapsed(duration)}`,
@@ -1012,9 +1012,6 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
         </span>
         <span className="flex items-center gap-1">
           <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.RED.strip }} /> Red
-        </span>
-        <span className="flex items-center gap-1 ml-2">
-          <span className="w-3 h-0.5 border-t border-dashed border-destructive" /> Pit stop
         </span>
         <span className="text-[9px] text-muted-foreground/60 ml-2">
           {compareMode
