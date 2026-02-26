@@ -656,6 +656,13 @@ serve(async (req) => {
       allJsonLinks.push(match[1]);
     }
 
+    // Collect Flags Analysis & RC Messages JSON links (pattern: 25_FlagsAnalysis*.JSON)
+    const flagsJsonRegex = /href="([^"]+25_FlagsAnalysis[^"]*\.JSON)"/gi;
+    const allFlagsJsonLinks: string[] = [];
+    while ((match = flagsJsonRegex.exec(html)) !== null) {
+      allFlagsJsonLinks.push(match[1]);
+    }
+
     // Also collect Time Card CSV links for endurance driver detection
     const timeCardRegex = /href="([^"]+23_Time(?:%20|[_%\s])*Cards?[^"]*\.CSV)"/gi;
     const allTimeCardLinks: string[] = [];
@@ -676,7 +683,7 @@ serve(async (req) => {
       allWeatherCsvLinks.push(match[1]);
     }
 
-    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links in HTML`);
+    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links, ${allFlagsJsonLinks.length} Flags Analysis JSON links in HTML`);
 
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
     const season = event.v2_seasons as any;
@@ -975,6 +982,21 @@ serve(async (req) => {
     }
     console.log(`Weather JSON mapped: ${weatherByKey.size} sessions`, Array.from(weatherByKey.keys()));
 
+    // ── Flags Analysis mapping ────────────────────────────────────────────
+    const flagsByKey = new Map<string, string>();
+    for (const fl of allFlagsJsonLinks) {
+      if (matchesSeriesFolder(fl)) {
+        const decoded = decodeURIComponent(fl);
+        const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+        if (tsMatch) {
+          const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+          const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+          flagsByKey.set(key, fl);
+        }
+      }
+    }
+    console.log(`Flags JSON mapped: ${flagsByKey.size} sessions`, Array.from(flagsByKey.keys()));
+
     // Estimate local hour from UTC timestamp string
     // Daytona is UTC-5, but we'll derive offset from the session_date vs UTC time
     function estimateLocalHour(utcTimeStr: string, utcOffset: number): number {
@@ -1178,6 +1200,105 @@ serve(async (req) => {
       return null;
     };
 
+    // Match a results JSON URL to its corresponding flags JSON URL
+    const flagsUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
+      const decoded = decodeURIComponent(jsonUrl);
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        if (hourNumber) {
+          const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+          const hourUrl = flagsByKey.get(hourKey);
+          if (hourUrl) return hourUrl;
+        }
+        return flagsByKey.get(tsMatch[1]) || null;
+      }
+      return null;
+    };
+
+    // ── Race Control processing ───────────────────────────────────────────
+    function rcItemColor(recType: string, flag: string, message: string): string {
+      const f = (flag || "").toUpperCase();
+      const m = (message || "").toUpperCase();
+      const rt = (recType || "").toUpperCase();
+      // Green flag
+      if (rt === "GF" || f.includes("GREEN") || m === "GREEN FLAG") return "#22c55e";
+      // Yellow flag / caution
+      if (rt === "YF" || rt === "FCY" || f.includes("YELLOW") || f.includes("CAUTION") || m.includes("YELLOW") || m.includes("FULL COURSE CAUTION")) return "#eab308";
+      // Red flag
+      if (rt === "RF" || f.includes("RED") || m.includes("RED FLAG")) return "#ef4444";
+      // Safety car
+      if (rt === "SC" || f.includes("SAFETY CAR") || m.includes("SAFETY CAR")) return "#f97316";
+      // Chequered / checkered
+      if (rt === "FF" || f.includes("CHEQUER") || f.includes("CHECKER") || m.includes("CHECKERED") || m.includes("CHEQUERED")) return "#a1a1aa";
+      // Penalties / drive-through / stop-and-go
+      if (m.includes("PENALTY") || m.includes("DRIVE THROUGH") || m.includes("STOP AND GO") || m.includes("STOP & GO") || m.includes("TIME PENALTY")) return "#a855f7";
+      // Incident / spin / contact / off-track
+      if (m.includes("SPUN") || m.includes("CONTACT") || m.includes("OFF TRACK") || m.includes("STOPPED") || m.includes("INCIDENT") || m.includes("ACCIDENT") || m.includes("DEBRIS")) return "#f59e0b";
+      // Impound
+      if (m.includes("IMPOUND")) return "#6b7280";
+      // Default: neutral blue
+      return "#3b82f6";
+    }
+
+    const processRaceControl = async (sessionId: string, flagsJsonUrl: string) => {
+      try {
+        const fullUrl = (() => { try { return new URL(flagsJsonUrl, baseUrl).href; } catch { return null; } })();
+        if (!fullUrl) return;
+
+        const resp = await fetchWithRetry(fullUrl);
+        if (!resp.ok) return;
+        const flagsData = await resp.json();
+        const flags = flagsData.flags || [];
+        if (flags.length === 0) return;
+
+        // Create annotation section
+        const { data: section, error: secErr } = await adminClient
+          .from("v2_annotation_sections")
+          .insert({ session_id: sessionId, title: "Race Control", sort_order: 0 })
+          .select("id")
+          .single();
+        if (secErr || !section) {
+          console.error(`Failed to create RC section for session ${sessionId}:`, secErr);
+          return;
+        }
+
+        // Build annotation items
+        const items = flags.map((f: any, idx: number) => {
+          const recType = f.rec_type || "";
+          const flagName = f.flag || "";
+          const message = f.message || "";
+          const elapsed = f.elapsed || "";
+          const time = f.time || "";
+          const lap = f.lap || 0;
+
+          // Build description: [TIME] (Elapsed: ELAPSED) [Lap N] FLAG/MESSAGE
+          const parts: string[] = [];
+          if (time) parts.push(`[${time}]`);
+          if (elapsed && elapsed !== "-") parts.push(`(+${elapsed})`);
+          if (lap > 0) parts.push(`Lap ${lap}`);
+          if (flagName) parts.push(`🏁 ${flagName}`);
+          if (message) parts.push(message);
+
+          return {
+            section_id: section.id,
+            description: parts.join(" ") || "Race Control entry",
+            color: rcItemColor(recType, flagName, message),
+            sort_order: idx,
+          };
+        });
+
+        // Batch insert (chunks of 100)
+        for (let i = 0; i < items.length; i += 100) {
+          const chunk = items.slice(i, i + 100);
+          await adminClient.from("v2_annotation_items").insert(chunk);
+        }
+        console.log(`Race Control: ${items.length} items added for session ${sessionId}`);
+      } catch (err) {
+        console.error(`Failed to process Race Control for session ${sessionId}:`, err);
+      }
+    };
+
+
     if (isEndurance) {
       // 1. Non-race sessions
       for (const f of fetchedResults.filter(f => f.kind === "nonrace")) {
@@ -1194,6 +1315,9 @@ serve(async (req) => {
         // Process weather for this session
         const weatherUrl = weatherUrlForSession(f.url);
         if (weatherUrl) await processImWeather(sessionId, weatherUrl);
+        // Process Race Control
+        const flagsUrl = flagsUrlForSession(f.url);
+        if (flagsUrl) await processRaceControl(sessionId, flagsUrl);
       }
 
       // 2. Fetch Time Card CSV for driver detection in hour sub-sessions
@@ -1253,6 +1377,14 @@ serve(async (req) => {
         if (parentSessionId && raceDataSource) {
           const entries = raceDataSource.data.classification || [];
           await insertResults(parentSessionId, entries, "endurance_race", true);
+          // For parent endurance race, try to get RC from last hour's flags file
+          const lastHour = fetchedResults
+            .filter(f => f.kind === "hour")
+            .sort((a, b) => (b.hour || 0) - (a.hour || 0))[0];
+          if (lastHour) {
+            const parentFlagsUrl = flagsUrlForSession(lastHour.url, lastHour.hour);
+            if (parentFlagsUrl) await processRaceControl(parentSessionId, parentFlagsUrl);
+          }
         }
       } else {
         summary.sessions_skipped++;
@@ -1339,6 +1471,9 @@ serve(async (req) => {
         // Process weather for this hour session (use hour-specific weather)
         const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
         if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
+        // Process Race Control for this hour
+        const hourFlagsUrl = flagsUrlForSession(f.url, f.hour);
+        if (hourFlagsUrl) await processRaceControl(childSessionId, hourFlagsUrl);
       }
 
       // Note: Step 5 (updating parent race driver_ids) removed.
@@ -1361,6 +1496,9 @@ serve(async (req) => {
         // Process weather for this session
         const weatherUrl = weatherUrlForSession(f.url);
         if (weatherUrl) await processImWeather(sessionId, weatherUrl);
+        // Process Race Control
+        const flagsUrl = flagsUrlForSession(f.url);
+        if (flagsUrl) await processRaceControl(sessionId, flagsUrl);
       }
     }
 
