@@ -246,6 +246,268 @@ function parseTimeCardCSV(csvText: string): Map<string, Map<number, string>> {
   return result;
 }
 
+// ── Strategy derivation (Time Card + Flags) ───────────────────────────
+
+type TimeCardLapRow = {
+  carNumber: string;
+  driverName: string;
+  elapsedSec: number;
+  lapNumber: number | null;
+};
+
+type StrategyFlagState = "GREEN" | "YELLOW" | "FCY" | "RED";
+type StrategyFlagEvent = { elapsedSec: number; state: StrategyFlagState };
+
+function parseTimeCardLaps(csvText: string): Map<string, TimeCardLapRow[]> {
+  const lines = csvText.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return new Map();
+
+  const header = lines[0].split(";").map(h => h.trim().replace(/\\/g, "").toUpperCase());
+  const numIdx = header.indexOf("NUMBER");
+  const driverNameIdx = header.indexOf("DRIVER_NAME");
+  const elapsedIdx = header.indexOf("ELAPSED");
+  const lapIdx = header.indexOf("LAP_NUMBER");
+
+  if (numIdx === -1 || driverNameIdx === -1 || elapsedIdx === -1) {
+    console.log("Time Card laps: missing required columns", header);
+    return new Map();
+  }
+
+  const lapsByCar = new Map<string, TimeCardLapRow[]>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";").map(c => c.trim());
+    const carNumber = cols[numIdx];
+    const driverName = cols[driverNameIdx];
+    const elapsedRaw = cols[elapsedIdx];
+    if (!carNumber || !driverName || !elapsedRaw) continue;
+
+    const elapsedSec = parseElapsedToSeconds(elapsedRaw);
+    if (!isFinite(elapsedSec) || elapsedSec <= 0) continue;
+
+    const parsedLap = lapIdx >= 0 ? parseInt(cols[lapIdx] || "", 10) : NaN;
+    const lapNumber = Number.isFinite(parsedLap) ? parsedLap : null;
+
+    if (!lapsByCar.has(carNumber)) lapsByCar.set(carNumber, []);
+    lapsByCar.get(carNumber)!.push({ carNumber, driverName, elapsedSec, lapNumber });
+  }
+
+  for (const [, rows] of lapsByCar) {
+    rows.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  }
+
+  console.log(`Time Card lap telemetry parsed: ${lapsByCar.size} cars`);
+  return lapsByCar;
+}
+
+function detectStrategyFlagState(recType: string, flag: string, message: string): StrategyFlagState | null {
+  const rt = (recType || "").toUpperCase();
+  const f = (flag || "").toUpperCase();
+  const m = (message || "").toUpperCase();
+
+  if (rt === "RF" || f.includes("RED") || m.includes("RED FLAG")) return "RED";
+  if (rt === "FCY" || rt === "SC" || f.includes("FULL COURSE CAUTION") || f.includes("SAFETY CAR") || m.includes("FULL COURSE CAUTION") || m.includes("SAFETY CAR")) return "FCY";
+  if (rt === "YF" || f.includes("YELLOW") || f.includes("CAUTION") || m.includes("YELLOW")) return "YELLOW";
+  if (rt === "GF" || f.includes("GREEN") || m.includes("GREEN FLAG")) return "GREEN";
+
+  return null;
+}
+
+function parseStrategyFlagEvents(flagsData: any): StrategyFlagEvent[] {
+  const events: StrategyFlagEvent[] = [];
+  const flags = flagsData?.flags || [];
+
+  for (const item of flags) {
+    const state = detectStrategyFlagState(item.rec_type || "", item.flag || "", item.message || "");
+    if (!state) continue;
+
+    const elapsedRaw = String(item.elapsed || "").trim();
+    if (!elapsedRaw || elapsedRaw === "-") continue;
+    const elapsedSec = parseElapsedToSeconds(elapsedRaw);
+    if (!isFinite(elapsedSec) || elapsedSec < 0) continue;
+
+    events.push({ elapsedSec, state });
+  }
+
+  events.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  return events;
+}
+
+function strategyFlagAtElapsed(events: StrategyFlagEvent[], elapsedSec: number): StrategyFlagState {
+  let state: StrategyFlagState = "GREEN";
+  for (const e of events) {
+    if (e.elapsedSec <= elapsedSec) state = e.state;
+    else break;
+  }
+  return state;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function round3(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
+
+function formatDurationFromSeconds(seconds: number | null): string | null {
+  if (seconds == null || !isFinite(seconds) || seconds <= 0) return null;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds - mins * 60;
+  return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
+}
+
+function deriveStrategyRowsFromTimeCard(
+  lapsByCar: Map<string, TimeCardLapRow[]>,
+  driverMap: Map<string, string>,
+  flagEvents: StrategyFlagEvent[]
+): { stints: any[]; pitStops: any[] } {
+  const stints: any[] = [];
+  const pitStops: any[] = [];
+
+  const normalizeName = (name: string) => name.toLowerCase().trim();
+
+  for (const [carNumber, laps] of lapsByCar) {
+    if (laps.length < 2) continue;
+
+    const deltas: number[] = [];
+    for (let i = 1; i < laps.length; i++) {
+      const d = laps[i].elapsedSec - laps[i - 1].elapsedSec;
+      if (d > 15 && d < 500) deltas.push(d);
+    }
+
+    const medianLap = median(deltas.length > 0 ? deltas : [90]);
+    const basePitThreshold = Math.max(35, Math.min(160, medianLap * 1.35));
+
+    let currentStartElapsed = laps[0].elapsedSec;
+    let currentStartLap = laps[0].lapNumber;
+    let currentDriverName = laps[0].driverName;
+
+    const closeStint = (endRow: TimeCardLapRow) => {
+      if (endRow.elapsedSec <= currentStartElapsed) return;
+      stints.push({
+        car_number: carNumber,
+        driver_id: driverMap.get(normalizeName(currentDriverName)) || null,
+        start_elapsed: round3(currentStartElapsed),
+        end_elapsed: round3(endRow.elapsedSec),
+        start_lap: currentStartLap,
+        end_lap: endRow.lapNumber,
+      });
+    };
+
+    for (let i = 1; i < laps.length; i++) {
+      const prev = laps[i - 1];
+      const curr = laps[i];
+      const delta = curr.elapsedSec - prev.elapsedSec;
+      if (delta <= 0) continue;
+
+      const currentFlag = strategyFlagAtElapsed(flagEvents, prev.elapsedSec);
+      const cautionThreshold = Math.max(basePitThreshold + 20, medianLap * 1.7);
+      const threshold = currentFlag === "GREEN" ? basePitThreshold : cautionThreshold;
+
+      const driverChanged = normalizeName(curr.driverName) !== normalizeName(currentDriverName);
+      const hasPitGap = delta >= threshold && delta >= medianLap + 20;
+
+      if (hasPitGap) {
+        closeStint(prev);
+
+        const pitDuration = curr.elapsedSec - prev.elapsedSec;
+        pitStops.push({
+          car_number: carNumber,
+          driver_id: driverMap.get(normalizeName(curr.driverName)) || driverMap.get(normalizeName(currentDriverName)) || null,
+          pit_in_elapsed: round3(prev.elapsedSec),
+          pit_out_elapsed: round3(curr.elapsedSec),
+          lap_number: prev.lapNumber ?? curr.lapNumber ?? null,
+          stop_duration: formatDurationFromSeconds(pitDuration),
+          total_pit_time: formatDurationFromSeconds(pitDuration),
+          flag_status: currentFlag === "GREEN" ? "Green" : currentFlag,
+        });
+
+        currentStartElapsed = curr.elapsedSec;
+        currentStartLap = curr.lapNumber;
+        currentDriverName = curr.driverName;
+      } else if (driverChanged) {
+        closeStint(prev);
+        currentStartElapsed = curr.elapsedSec;
+        currentStartLap = curr.lapNumber;
+        currentDriverName = curr.driverName;
+      }
+    }
+
+    closeStint(laps[laps.length - 1]);
+  }
+
+  return { stints, pitStops };
+}
+
+function bucketStrategyRowsForHour(
+  stints: any[],
+  pitStops: any[],
+  hourNumber: number
+): { stints: any[]; pitStops: any[] } {
+  const start = (hourNumber - 1) * 3600;
+  const end = start + 3600;
+
+  const scopedStints = stints
+    .map((s: any) => {
+      const stintStart = Number(s.start_elapsed ?? 0);
+      const stintEnd = Number(s.end_elapsed ?? 0);
+      if (!isFinite(stintStart) || !isFinite(stintEnd)) return null;
+      if (stintEnd <= start || stintStart >= end) return null;
+
+      const clippedStart = Math.max(stintStart, start);
+      const clippedEnd = Math.min(stintEnd, end);
+      if (clippedEnd <= clippedStart) return null;
+
+      return {
+        ...s,
+        start_elapsed: round3(clippedStart),
+        end_elapsed: round3(clippedEnd),
+      };
+    })
+    .filter(Boolean) as any[];
+
+  const scopedPits = pitStops.filter((p: any) => {
+    const pitIn = Number(p.pit_in_elapsed ?? NaN);
+    return isFinite(pitIn) && pitIn >= start && pitIn < end;
+  });
+
+  return { stints: scopedStints, pitStops: scopedPits };
+}
+
+async function insertRowsInChunks(adminClient: any, table: string, rows: any[], chunkSize = 500) {
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error } = await adminClient.from(table as any).insert(chunk as any);
+    if (error) throw new Error(`Failed to insert into ${table}: ${error.message}`);
+  }
+}
+
+async function replaceStrategyRowsForSession(
+  adminClient: any,
+  sessionId: string,
+  stints: any[],
+  pitStops: any[]
+) {
+  await Promise.all([
+    adminClient.from("v2_stints").delete().eq("session_id", sessionId),
+    adminClient.from("v2_pit_stops").delete().eq("session_id", sessionId),
+  ]);
+
+  const stintRows = stints.map((s: any) => ({ ...s, session_id: sessionId }));
+  const pitRows = pitStops.map((p: any) => ({ ...p, session_id: sessionId }));
+
+  await Promise.all([
+    stintRows.length > 0 ? insertRowsInChunks(adminClient, "v2_stints", stintRows) : Promise.resolve(),
+    pitRows.length > 0 ? insertRowsInChunks(adminClient, "v2_pit_stops", pitRows) : Promise.resolve(),
+  ]);
+
+  console.log(`Strategy rows saved for ${sessionId}: ${stintRows.length} stints, ${pitRows.length} pits`);
+}
+
 // ── Bulk entity resolution ───────────────────────────────────────────
 // Pre-scan all JSON data to collect unique drivers/teams/cars, then resolve/create them all at once
 
@@ -811,6 +1073,7 @@ serve(async (req) => {
     const existingTeams = teamsRes.data || [];
     const existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }> = (carsRes.data || []) as any;
     const existingSessionNames = new Set((existingSessionsRes.data || []).map((s: any) => s.name));
+    const existingSessionIdByName = new Map((existingSessionsRes.data || []).map((s: any) => [s.name, s.id]));
     const seasonAliases: Array<{ team_id: string; display_name: string }> = (aliasesRes.data || []) as any;
     const seasonCarMap = new Map<string, string>();
     for (const sc of (seasonCarsRes.data || []) as any[]) seasonCarMap.set(sc.team_id, sc.car_id);
@@ -943,6 +1206,7 @@ serve(async (req) => {
         return null;
       }
       existingSessionNames.add(name);
+      existingSessionIdByName.set(name, newSession.id);
       await autoAssignLayout(newSession.id);
       summary.sessions_created++;
       return newSession.id;
@@ -1322,6 +1586,7 @@ serve(async (req) => {
 
       // 2. Fetch Time Card CSV for driver detection in hour sub-sessions
       let timeCardMap: Map<string, Map<number, string>> = new Map();
+      let timeCardLapsByCar: Map<string, TimeCardLapRow[]> = new Map();
       const raceTimeCardLinks = allTimeCardLinks
         .filter(l => matchesSeriesFolder(l))
         .filter(l => {
@@ -1344,6 +1609,7 @@ serve(async (req) => {
             if (tcResp.ok) {
               const csvText = await tcResp.text();
               timeCardMap = parseTimeCardCSV(csvText);
+              timeCardLapsByCar = parseTimeCardLaps(csvText);
               console.log(`Time Card data loaded for ${timeCardMap.size} cars`);
             } else {
               console.log(`Time Card CSV returned ${tcResp.status}`);
@@ -1420,9 +1686,16 @@ serve(async (req) => {
         }
       }
 
+      const hourSessionIdByHour = new Map<number, string>();
+
       for (const f of sortedHours) {
         const hourSessionName = `Hour ${f.hour}`;
-        if (existingSessionNames.has(hourSessionName)) { summary.sessions_skipped++; continue; }
+        if (existingSessionNames.has(hourSessionName)) {
+          summary.sessions_skipped++;
+          const existingHourId = existingSessionIdByName.get(hourSessionName);
+          if (existingHourId && f.hour) hourSessionIdByHour.set(f.hour, existingHourId);
+          continue;
+        }
         const entries = f.data.classification || [];
         if (entries.length === 0) continue;
 
@@ -1464,6 +1737,8 @@ serve(async (req) => {
 
         const childSessionId = await createSession(hourSessionName, "race", f.url, hourDate, hourStart, parentSessionId);
         if (!childSessionId) continue;
+        if (f.hour) hourSessionIdByHour.set(f.hour, childSessionId);
+
         if (hourEnd) {
           await adminClient.from("v2_sessions").update({ end_time: hourEnd } as any).eq("id", childSessionId);
         }
@@ -1474,6 +1749,49 @@ serve(async (req) => {
         // Process Race Control for this hour
         const hourFlagsUrl = flagsUrlForSession(f.url, f.hour);
         if (hourFlagsUrl) await processRaceControl(childSessionId, hourFlagsUrl);
+      }
+
+      // 5. Strategy derivation from Time Card telemetry (deterministic)
+      if (timeCardLapsByCar.size > 0) {
+        try {
+          let strategyFlagEvents: StrategyFlagEvent[] = [];
+          const strategyFlagsUrl = (() => {
+            const lastHourSession = sortedHours[sortedHours.length - 1];
+            if (lastHourSession) return flagsUrlForSession(lastHourSession.url, lastHourSession.hour);
+            const overallRace = fetchedResults.find(fr => fr.kind === "overall");
+            return overallRace ? flagsUrlForSession(overallRace.url) : null;
+          })();
+
+          if (strategyFlagsUrl) {
+            const fullFlagsUrl = (() => { try { return new URL(strategyFlagsUrl, baseUrl).href; } catch { return null; } })();
+            if (fullFlagsUrl) {
+              const flagsResp = await fetchWithRetry(fullFlagsUrl);
+              if (flagsResp.ok) {
+                const flagsData = await flagsResp.json();
+                strategyFlagEvents = parseStrategyFlagEvents(flagsData);
+              }
+            }
+          }
+
+          const { stints: baseStrategyStints, pitStops: baseStrategyPits } = deriveStrategyRowsFromTimeCard(
+            timeCardLapsByCar,
+            driverMap,
+            strategyFlagEvents
+          );
+
+          if (parentSessionId) {
+            await replaceStrategyRowsForSession(adminClient, parentSessionId, baseStrategyStints, baseStrategyPits);
+          }
+
+          for (const [hourNumber, sessionId] of hourSessionIdByHour.entries()) {
+            const hourStrategy = bucketStrategyRowsForHour(baseStrategyStints, baseStrategyPits, hourNumber);
+            await replaceStrategyRowsForSession(adminClient, sessionId, hourStrategy.stints, hourStrategy.pitStops);
+          }
+        } catch (strategyErr) {
+          console.error("Strategy derivation failed:", strategyErr);
+        }
+      } else {
+        console.log("Strategy derivation skipped: no Time Card lap telemetry");
       }
 
       // Note: Step 5 (updating parent race driver_ids) removed.
