@@ -40,6 +40,8 @@ interface CarInfo {
 
 // ── Constants ───────────────────────────────────────────────────────
 
+const CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+
 const CLASS_COLORS: Record<string, string> = {
   GTP: "#e63946",
   GTDPRO: "#457b9d",
@@ -183,7 +185,11 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass 
     for (const [, info] of carInfoMap) {
       if (info.className) classes.add(info.className);
     }
-    return Array.from(classes).sort();
+    return Array.from(classes).sort((a, b) => {
+      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
+      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
   }, [carInfoMap]);
 
   const effectiveClasses = selectedClasses.size > 0 ? selectedClasses : new Set(allClasses);
