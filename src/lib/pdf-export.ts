@@ -102,6 +102,7 @@ function buildSessionTable(s: SessionExportData) {
     if (anyHas(results, "gap_to_p1")) addCol("Gap", (r) => r.gap_to_p1 || "");
     if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
     if (anyHas(results, "laps_run")) addCol("Laps", (r) => String(r.laps_run || ""));
+    if (results.some((r) => r.points != null && r.points !== 0)) addCol("Pts", (r) => String(r.points ?? ""));
   } else if (isQual) {
     if (anyHas(results, "q1_time")) addCol("Q1", (r) => r.q1_time || "");
     if (anyHas(results, "q2_time")) addCol("Q2", (r) => r.q2_time || "");
@@ -110,6 +111,7 @@ function buildSessionTable(s: SessionExportData) {
     if (anyHas(results, "gap_to_pole")) addCol("Gap", (r) => r.gap_to_pole || "");
     if (hasInt && anyHasExtra(results, "Int")) addCol("Int", (r) => r.extra_data?.Int || "");
     if (anyHas(results, "laps_run")) addCol("Laps", (r) => String(r.laps_run || ""));
+    if (results.some((r) => r.points != null && r.points !== 0)) addCol("Pts", (r) => String(r.points ?? ""));
   } else {
     // Race
     if (anyHas(results, "laps_completed")) addCol("Laps", (r) => String(r.laps_completed || ""));
