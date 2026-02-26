@@ -44,7 +44,7 @@ const makeKey = () => Math.random().toString(36).slice(2, 10);
 const blankRow = (pos: number, type: string, customCols: CustomColumn[] = []): ResultRow => {
   const base: ResultRow = { _key: makeKey(), position: String(pos), car_number: "", driver: null, additionalDrivers: [], team: null, car: null, _driverNationality: null, _additionalDriverNationalities: [] };
   if (type === "practice") { base.best_lap_time = ""; base.gap_to_p1 = ""; base.gap_int = ""; base.laps_run = ""; base.notes = ""; }
-  else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.gap_int = ""; base.laps_run = ""; }
+  else if (type === "qualifying" || type === "sprint_qualifying") { base.q1_time = ""; base.q2_time = ""; base.q3_time = ""; base.best_time = ""; base.gap_to_pole = ""; base.gap_int = ""; base.laps_run = ""; base.points = ""; }
   else if (type === "race" || type === "sprint_race" || type === "endurance_race") { base.laps_completed = ""; base.total_time = ""; base.gap_to_leader = ""; base.fastest_lap_time = ""; base.average_lap_time = ""; base.pit_stops = ""; base.points = ""; base.status = "finished"; base.dnf_reason = ""; base.dnf_explanation = ""; base.gap_int = ""; }
   else { base.notes = ""; }
   for (const col of customCols) {
@@ -149,7 +149,7 @@ export default function ManageSessionResults() {
     if (isMulticlass) cols.push("_pic", "_class");
     cols.push("car_number", "driver", "nat", "team", "car");
     if (type === "practice") cols.push("best_lap_time", "gap_to_p1", "gap_int", "laps_run", "notes");
-    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run");
+    else if (type === "qualifying" || type === "sprint_qualifying") cols.push("q1_time", "q2_time", "q3_time", "best_time", "gap_to_pole", "gap_int", "laps_run", "points");
     else if (type === "race" || type === "sprint_race" || type === "endurance_race") cols.push("laps_completed", "total_time", "gap_to_leader", "gap_int", "fastest_lap_time", "average_lap_time", "pit_stops", "points", "status");
     else cols.push("notes");
     return cols;
@@ -256,7 +256,7 @@ export default function ManageSessionResults() {
             _additionalDriverNationalities: otherNationalities,
           };
           if (t === "practice") { row.best_lap_time = r.best_lap_time || ""; row.gap_to_p1 = r.gap_to_p1 || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.notes = ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
-          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
+          else if (t === "qualifying" || t === "sprint_qualifying") { row.q1_time = r.q1_time || ""; row.q2_time = r.q2_time || ""; row.q3_time = r.q3_time || ""; row.best_time = r.best_time || ""; row.gap_to_pole = r.gap_to_pole || ""; row.laps_run = r.laps_run != null ? String(r.laps_run) : ""; row.gap_int = (r.extra_data as any)?.Int || ""; row.points = r.points != null ? String(r.points) : ""; }
           else if (t === "race" || t === "sprint_race" || t === "endurance_race") { row.laps_completed = r.laps_completed != null ? String(r.laps_completed) : ""; row.total_time = r.total_time || ""; row.gap_to_leader = r.gap_to_leader || ""; row.fastest_lap_time = r.fastest_lap_time || ""; row.average_lap_time = r.average_lap_time || ""; row.pit_stops = r.pit_stops != null ? String(r.pit_stops) : ""; row.points = r.points != null ? String(r.points) : ""; row.status = r.status || "finished"; row.dnf_reason = r.dnf_reason || ""; row.dnf_explanation = (r as any).dnf_explanation || ""; row.gap_int = (r.extra_data as any)?.Int || ""; }
           else { row.notes = ""; }
           // Load class/PIC and custom column data from extra_data
