@@ -349,6 +349,10 @@ const SeriesProfile = () => {
               podiums: number;
             }>();
 
+            // Track which (car_number, session_id) combos we've already counted points/wins for
+            const countedPoints = new Set<string>();
+            const countedWins = new Set<string>();
+
             for (const r of allResults) {
               if (!r.car_number) continue;
               const pts = r.points != null ? Number(r.points) : 0;
@@ -372,7 +376,14 @@ const SeriesProfile = () => {
               }
 
               const entry = carMap.get(r.car_number)!;
-              entry.totalPoints += pts;
+
+              // Only count points once per car per session (endurance cars have multiple driver rows)
+              const pointsKey = `${r.car_number}|${r.session_id}`;
+              if (pts > 0 && !countedPoints.has(pointsKey)) {
+                entry.totalPoints += pts;
+                countedPoints.add(pointsKey);
+              }
+
               if (r.driver_id) entry.driverIds.add(r.driver_id);
               if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
               if (!entry.teamName && teamDisplayName) {
@@ -381,8 +392,10 @@ const SeriesProfile = () => {
               }
               if (!entry.className && className) entry.className = className;
 
-              // Count wins/podiums only from main race sessions
-              if (r.position != null && r.session_id && raceSessionIds.has(r.session_id)) {
+              // Count wins/podiums only from main race sessions, once per car per session
+              const winKey = `${r.car_number}|${r.session_id}`;
+              if (r.position != null && r.session_id && raceSessionIds.has(r.session_id) && !countedWins.has(winKey)) {
+                countedWins.add(winKey);
                 if (r.position === 1) entry.wins++;
                 if (r.position <= 3) entry.podiums++;
               }
