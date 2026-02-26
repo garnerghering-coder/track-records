@@ -20,6 +20,7 @@ import PositionProgressionChart from "@/components/PositionProgressionChart";
 import TrackFingerprint from "@/components/TrackFingerprint";
 import { computeTrackMetrics } from "@/lib/track-calculations";
 import SessionBottomTabs from "@/components/SessionBottomTabs";
+import EventHeroDashboard from "@/components/EventHeroDashboard";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -109,6 +110,26 @@ export default function EventPage() {
     weatherMap[w.session_id] = w;
   }
 
+  // Find the race session for the hero dashboard
+  const raceSessionForHero = sessions.find((s: any) =>
+    s.session_type === "race" || s.session_type === "sprint_race" || s.session_type === "endurance_race"
+  );
+  const heroHourSessions = raceSessionForHero?.session_type === "endurance_race"
+    ? childSessions
+        .filter((s: any) => (s as any).parent_session_id === raceSessionForHero.id)
+        .sort((a: any, b: any) => a.sort_order - b.sort_order)
+    : [];
+
+  // Fetch annotation sections for the race session (for hero Race Control mini)
+  const { data: heroAnnotations = [] } = useQuery({
+    queryKey: ["hero_annotations", raceSessionForHero?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_annotation_sections" as any).select("*, v2_annotation_items(*)").eq("session_id", raceSessionForHero!.id).order("sort_order");
+      return (data || []) as any[];
+    },
+    enabled: !!raceSessionForHero,
+  });
+
   if (isLoading) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Loading…</div></div>;
   if (!event) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Event not found or not published.</div><Footer /></div>;
 
@@ -148,11 +169,22 @@ export default function EventPage() {
             </div>
             {event.description && <p className="text-sm text-muted-foreground max-w-2xl mt-2">{event.description}</p>}
           </div>
-          {event.v2_circuits?.layout_image_url && (
-            <div className="container pb-6">
-              <img src={event.v2_circuits.layout_image_url} alt="Circuit layout" className="max-h-48 rounded-lg border border-border object-contain" />
-            </div>
-          )}
+        </div>
+
+        {/* Hero Dashboard */}
+        <div className="container py-6">
+          <EventHeroDashboard
+            event={event}
+            sessions={sessions}
+            allSessions={allSessions}
+            hourSessions={heroHourSessions}
+            teamNameMap={teamNameMap}
+            weatherMap={weatherMap}
+            isMulticlass={isMulticlass}
+            layout={(event as any).v2_circuits?.v2_circuit_layouts}
+            raceSession={raceSessionForHero || null}
+            annotationSections={heroAnnotations}
+          />
         </div>
 
         {/* Session Tabs */}

@@ -45,6 +45,7 @@ interface Props {
   teamNameMap: Record<string, string>;
   activeHourId?: string;
   isMulticlass?: boolean;
+  compact?: boolean;
 }
 
 // ── Deterministic color palette ──────────────────────────────────────

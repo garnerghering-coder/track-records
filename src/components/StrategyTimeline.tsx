@@ -121,9 +121,10 @@ interface StrategyTimelineProps {
   sessionId: string;
   teamNameMap: Record<string, string>;
   isMulticlass?: boolean;
+  compact?: boolean;
 }
 
-export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass }: StrategyTimelineProps) {
+export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass, compact }: StrategyTimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null);
