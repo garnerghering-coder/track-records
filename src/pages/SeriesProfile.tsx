@@ -181,8 +181,11 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
 }) {
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showClassPicker, setShowClassPicker] = useState(false);
+  const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set(classes.map(c => c.name)));
 
-  const handleExport = async (cls?: string | null) => {
+  const handleExport = async (classNames?: string[] | null) => {
+    setShowClassPicker(false);
     setExporting(true);
     setProgress(5);
     try {
@@ -190,7 +193,7 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
         seriesName,
         year,
         seasonId,
-        className: cls,
+        classNames: classNames,
         onProgress: setProgress,
       });
       setProgress(100);
@@ -206,6 +209,23 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
     }
   };
 
+  const toggleClass = (name: string) => {
+    setSelectedClasses(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedClasses.size === classes.length) {
+      setSelectedClasses(new Set());
+    } else {
+      setSelectedClasses(new Set(classes.map(c => c.name)));
+    }
+  };
+
   return (
     <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
       <div className="flex items-center justify-between mb-3">
@@ -214,32 +234,49 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
           {year} Championship Standings
         </h4>
         {!exporting && (
-          isMulticlass ? (
-            <div className="flex gap-1">
-              {classes.map((cls) => (
-                <Button
-                  key={cls.id}
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-                  onClick={() => handleExport(cls.name)}
-                >
-                  <FileDown className="h-3 w-3" />
-                  {cls.name}
-                </Button>
-              ))}
-            </div>
-          ) : (
+          <div className="relative">
             <Button
               variant="ghost"
               size="sm"
               className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => handleExport(null)}
+              onClick={() => isMulticlass ? setShowClassPicker(!showClassPicker) : handleExport(null)}
             >
               <FileDown className="h-3 w-3" />
               Export PDF
             </Button>
-          )
+            {showClassPicker && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-3 min-w-[180px]">
+                <div className="flex items-center gap-2 pb-2 mb-2 border-b border-border">
+                  <input
+                    type="checkbox"
+                    checked={selectedClasses.size === classes.length}
+                    onChange={toggleAll}
+                    className="rounded border-border"
+                  />
+                  <span className="text-xs font-semibold text-foreground">Select All</span>
+                </div>
+                {classes.map((cls) => (
+                  <label key={cls.id} className="flex items-center gap-2 py-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedClasses.has(cls.name)}
+                      onChange={() => toggleClass(cls.name)}
+                      className="rounded border-border"
+                    />
+                    <span className="text-xs text-foreground">{cls.name}</span>
+                  </label>
+                ))}
+                <Button
+                  size="sm"
+                  className="w-full mt-2 h-7 text-xs"
+                  disabled={selectedClasses.size === 0}
+                  onClick={() => handleExport([...selectedClasses])}
+                >
+                  Download {selectedClasses.size === classes.length ? "All" : `${selectedClasses.size} class${selectedClasses.size !== 1 ? "es" : ""}`}
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </div>
       {exporting && (
