@@ -453,7 +453,7 @@ function SessionResults({
       const ed = (r as any).extra_data;
       if (ed && typeof ed === "object") {
         for (const [k] of Object.entries(ed)) {
-          if (k === "Int" || k === "avg_kmh" || k === "all_drivers" || k === "PIC" || k === "Class") continue;
+          if (k === "Int" || k === "avg_kmh" || k === "all_drivers" || k === "PIC" || k === "Class" || k === "_points_columns") continue;
           if (!seenKeys.has(k)) {
             seenKeys.add(k);
             extraDataKeys.push({ key: k, name: k });
@@ -510,7 +510,7 @@ function SessionResults({
       const ed = r.extra_data;
       if (ed && typeof ed === "object") {
         for (const k of Object.keys(ed)) {
-          if (k === "Int" || k === "avg_kmh" || seenKeys.has(k)) continue;
+          if (k === "Int" || k === "avg_kmh" || k === "_points_columns" || seenKeys.has(k)) continue;
           seenKeys.add(k);
           customCols.push({ key: k, name: k });
         }
