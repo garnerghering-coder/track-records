@@ -487,7 +487,7 @@ function SessionResults({
   const hasFastestLap = isRace && results.some((r: any) => r.fastest_lap_time);
   const hasAvgLap = isRace && results.some((r: any) => r.average_lap_time);
   const hasPits = isRace && results.some((r: any) => r.pit_stops != null);
-  const hasPoints = isRace && results.some((r: any) => r.points != null && r.points !== 0);
+  const hasPoints = (isRace || isQual) && results.some((r: any) => r.points != null && r.points !== 0);
   const hasStatus = isRace && !hideStatus && results.some((r: any) => r.status && r.status !== "finished");
 
   const bestLapField = isPractice ? "best_lap_time" : isQual ? "best_time" : "fastest_lap_time";
@@ -615,7 +615,7 @@ function SessionResults({
                {hasTeam && <TableHead>Team</TableHead>}
                {hasCar && <TableHead>Car</TableHead>}
                {isPractice && <>{hasBestLap && <TableHead>Best Lap</TableHead>}{hasGapP1 && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasPracticeLaps && <TableHead>Laps</TableHead>}</>}
-               {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}</>}
+               {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}</>}
                {isRace && <>{hasRaceLaps && <TableHead>Laps</TableHead>}{hasTotalTime && <TableHead>Time</TableHead>}{hasGapLeader && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasFastestLap && <TableHead>Best Lap</TableHead>}{hasAvgLap && <TableHead>Avg Lap</TableHead>}{hasPits && <TableHead>Pits</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}{hasStatus && <TableHead>Status</TableHead>}</>}
                {extraDataKeys.filter(c => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires").map(col => (
                  <TableHead key={col.key}>{col.name}</TableHead>
@@ -695,6 +695,7 @@ function SessionResults({
                   {hasGapPole && <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>}
                   {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
                   {hasQualLaps && <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>}
+                  {hasPoints && <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>}
                 </>}
                 {isRace && <>
                   {hasRaceLaps && <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>}
