@@ -903,126 +903,131 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
   // ── Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-3">
-      {/* Controls Row 1: Class filters + Zoom presets */}
-      <div className="flex flex-wrap items-center gap-2">
-        {allClasses.length > 1 && (
-          <div className="flex flex-wrap gap-1">
-            {allClasses.map(cls => {
-              const isActive = selectedClasses.size === 0 || selectedClasses.has(cls);
-              const color = getClassColor(cls);
-              return (
-                <button
-                  key={cls}
-                  onClick={() => {
-                    setSelectedClasses(prev => {
-                      const next = new Set(prev);
-                      if (next.has(cls)) next.delete(cls); else next.add(cls);
-                      if (next.size === allClasses.length) return new Set();
-                      return next;
-                    });
-                  }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all"
-                  style={{
-                    borderColor: isActive ? color : "transparent",
-                    backgroundColor: isActive ? `${color}18` : "rgba(107, 114, 128, 0.1)",
-                    color: isActive ? color : "#9ca3af",
-                  }}
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, opacity: isActive ? 1 : 0.3 }} />
-                  {cls}
-                </button>
-              );
-            })}
-          </div>
-        )}
+    <div className={compact ? "h-full flex flex-col" : "space-y-3"}>
+      {/* Controls — hidden in compact mode */}
+      {!compact && (
+        <>
+          {/* Controls Row 1: Class filters + Zoom presets */}
+          <div className="flex flex-wrap items-center gap-2">
+            {allClasses.length > 1 && (
+              <div className="flex flex-wrap gap-1">
+                {allClasses.map(cls => {
+                  const isActive = selectedClasses.size === 0 || selectedClasses.has(cls);
+                  const color = getClassColor(cls);
+                  return (
+                    <button
+                      key={cls}
+                      onClick={() => {
+                        setSelectedClasses(prev => {
+                          const next = new Set(prev);
+                          if (next.has(cls)) next.delete(cls); else next.add(cls);
+                          if (next.size === allClasses.length) return new Set();
+                          return next;
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all"
+                      style={{
+                        borderColor: isActive ? color : "transparent",
+                        backgroundColor: isActive ? `${color}18` : "rgba(107, 114, 128, 0.1)",
+                        color: isActive ? color : "#9ca3af",
+                      }}
+                    >
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, opacity: isActive ? 1 : 0.3 }} />
+                      {cls}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-        <div className="flex gap-1 ml-auto">
-          {zoomPresets.map((preset, i) => (
+            <div className="flex gap-1 ml-auto">
+              {zoomPresets.map((preset, i) => (
+                <button
+                  key={i}
+                  onClick={() => setZoomRange(preset.range)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
+                    (preset.range === null && zoomRange === null) ||
+                    (preset.range && zoomRange && preset.range[0] === zoomRange[0] && preset.range[1] === zoomRange[1])
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Controls Row 2: Feature toggles + Search */}
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              key={i}
-              onClick={() => setZoomRange(preset.range)}
-              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
-                (preset.range === null && zoomRange === null) ||
-                (preset.range && zoomRange && preset.range[0] === zoomRange[0] && preset.range[1] === zoomRange[1])
+              onClick={() => {
+                setCompareMode(prev => !prev);
+                if (compareMode) setCompareCars(new Set());
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                compareMode
                   ? "bg-primary/10 border-primary/30 text-primary"
                   : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
               }`}
             >
-              {preset.label}
+              🔀 Compare {compareMode && compareCars.size > 0 ? `(${compareCars.size})` : ""}
             </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Controls Row 2: Feature toggles + Search */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => {
-            setCompareMode(prev => !prev);
-            if (compareMode) setCompareCars(new Set());
-          }}
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
-            compareMode
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          🔀 Compare {compareMode && compareCars.size > 0 ? `(${compareCars.size})` : ""}
-        </button>
+            <button
+              onClick={() => setShowPositions(prev => !prev)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                showPositions
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              🏆 Positions
+            </button>
 
-        <button
-          onClick={() => setShowPositions(prev => !prev)}
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
-            showPositions
-              ? "bg-primary/10 border-primary/30 text-primary"
-              : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          🏆 Positions
-        </button>
+            <input
+              type="text"
+              placeholder="Search car # or team..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="px-2 py-1 rounded text-[10px] border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground/60 w-36 focus:outline-none focus:border-primary/40"
+            />
 
-        <input
-          type="text"
-          placeholder="Search car # or team..."
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          className="px-2 py-1 rounded text-[10px] border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground/60 w-36 focus:outline-none focus:border-primary/40"
-        />
+            {compareMode && compareCars.size > 0 && (
+              <button
+                onClick={() => setCompareCars(new Set())}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear selection
+              </button>
+            )}
+          </div>
 
-        {compareMode && compareCars.size > 0 && (
-          <button
-            onClick={() => setCompareCars(new Set())}
-            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Clear selection
-          </button>
-        )}
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-[9px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.GREEN.strip }} /> Green
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.YELLOW.strip }} /> Yellow
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.FCY.strip }} /> FCY/SC
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.RED.strip }} /> Red
-        </span>
-        <span className="text-[9px] text-muted-foreground/60 ml-2">
-          {compareMode
-            ? "Click cars to add/remove from comparison"
-            : "Click class header to expand · Click car row to highlight · Drag to zoom"}
-        </span>
-      </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-3 text-[9px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.GREEN.strip }} /> Green
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.YELLOW.strip }} /> Yellow
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.FCY.strip }} /> FCY/SC
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.RED.strip }} /> Red
+            </span>
+            <span className="text-[9px] text-muted-foreground/60 ml-2">
+              {compareMode
+                ? "Click cars to add/remove from comparison"
+                : "Click class header to expand · Click car row to highlight · Drag to zoom"}
+            </span>
+          </div>
+        </>
+      )}
 
       {/* Canvas */}
-      <div ref={containerRef} className="overflow-x-auto cursor-crosshair select-none">
+      <div ref={containerRef} className={`overflow-x-auto cursor-crosshair select-none ${compact ? "flex-1" : ""}`}>
         <canvas
           ref={canvasRef}
           onMouseMove={handleMouseMove}

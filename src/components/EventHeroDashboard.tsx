@@ -4,8 +4,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Maximize2 } from "lucide-react";
 import FlagImage from "@/components/FlagImage";
-import TrackFingerprint from "@/components/TrackFingerprint";
-import { computeTrackMetrics } from "@/lib/track-calculations";
+import { computeTrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import StrategyTimeline from "@/components/StrategyTimeline";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
 
@@ -100,7 +99,7 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
   const posLabel = entry.position === 1 ? "Winner" : `P${entry.position}`;
 
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex items-center gap-4 py-2.5">
       <div className="shrink-0 w-8 text-center">
         {showPosition ? (
           <span className="text-lg font-bold text-foreground">{entry.position}</span>
@@ -109,7 +108,7 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
         )}
       </div>
 
-      <div className="shrink-0 w-[140px]">
+      <div className="shrink-0 w-[200px]">
         {entry.liveryUrl ? (
           <img
             src={entry.liveryUrl}
@@ -219,14 +218,14 @@ function MiniVisualization({
           <Maximize2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="h-[220px] overflow-hidden relative">
+      <div className="h-[280px] overflow-hidden relative">
         {activeVizTab === "strategy" && (
-          <div className="p-2 h-full">
+          <div className="h-full">
             <StrategyTimeline sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
           </div>
         )}
         {activeVizTab === "progression" && hasHours && (
-          <div className="p-2 h-full">
+          <div className="h-full">
             <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
           </div>
         )}
@@ -358,14 +357,12 @@ export default function EventHeroDashboard({
       <div className="container">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* LEFT — Winners/Podium */}
-          <div className="space-y-1">
+          <div className="space-y-3">
             {classNames.map(cls => (
-              <div key={cls}>
-                {classNames.length > 1 && (
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mt-2 mb-1">
-                    {cls} {showTop3 ? "Podium" : "Winner"}
-                  </h3>
-                )}
+              <div key={cls} className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                  {cls} {showTop3 ? "Podium" : "Winner"}
+                </h3>
                 {winners
                   .filter(w => w.className === cls)
                   .map((w, i) => (
@@ -385,14 +382,41 @@ export default function EventHeroDashboard({
             />
 
             {hasFingerprint && layoutData && trackMetrics && (
-              <div className="rounded-lg border border-border bg-card p-3">
-                <TrackFingerprint
-                  metrics={trackMetrics}
-                  layoutImageUrl={layoutData.layout_image_url}
-                  layoutName={layoutData.name}
-                  lengthKm={layoutData.length_km}
-                  turns={layoutData.turns}
-                />
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center gap-5">
+                  {layoutData.layout_image_url && (
+                    <div className="shrink-0 w-[120px]">
+                      <img
+                        src={layoutData.layout_image_url}
+                        alt={layoutData.name ? `${layoutData.name} layout` : "Circuit layout"}
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                  )}
+                  <div className="shrink-0">
+                    {layoutData.name && (
+                      <span className="font-display text-sm font-semibold text-card-foreground">{layoutData.name}</span>
+                    )}
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                      {layoutData.length_km && <span>{Number(layoutData.length_km).toFixed(3)} km</span>}
+                      {layoutData.turns != null && <span>{layoutData.turns} turns</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 ml-auto">
+                    {trackMetrics.tdi != null && trackMetrics.tdiCategory && (
+                      <div className="text-center">
+                        <span className="font-display text-2xl font-bold" style={{ color: computeTrackMetrics ? categoryHexColor(trackMetrics.tdiCategory) : undefined }}>{Math.round(trackMetrics.tdi)}</span>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Demand</p>
+                      </div>
+                    )}
+                    {trackMetrics.tcs100 != null && trackMetrics.tcsCategory && (
+                      <div className="text-center">
+                        <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.tcsCategory) }}>{Math.round(trackMetrics.tcs100)}</span>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Character</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
