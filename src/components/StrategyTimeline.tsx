@@ -415,7 +415,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       }
     }
 
-    const hdrH = compact ? COMPACT_HEADER_HEIGHT : HEADER_HEIGHT;
+    const hdrH = compact ? 4 : HEADER_HEIGHT;
     const totalHeight = TOP_MARGIN + STRIP_HEIGHT + 8 + classHeaders * hdrH + totalRows * (effectiveRowHeight + ROW_GAP) + 20;
 
     canvas.width = width * dpr;
@@ -442,11 +442,13 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       ctx.fillStyle = color;
       ctx.fillRect(x1, stripY, Math.max(x2 - x1, 1), STRIP_HEIGHT);
     }
-    // Strip label
-    ctx.fillStyle = "#9ca3af";
-    ctx.font = "9px system-ui, sans-serif";
-    ctx.textAlign = "right";
-    ctx.fillText("FLAGS", labelW - 6, stripY + STRIP_HEIGHT / 2 + 3);
+    // Strip label (hide in compact mode)
+    if (!compact) {
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = "9px system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText("FLAGS", labelW - 6, stripY + STRIP_HEIGHT / 2 + 3);
+    }
 
     // ── Time axis ticks ──
     const axisY = TOP_MARGIN - STRIP_HEIGHT - 8;
@@ -647,17 +649,19 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         const shown = isExpanded ? group : group.slice(0, maxPerClass);
         const classColor = getClassColor(cls);
 
-        // Class header
-        ctx.fillStyle = classColor;
-        ctx.font = compact ? "bold 9px system-ui, sans-serif" : "bold 10px system-ui, sans-serif";
-        ctx.textAlign = "left";
-        ctx.fillText(`${cls} (${group.length})`, 4, y + hdrH / 2 + 3);
-        if (!isExpanded && group.length > maxPerClass) {
-          ctx.fillStyle = "#9ca3af";
-          ctx.font = "9px system-ui, sans-serif";
-          ctx.fillText(`+${group.length - maxPerClass} more`, labelW - 8, y + hdrH / 2 + 3);
+        // Class header (hide in compact mode)
+        if (!compact) {
+          ctx.fillStyle = classColor;
+          ctx.font = "bold 10px system-ui, sans-serif";
+          ctx.textAlign = "left";
+          ctx.fillText(`${cls} (${group.length})`, 4, y + hdrH / 2 + 3);
+          if (!isExpanded && group.length > maxPerClass) {
+            ctx.fillStyle = "#9ca3af";
+            ctx.font = "9px system-ui, sans-serif";
+            ctx.fillText(`+${group.length - maxPerClass} more`, labelW - 8, y + hdrH / 2 + 3);
+          }
         }
-        y += hdrH;
+        y += compact ? 4 : hdrH;
 
         for (const car of shown) {
           drawCarRow(car, y, classColor);

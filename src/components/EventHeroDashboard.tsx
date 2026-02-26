@@ -98,25 +98,27 @@ function RaceControlMini({ sections }: { sections: any[] }) {
 
 function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; showGap?: boolean; showPosition?: boolean }) {
   return (
-    <div className="flex items-center gap-4 py-2">
+    <div className="flex items-center gap-3 py-2">
       <div className="flex-1 min-w-0">
-        <div className="flex flex-col gap-0.5">
-          {entry.drivers.map((d, i) => (
-            <span key={i} className="text-sm font-medium text-foreground whitespace-nowrap flex items-center gap-1">
-              <FlagImage nationality={d.nationality} size={14} />
-              {d.id ? (
-                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
-              ) : d.name}
-            </span>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-          {entry.car_number && <span className="font-mono">#{entry.car_number}</span>}
-          {entry.team_id ? (
-            <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors">{entry.teamName}</Link>
-          ) : (
-            <span>{entry.teamName}</span>
-          )}
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-0.5">
+            {entry.drivers.map((d, i) => (
+              <span key={i} className="text-[13px] font-medium text-foreground whitespace-nowrap flex items-center gap-1">
+                <FlagImage nationality={d.nationality} size={14} />
+                {d.id ? (
+                  <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
+                ) : d.name}
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-col text-xs text-muted-foreground whitespace-nowrap">
+            {entry.car_number && <span className="font-mono">#{entry.car_number}</span>}
+            {entry.team_id ? (
+              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors">{entry.teamName}</Link>
+            ) : (
+              <span>{entry.teamName}</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -138,7 +140,7 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
         )}
       </div>
 
-      <div className="shrink-0 text-right space-y-0.5 min-w-[60px]">
+      <div className="shrink-0 text-right space-y-0.5 min-w-[50px]">
         {entry.laps_completed != null && (
           <p className="text-[11px] text-muted-foreground">{entry.laps_completed} laps</p>
         )}
@@ -247,6 +249,7 @@ export default function EventHeroDashboard({
     ? hourSessions[hourSessions.length - 1].id
     : raceSession?.id;
 
+  // Fetch position data from last hour session (1 driver per car)
   const { data: raceResults = [] } = useQuery({
     queryKey: ["hero_race_results", resultsSessionId],
     queryFn: async () => {
@@ -255,21 +258,39 @@ export default function EventHeroDashboard({
         .select("*, v2_drivers(id, full_name, nationality), v2_teams(id, full_name, short_name)")
         .eq("session_id", resultsSessionId)
         .order("position");
-      const grouped = new Map<string, any>();
-      for (const row of (data || []) as any[]) {
-        const key = row.car_number ? `${row.car_number}-${row.position}` : row.id;
-        if (grouped.has(key)) {
-          const existing = grouped.get(key);
-          if (!existing._drivers) existing._drivers = [{ id: existing.v2_drivers?.id, name: existing.v2_drivers?.full_name, nationality: existing.v2_drivers?.nationality }];
-          existing._drivers.push({ id: row.v2_drivers?.id, name: row.v2_drivers?.full_name, nationality: row.v2_drivers?.nationality });
-        } else {
-          grouped.set(key, { ...row, _drivers: [{ id: row.v2_drivers?.id, name: row.v2_drivers?.full_name, nationality: row.v2_drivers?.nationality }] });
-        }
-      }
-      return [...grouped.values()];
+      return (data || []) as any[];
     },
     enabled: !!resultsSessionId,
   });
+
+  // For endurance races, fetch ALL drivers from the main race session (has 3-4 drivers per car)
+  const enduranceDriverSessionId = isEndurance ? raceSession?.id : null;
+  const { data: enduranceDrivers = [] } = useQuery({
+    queryKey: ["hero_endurance_drivers", enduranceDriverSessionId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("v2_race_results" as any)
+        .select("car_number, v2_drivers(id, full_name, nationality)")
+        .eq("session_id", enduranceDriverSessionId);
+      return (data || []) as any[];
+    },
+    enabled: !!enduranceDriverSessionId,
+  });
+
+  // Build a map of car_number -> all drivers (for endurance)
+  const enduranceDriverMap = useMemo(() => {
+    const m: Record<string, { id: string | null; name: string; nationality: string | null }[]> = {};
+    for (const row of enduranceDrivers) {
+      if (!row.car_number || !row.v2_drivers) continue;
+      if (!m[row.car_number]) m[row.car_number] = [];
+      const driver = { id: row.v2_drivers.id, name: row.v2_drivers.full_name, nationality: row.v2_drivers.nationality };
+      // Avoid duplicates
+      if (!m[row.car_number].some((d: any) => d.id === driver.id)) {
+        m[row.car_number].push(driver);
+      }
+    }
+    return m;
+  }, [enduranceDrivers]);
 
   const { data: liveries = [] } = useQuery({
     queryKey: ["car_liveries", seasonId],
@@ -304,6 +325,10 @@ export default function EventHeroDashboard({
         const r = sorted[i];
         const teamId = r.v2_teams?.id || r.team_id;
         const teamName = teamId && teamNameMap[teamId] ? teamNameMap[teamId] : r.v2_teams?.short_name || r.v2_teams?.full_name || "—";
+        // Use endurance driver map if available, otherwise fallback to single driver from results
+        const drivers = (r.car_number && enduranceDriverMap[r.car_number]?.length > 0)
+          ? enduranceDriverMap[r.car_number]
+          : [{ id: r.v2_drivers?.id, name: r.v2_drivers?.full_name, nationality: r.v2_drivers?.nationality }];
         entries.push({
           position: i + 1,
           car_number: r.car_number,
@@ -311,14 +336,14 @@ export default function EventHeroDashboard({
           team_id: teamId,
           teamName,
           className: cls,
-          drivers: r._drivers || [{ id: r.v2_drivers?.id, name: r.v2_drivers?.full_name, nationality: r.v2_drivers?.nationality }],
+          drivers,
           liveryUrl: r.car_number ? liveryMap[r.car_number] || null : null,
           laps_completed: r.laps_completed ?? null,
         });
       }
     }
     return entries;
-  }, [raceResults, liveryMap, teamNameMap]);
+  }, [raceResults, liveryMap, teamNameMap, enduranceDriverMap]);
 
   // Layout/fingerprint
   const layoutId = raceSession?.layout_id || event?.layout_id;
@@ -354,13 +379,22 @@ export default function EventHeroDashboard({
           <div className="space-y-3">
             {classNames.map(cls => (
               <div key={cls} className="rounded-lg border border-border bg-card p-4">
-                <h3 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
-                  {cls} {showTop3 ? "Podium" : "Winner"}
-                </h3>
                 {winners
                   .filter(w => w.className === cls)
                   .map((w, i) => (
-                    <WinnerCard key={`${cls}-${i}`} entry={w} showGap={showTop3} showPosition={false} />
+                    <div key={`${cls}-${i}`}>
+                      {i === 0 && (
+                        <h3 className="text-sm font-bold text-primary uppercase tracking-wider mb-1">
+                          {cls} {showTop3 && w.position > 1 ? `P${w.position}` : "Winner"}
+                        </h3>
+                      )}
+                      {showTop3 && i > 0 && (
+                        <div className="border-t border-border mt-1 pt-1">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase">P{w.position}</span>
+                        </div>
+                      )}
+                      <WinnerCard entry={w} showGap={showTop3} showPosition={false} />
+                    </div>
                   ))}
               </div>
             ))}
