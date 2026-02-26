@@ -76,6 +76,7 @@ const HEADER_HEIGHT = 20;
 const STRIP_HEIGHT = 18;
 const TOP_MARGIN = 40;
 const LABEL_WIDTH = 70;
+const COMPACT_LABEL_WIDTH = 45;
 const RIGHT_PAD = 16;
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -443,15 +444,19 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
 
     // ── Time axis ticks ──
     const axisY = TOP_MARGIN - STRIP_HEIGHT - 8;
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "9px system-ui, sans-serif";
-    ctx.textAlign = "center";
+    if (!compact) {
+      ctx.fillStyle = "#6b7280";
+      ctx.font = "9px system-ui, sans-serif";
+      ctx.textAlign = "center";
+    }
     const tickInterval = viewDuration > 14400 ? 3600 : viewDuration > 3600 ? 1800 : viewDuration > 600 ? 300 : 60;
     const firstTick = Math.ceil(viewRange[0] / tickInterval) * tickInterval;
     for (let t = firstTick; t <= viewRange[1]; t += tickInterval) {
       const x = elapsed2x(t);
       if (x < LABEL_WIDTH || x > LABEL_WIDTH + chartWidth) continue;
-      ctx.fillText(formatElapsed(t), x, axisY);
+      if (!compact) {
+        ctx.fillText(formatElapsed(t), x, axisY);
+      }
       ctx.strokeStyle = "rgba(107, 114, 128, 0.15)";
       ctx.lineWidth = 0.5;
       ctx.beginPath();
@@ -553,7 +558,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       }
 
       // Driver change initials (non-compare mode)
-      if (!compareMode) {
+      if (!compareMode && !compact) {
         let prevDriverId: string | null = null;
         for (const stint of carStints) {
           if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) {
@@ -653,7 +658,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         }
       }
     }
-  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars]);
+  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars, compact]);
 
   useEffect(() => {
     drawCanvas();

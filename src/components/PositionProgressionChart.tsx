@@ -71,6 +71,7 @@ export default function PositionProgressionChart({
   teamNameMap,
   activeHourId,
   isMulticlass,
+  compact,
 }: Props) {
   const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
   const [highlightedCar, setHighlightedCar] = useState<string | null>(null);
@@ -284,7 +285,8 @@ export default function PositionProgressionChart({
   const showClassFilter = allClasses.length > 1;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+    <div className={compact ? "h-full flex flex-col" : "rounded-lg border border-border bg-card p-4 space-y-4"}>
+      {!compact && (
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-card-foreground">Position Progression</h3>
         <div className="flex flex-wrap items-center gap-2">
@@ -325,17 +327,18 @@ export default function PositionProgressionChart({
           )}
         </div>
       </div>
+      )}
 
       <div
         ref={chartContainerRef}
-        className="w-full relative"
-        style={{ height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}
+        className={`w-full relative ${compact ? "flex-1" : ""}`}
+        style={compact ? undefined : { height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}
         onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}
-            margin={{ top: 10, right: 20, bottom: 10, left: 50 }}
+            margin={{ top: 10, right: 10, bottom: 10, left: compact ? 5 : 50 }}
             onMouseMove={(state: any) => {
               if (!state || state.activeTooltipIndex == null || !state.chartX || !state.chartY) {
                 return;
@@ -395,7 +398,8 @@ export default function PositionProgressionChart({
               axisLine={{ stroke: "hsl(var(--border))" }}
               tickLine={false}
               allowDecimals={false}
-              label={{ value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } }}
+              width={compact ? 25 : 50}
+              {...(!compact && { label: { value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } } })}
             />
             <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
             {activeHourIndex && activeHourIndex > 0 && (
@@ -460,7 +464,8 @@ export default function PositionProgressionChart({
         })()}
       </div>
 
-      {/* Car legend */}
+      {/* Car legend — hidden in compact mode */}
+      {!compact && (
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
         {filteredSeries.map((car) => (
           <button
@@ -485,6 +490,7 @@ export default function PositionProgressionChart({
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

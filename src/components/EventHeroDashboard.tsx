@@ -7,6 +7,7 @@ import FlagImage from "@/components/FlagImage";
 import { computeTrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import StrategyTimeline from "@/components/StrategyTimeline";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ interface WinnerEntry {
   className: string;
   drivers: { id: string | null; name: string; nationality: string | null }[];
   liveryUrl: string | null;
+  laps_completed: number | null;
 }
 
 interface EventHeroDashboardProps {
@@ -40,25 +42,24 @@ function WeatherCard({ weather }: { weather: any }) {
   if (!weather) return null;
   const emoji = weather.condition_emoji || "🌤️";
   return (
-    <div className="rounded-lg border border-border bg-card p-4 h-full">
-      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Weather</h4>
-      <div className="space-y-1.5 text-sm">
-        <p>
-          <span className="mr-1.5">{emoji}</span>
-          <span className="text-foreground font-medium">{weather.condition_summary || "No data"}</span>
-        </p>
-        {(weather.air_temp_min != null || weather.air_temp_max != null) && (
-          <p className="text-muted-foreground text-xs">Air: {weather.air_temp_min}–{weather.air_temp_max} °C</p>
-        )}
-        {(weather.track_temp_min != null || weather.track_temp_max != null) && (
-          <p className="text-muted-foreground text-xs">Track: {weather.track_temp_min}–{weather.track_temp_max} °C</p>
-        )}
-        {weather.rain_mm != null && weather.rain_mm > 0 && (
-          <p className="text-muted-foreground text-xs">Rain: {weather.rain_mm} mm{weather.rain_detail ? ` (${weather.rain_detail})` : ""}</p>
-        )}
-        {weather.wind_summary && (
-          <p className="text-muted-foreground text-xs">Wind: {weather.wind_summary}</p>
-        )}
+    <div className="rounded-lg border border-border bg-card px-4 py-3 h-full">
+      <div className="flex items-start gap-3">
+        <span className="text-2xl leading-none mt-0.5">{emoji}</span>
+        <div className="space-y-0.5 text-xs">
+          <p className="text-foreground font-medium text-sm">{weather.condition_summary || "No data"}</p>
+          {(weather.air_temp_min != null || weather.air_temp_max != null) && (
+            <p className="text-muted-foreground">Air: {weather.air_temp_min}–{weather.air_temp_max} °C</p>
+          )}
+          {(weather.track_temp_min != null || weather.track_temp_max != null) && (
+            <p className="text-muted-foreground">Track: {weather.track_temp_min}–{weather.track_temp_max} °C</p>
+          )}
+          {weather.rain_mm != null && weather.rain_mm > 0 && (
+            <p className="text-muted-foreground">Rain: {weather.rain_mm} mm{weather.rain_detail ? ` (${weather.rain_detail})` : ""}</p>
+          )}
+          {weather.wind_summary && (
+            <p className="text-muted-foreground">Wind: {weather.wind_summary}</p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -147,10 +148,12 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
         </div>
       </div>
 
-      <div className="shrink-0 text-right">
-        <span className="text-xs font-semibold text-muted-foreground">{entry.className}</span>
+      <div className="shrink-0 text-right space-y-0.5">
         {showGap && entry.gap_to_leader && entry.position > 1 && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">{entry.gap_to_leader}</p>
+          <p className="text-[11px] text-muted-foreground">{entry.gap_to_leader}</p>
+        )}
+        {entry.laps_completed != null && (
+          <p className="text-[11px] text-muted-foreground">{entry.laps_completed} laps</p>
         )}
       </div>
     </div>
@@ -320,6 +323,7 @@ export default function EventHeroDashboard({
           className: cls,
           drivers: r._drivers || [{ id: r.v2_drivers?.id, name: r.v2_drivers?.full_name, nationality: r.v2_drivers?.nationality }],
           liveryUrl: r.car_number ? liveryMap[r.car_number] || null : null,
+          laps_completed: r.laps_completed ?? null,
         });
       }
     }
@@ -360,7 +364,7 @@ export default function EventHeroDashboard({
           <div className="space-y-3">
             {classNames.map(cls => (
               <div key={cls} className="rounded-lg border border-border bg-card p-4">
-                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-bold text-primary uppercase tracking-wider mb-1">
                   {cls} {showTop3 ? "Podium" : "Winner"}
                 </h3>
                 {winners
@@ -382,10 +386,11 @@ export default function EventHeroDashboard({
             />
 
             {hasFingerprint && layoutData && trackMetrics && (
+              <TooltipProvider delayDuration={200}>
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center gap-5">
                   {layoutData.layout_image_url && (
-                    <div className="shrink-0 w-[120px]">
+                    <div className="shrink-0 w-[100px]">
                       <img
                         src={layoutData.layout_image_url}
                         alt={layoutData.name ? `${layoutData.name} layout` : "Circuit layout"}
@@ -402,22 +407,55 @@ export default function EventHeroDashboard({
                       {layoutData.turns != null && <span>{layoutData.turns} turns</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 ml-auto">
+                  <div className="flex items-center gap-3 ml-auto">
                     {trackMetrics.tdi != null && trackMetrics.tdiCategory && (
-                      <div className="text-center">
-                        <span className="font-display text-2xl font-bold" style={{ color: computeTrackMetrics ? categoryHexColor(trackMetrics.tdiCategory) : undefined }}>{Math.round(trackMetrics.tdi)}</span>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Demand</p>
-                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-center cursor-default">
+                            <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.tdiCategory) }}>{Math.round(trackMetrics.tdi)}</span>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Demand</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.tdiCategory}</p><p className="text-[10px] text-muted-foreground">Track Demand Index — overall physical challenge</p></TooltipContent>
+                      </Tooltip>
                     )}
                     {trackMetrics.tcs100 != null && trackMetrics.tcsCategory && (
-                      <div className="text-center">
-                        <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.tcsCategory) }}>{Math.round(trackMetrics.tcs100)}</span>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Character</p>
-                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-center cursor-default">
+                            <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.tcsCategory) }}>{Math.round(trackMetrics.tcs100)}</span>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Character</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.tcsCategory}</p><p className="text-[10px] text-muted-foreground">Track Character Score — power vs technical balance</p></TooltipContent>
+                      </Tooltip>
+                    )}
+                    {trackMetrics.ei != null && trackMetrics.eiCategory && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-center cursor-default">
+                            <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.eiCategory) }}>{Math.round(trackMetrics.ei)}</span>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Elevation</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.eiCategory}</p><p className="text-[10px] text-muted-foreground">Elevation Index — total altitude variation</p></TooltipContent>
+                      </Tooltip>
+                    )}
+                    {trackMetrics.csi != null && trackMetrics.csiCategory && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="text-center cursor-default">
+                            <span className="font-display text-2xl font-bold" style={{ color: categoryHexColor(trackMetrics.csiCategory) }}>{Math.round(trackMetrics.csi)}</span>
+                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Braking</p>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.csiCategory}</p><p className="text-[10px] text-muted-foreground">Corner Severity Index — heavy braking demand</p></TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
                 </div>
               </div>
+              </TooltipProvider>
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
