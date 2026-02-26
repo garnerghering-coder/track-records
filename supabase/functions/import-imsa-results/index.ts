@@ -421,11 +421,14 @@ function deriveStrategyRowsFromTimeCard(
       if (delta <= 0) continue;
 
       const currentFlag = strategyFlagAtElapsed(flagEvents, prev.elapsedSec);
-      const cautionThreshold = Math.max(basePitThreshold + 20, medianLap * 1.7);
-      const threshold = currentFlag === "GREEN" ? basePitThreshold : cautionThreshold;
+      const isCaution = currentFlag !== "GREEN";
+      // Under caution/SC, lap times can be 3-5x normal — use a very high threshold
+      // to avoid splitting every slow caution lap into its own stint
+      const cautionThreshold = Math.max(basePitThreshold * 3, medianLap * 4);
+      const threshold = isCaution ? cautionThreshold : basePitThreshold;
 
       const driverChanged = normalizeName(curr.driverName) !== normalizeName(currentDriverName);
-      const hasPitGap = delta >= threshold && delta >= medianLap + 20;
+      const hasPitGap = delta >= threshold && delta >= (isCaution ? medianLap * 3 : medianLap + 20);
 
       if (hasPitGap) {
         closeStint(prev);
