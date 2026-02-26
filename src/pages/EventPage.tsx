@@ -19,6 +19,7 @@ import WeatherBubble from "@/components/WeatherBubble";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
 import TrackFingerprint from "@/components/TrackFingerprint";
 import { computeTrackMetrics } from "@/lib/track-calculations";
+import SessionBottomTabs from "@/components/SessionBottomTabs";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -274,17 +275,10 @@ function EnduranceRaceView({
         hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
         isOverallEnduranceView={!isHourView}
         isMulticlass={isMulticlass}
+        layout={layout}
+        enduranceHourSessions={hourSessions}
+        enduranceActiveHourId={isHourView ? displaySessionId : undefined}
       />
-
-      {/* Position Progression Chart */}
-      {hourSessions.length > 0 && (
-        <PositionProgressionChart
-          hourSessions={hourSessions}
-          teamNameMap={teamNameMap}
-          activeHourId={isHourView ? displaySessionId : undefined}
-          isMulticlass={isMulticlass}
-        />
-      )}
     </div>
   );
 }
@@ -325,6 +319,8 @@ function SessionResults({
   isOverallEnduranceView,
   isMulticlass,
   layout,
+  enduranceHourSessions,
+  enduranceActiveHourId,
 }: {
   session: any;
   event: any;
@@ -337,6 +333,8 @@ function SessionResults({
   isOverallEnduranceView?: boolean;
   isMulticlass?: boolean;
   layout?: any;
+  enduranceHourSessions?: any[];
+  enduranceActiveHourId?: string;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -752,53 +750,18 @@ function SessionResults({
         </div>
       )}
 
-      {/* Annotation sections */}
-      {annotationSections.map((section: any) => {
-        const items = (section.v2_annotation_items || []).sort((a: any, b: any) => a.sort_order - b.sort_order);
-        if (items.length === 0) return null;
-        return (
-          <div key={section.id} className="space-y-2">
-            <h4 className="text-sm font-semibold">{section.title}</h4>
-            <div className="space-y-1">
-              {items.map((item: any) => (
-                <div key={item.id} className="text-xs text-muted-foreground border-l-2 pl-3 py-1" style={{ borderColor: item.color }}>
-                  {item.description}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Circuit Configuration Fingerprint */}
-      {(() => {
-        // Use session-level layout_id override, or event-level layout
-        const layoutId = (session as any).layout_id || (event as any).layout_id;
-        const layoutData = layout && Array.isArray(layout)
-          ? layout.find((l: any) => l.id === layoutId) || (layout.length === 1 ? layout[0] : null)
-          : null;
-        if (!layoutData) return null;
-        const m = computeTrackMetrics(
-          layoutData.length_km ? Number(layoutData.length_km) : null,
-          layoutData.turns,
-          layoutData.total_straight_length_km ? Number(layoutData.total_straight_length_km) : null,
-          layoutData.total_elevation_change_m ? Number(layoutData.total_elevation_change_m) : null,
-          layoutData.heavy_braking_corners
-        );
-        if (m.tcs100 == null && m.ei == null && m.csi == null) return null;
-        return (
-          <div className="mt-6 rounded-lg border border-border bg-card p-5">
-            <h4 className="text-sm font-semibold mb-3">Circuit Fingerprint</h4>
-            <TrackFingerprint
-              metrics={m}
-              layoutImageUrl={layoutData.layout_image_url}
-              layoutName={layoutData.name}
-              lengthKm={layoutData.length_km}
-              turns={layoutData.turns}
-            />
-          </div>
-        );
-      })()}
+      {/* Bottom tabbed sections (manila folder style) */}
+      <SessionBottomTabs
+        session={session}
+        event={event}
+        layout={layout}
+        annotationSections={annotationSections}
+        isOverallEnduranceView={isOverallEnduranceView}
+        hourSessions={enduranceHourSessions}
+        teamNameMap={teamNameMap}
+        isMulticlass={isMulticlass}
+        activeHourId={enduranceActiveHourId}
+      />
     </div>
   );
 }

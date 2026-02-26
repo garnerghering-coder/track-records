@@ -1276,7 +1276,7 @@ serve(async (req) => {
           if (time) parts.push(`[${time}]`);
           if (elapsed && elapsed !== "-") parts.push(`(+${elapsed})`);
           if (lap > 0) parts.push(`Lap ${lap}`);
-          if (flagName) parts.push(`🏁 ${flagName}`);
+          if (flagName) parts.push(flagName);
           if (message) parts.push(message);
 
           return {
