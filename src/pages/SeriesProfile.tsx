@@ -1,12 +1,15 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Trophy, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Trophy, ChevronDown, ChevronUp, FileDown } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import EventCard from "@/components/EventCard";
 import { useEventPodiums } from "@/hooks/useEventPodiums";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { exportStandingsPdf } from "@/lib/standings-pdf-export";
 
 interface DisplayEvent {
   id: string;
@@ -168,8 +171,105 @@ function PodiumDisplay({ standings, className: classLabel }: { standings: Standi
   );
 }
 
-function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap }: {
+function StandingsSection({ standings, classes, isMulticlass, year, seasonId, seriesName }: {
+  standings: StandingEntry[];
+  classes: { id: string; name: string }[];
+  isMulticlass: boolean;
+  year: number;
+  seasonId: string;
+  seriesName: string;
+}) {
+  const [exporting, setExporting] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const handleExport = async (cls?: string | null) => {
+    setExporting(true);
+    setProgress(5);
+    try {
+      await exportStandingsPdf({
+        seriesName,
+        year,
+        seasonId,
+        className: cls,
+        onProgress: setProgress,
+      });
+      setProgress(100);
+      setTimeout(() => {
+        setExporting(false);
+        setProgress(0);
+      }, 800);
+    } catch (e: any) {
+      console.error("Standings PDF export failed:", e);
+      setExporting(false);
+      setProgress(0);
+      alert("PDF export failed: " + (e?.message || "Unknown error"));
+    }
+  };
+
+  return (
+    <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-display text-sm font-semibold text-foreground flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-yellow-500" />
+          {year} Championship Standings
+        </h4>
+        {!exporting && (
+          isMulticlass ? (
+            <div className="flex gap-1">
+              {classes.map((cls) => (
+                <Button
+                  key={cls.id}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                  onClick={() => handleExport(cls.name)}
+                >
+                  <FileDown className="h-3 w-3" />
+                  {cls.name}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+              onClick={() => handleExport(null)}
+            >
+              <FileDown className="h-3 w-3" />
+              Export PDF
+            </Button>
+          )
+        )}
+      </div>
+      {exporting && (
+        <div className="mb-3 space-y-1">
+          <Progress value={progress} className="h-1.5" />
+          <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}%</p>
+        </div>
+      )}
+      {isMulticlass ? (
+        <div className="grid gap-6 sm:grid-cols-2">
+          {classes.map((cls) => {
+            const classStandings = standings
+              .filter(s => s.className === cls.name)
+              .sort((a, b) => b.totalPoints - a.totalPoints)
+              .map((s, i) => ({ ...s, position: i + 1 }));
+            return (
+              <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
+            );
+          })}
+        </div>
+      ) : (
+        <PodiumDisplay standings={standings} />
+      )}
+    </div>
+  );
+}
+
+function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap, seriesName }: {
   events: DisplayEvent[];
+  seriesName: string;
   seasonsGrouped: Record<number, { events: DisplayEvent[]; seasonId: string }>;
   seasonStandings: Record<string, StandingEntry[]>;
   seasonClassMap: Record<string, { id: string; name: string }[]>;
@@ -194,27 +294,14 @@ function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap
                 <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
 
                 {standings.length > 0 && (
-                  <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
-                    <h4 className="font-display text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                      <Trophy className="h-4 w-4 text-yellow-500" />
-                      {year} Championship Standings
-                    </h4>
-                    {isMulticlass ? (
-                      <div className="grid gap-6 sm:grid-cols-2">
-                        {classes.map((cls) => {
-                          const classStandings = standings
-                            .filter(s => s.className === cls.name)
-                            .sort((a, b) => b.totalPoints - a.totalPoints)
-                            .map((s, i) => ({ ...s, position: i + 1 }));
-                          return (
-                            <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <PodiumDisplay standings={standings} />
-                    )}
-                  </div>
+                  <StandingsSection
+                    standings={standings}
+                    classes={classes}
+                    isMulticlass={isMulticlass}
+                    year={Number(year)}
+                    seasonId={seasonId}
+                    seriesName={seriesName}
+                  />
                 )}
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -458,7 +545,7 @@ const SeriesProfile = () => {
         </div>
       </section>
 
-      <EventsSection events={events} seasonsGrouped={seasonsGrouped} seasonStandings={seasonStandings} seasonClassMap={seasonClassMap} />
+      <EventsSection events={events} seasonsGrouped={seasonsGrouped} seasonStandings={seasonStandings} seasonClassMap={seasonClassMap} seriesName={series.name} />
       <Footer />
     </div>
   );
