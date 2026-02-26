@@ -288,7 +288,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
           .in("session_id", sessIds),
         supabase
           .from("v2_qualifying_results" as any)
-          .select("car_number, driver_id, points, extra_data, session_id, v2_drivers(full_name), v2_teams(id, full_name)")
+          .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
           .in("session_id", sessIds),
         supabase
           .from("v2_practice_results" as any)
