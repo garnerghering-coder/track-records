@@ -17,6 +17,8 @@ export default function ManageCars() {
   const [form, setForm] = useState({ model_name: "", manufacturer: "" });
   const [search, setSearch] = useState("");
   const [unusedOnly, setUnusedOnly] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: cars = [], isLoading } = useQuery({
     queryKey: ["v2_cars"],
@@ -52,6 +54,26 @@ export default function ManageCars() {
     return list;
   }, [cars, search, unusedOnly, usedCarIds]);
 
+  const filteredIds = useMemo(() => new Set(filtered.map((c: any) => c.id)), [filtered]);
+  const allSelected = filtered.length > 0 && filtered.every((c: any) => selected.has(c.id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(prev => { const next = new Set(prev); filtered.forEach((c: any) => next.delete(c.id)); return next; });
+    } else {
+      setSelected(prev => { const next = new Set(prev); filtered.forEach((c: any) => next.add(c.id)); return next; });
+    }
+  };
+  const toggleOne = (id: string) => {
+    setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+
+  const activeSelected = useMemo(() => {
+    const s = new Set<string>();
+    selected.forEach(id => { if (filteredIds.has(id)) s.add(id); });
+    return s;
+  }, [selected, filteredIds]);
+
   const save = useMutation({
     mutationFn: async () => {
       const payload = { model_name: form.model_name, manufacturer: form.manufacturer || null };
@@ -71,6 +93,22 @@ export default function ManageCars() {
   const openNew = () => { setEditing(null); setForm({ model_name: "", manufacturer: "" }); setOpen(true); };
   const openEdit = (c: any) => { setEditing(c); setForm({ model_name: c.model_name, manufacturer: c.manufacturer || "" }); setOpen(true); };
 
+  const handleBulkDelete = async () => {
+    const ids = Array.from(activeSelected);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} car(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const id of ids) {
+      const { error } = await supabase.from("v2_cars").delete().eq("id", id);
+      if (!error) deleted++;
+    }
+    toast.success(`Deleted ${deleted} car(s)`);
+    setSelected(new Set());
+    qc.invalidateQueries({ queryKey: ["v2_cars"] });
+    setBulkDeleting(false);
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -87,12 +125,30 @@ export default function ManageCars() {
           Unused only
         </label>
       </div>
+
+      {activeSelected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2">
+          <span className="text-sm font-medium">{activeSelected.size} selected</span>
+          <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            {bulkDeleting ? "Deleting…" : "Delete"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="ml-auto text-xs">Clear</Button>
+        </div>
+      )}
+
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Model</TableHead><TableHead>Manufacturer</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10"><Checkbox checked={allSelected && filtered.length > 0} onCheckedChange={toggleAll} /></TableHead>
+              <TableHead>Model</TableHead><TableHead>Manufacturer</TableHead><TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {filtered.map((c: any) => (
-              <TableRow key={c.id}>
+              <TableRow key={c.id} data-state={selected.has(c.id) ? "selected" : undefined}>
+                <TableCell><Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggleOne(c.id)} /></TableCell>
                 <TableCell className="font-medium">{c.model_name}</TableCell>
                 <TableCell>{c.manufacturer}</TableCell>
                 <TableCell className="flex gap-1">
@@ -101,7 +157,7 @@ export default function ManageCars() {
                 </TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-4">No cars found.</TableCell></TableRow>}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No cars found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}

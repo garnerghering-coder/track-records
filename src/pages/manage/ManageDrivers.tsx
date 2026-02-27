@@ -22,6 +22,9 @@ export default function ManageDrivers() {
   const [enriching, setEnriching] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [recalcSingle, setRecalcSingle] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkRecalcing, setBulkRecalcing] = useState(false);
 
   const { data: drivers = [], isLoading } = useQuery({
     queryKey: ["v2_drivers"],
@@ -56,6 +59,28 @@ export default function ManageDrivers() {
     }
     return list;
   }, [drivers, search, unusedOnly, usedDriverIds]);
+
+  const filteredIds = useMemo(() => new Set(filtered.map(d => d.id)), [filtered]);
+  const allSelected = filtered.length > 0 && filtered.every(d => selected.has(d.id));
+  const someSelected = selected.size > 0;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(prev => { const next = new Set(prev); filtered.forEach(d => next.delete(d.id)); return next; });
+    } else {
+      setSelected(prev => { const next = new Set(prev); filtered.forEach(d => next.add(d.id)); return next; });
+    }
+  };
+  const toggleOne = (id: string) => {
+    setSelected(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+
+  // Keep selected in sync with filtered (remove stale selections)
+  const activeSelected = useMemo(() => {
+    const s = new Set<string>();
+    selected.forEach(id => { if (filteredIds.has(id)) s.add(id); });
+    return s;
+  }, [selected, filteredIds]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -124,6 +149,35 @@ export default function ManageDrivers() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    const ids = Array.from(activeSelected);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} driver(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    let deleted = 0;
+    for (const id of ids) {
+      const { error } = await supabase.from("v2_drivers").delete().eq("id", id);
+      if (!error) deleted++;
+    }
+    toast.success(`Deleted ${deleted} driver(s)`);
+    setSelected(new Set());
+    qc.invalidateQueries({ queryKey: ["v2_drivers"] });
+    setBulkDeleting(false);
+  };
+
+  const handleBulkRecalc = async () => {
+    const ids = Array.from(activeSelected);
+    if (!ids.length) return;
+    setBulkRecalcing(true);
+    let count = 0;
+    for (const id of ids) {
+      const { error } = await supabase.functions.invoke("recalculate-driver-fingerprint", { body: { driver_id: id } });
+      if (!error) count++;
+    }
+    toast.success(`Recalculated fingerprints for ${count} driver(s)`);
+    setBulkRecalcing(false);
+  };
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -152,12 +206,37 @@ export default function ManageDrivers() {
           Unused only
         </label>
       </div>
+
+      {/* Bulk action bar */}
+      {activeSelected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2">
+          <span className="text-sm font-medium">{activeSelected.size} selected</span>
+          <Button size="sm" variant="outline" onClick={handleBulkRecalc} disabled={bulkRecalcing}>
+            <Calculator className={`h-3.5 w-3.5 mr-1 ${bulkRecalcing ? "animate-spin" : ""}`} />
+            {bulkRecalcing ? "Recalculating…" : "Recalculate"}
+          </Button>
+          <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            {bulkDeleting ? "Deleting…" : "Delete"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="ml-auto text-xs">Clear</Button>
+        </div>
+      )}
+
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Hometown</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" /></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <Checkbox checked={allSelected && filtered.length > 0} onCheckedChange={toggleAll} />
+              </TableHead>
+              <TableHead>Name</TableHead><TableHead>Hometown</TableHead><TableHead>DOB</TableHead><TableHead className="w-20" />
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {filtered.map(d => (
-              <TableRow key={d.id}>
+              <TableRow key={d.id} data-state={selected.has(d.id) ? "selected" : undefined}>
+                <TableCell><Checkbox checked={selected.has(d.id)} onCheckedChange={() => toggleOne(d.id)} /></TableCell>
                 <TableCell className="font-medium">{d.full_name}</TableCell>
                 <TableCell>{d.nationality}</TableCell>
                 <TableCell>{d.date_of_birth}</TableCell>
@@ -170,7 +249,7 @@ export default function ManageDrivers() {
                 </TableCell>
               </TableRow>
             ))}
-            {filtered.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">No drivers found.</TableCell></TableRow>}
+            {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-4">No drivers found.</TableCell></TableRow>}
           </TableBody>
         </Table>
       )}
