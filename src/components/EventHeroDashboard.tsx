@@ -100,9 +100,9 @@ function RaceControlMini({ sections }: { sections: any[] }) {
 function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; showGap?: boolean; showPosition?: boolean }) {
   return (
     <div className="flex items-center gap-3 py-2">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col gap-0.5">
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex flex-col gap-0.5 shrink-0">
             {entry.drivers.map((d, i) => (
               <span key={i} className="text-[13px] font-medium text-foreground whitespace-nowrap flex items-center gap-1">
                 <FlagImage nationality={d.nationality} size={14} />
@@ -112,18 +112,18 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
               </span>
             ))}
           </div>
-          <div className="flex flex-col text-xs text-muted-foreground whitespace-nowrap">
-            {entry.car_number && <span className="font-mono">#{entry.car_number}</span>}
+          <div className="flex flex-col text-xs text-muted-foreground min-w-0">
+            {entry.car_number && <span className="font-mono whitespace-nowrap">#{entry.car_number}</span>}
             {entry.team_id ? (
-              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors">{entry.teamName}</Link>
+              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors truncate">{entry.teamName}</Link>
             ) : (
-              <span>{entry.teamName}</span>
+              <span className="truncate">{entry.teamName}</span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="shrink-0 w-[240px]">
+      <div className="shrink-0 w-[180px] xl:w-[240px]">
         {entry.liveryUrl ? (
           <img
             src={entry.liveryUrl}
