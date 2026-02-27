@@ -1,0 +1,1 @@
+ALTER TABLE public.v2_season_classes ADD COLUMN IF NOT EXISTS color text NOT NULL DEFAULT '#3b82f6';

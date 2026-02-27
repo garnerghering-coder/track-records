@@ -48,9 +48,9 @@ interface HourPosition {
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const DEFAULT_CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const CLASS_COLORS: Record<string, string> = {
+const DEFAULT_CLASS_COLORS: Record<string, string> = {
   GTP: "#e63946",
   GTDPRO: "#457b9d",
   GTD: "#2a9d8f",
@@ -91,8 +91,8 @@ function formatElapsed(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function getClassColor(cls: string): string {
-  return CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
+function getClassColor(cls: string, classColors: Record<string, string>): string {
+  return classColors[cls] || classColors[cls.toUpperCase()] || DEFAULT_CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
 }
 
 /** Compute green-flag duration within a stint by intersecting with flag segments */
@@ -125,9 +125,10 @@ interface StrategyTimelineProps {
   teamNameMap: Record<string, string>;
   isMulticlass?: boolean;
   compact?: boolean;
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }
 
-export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass, compact }: StrategyTimelineProps) {
+export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass, compact, seasonClasses }: StrategyTimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null);
@@ -262,17 +263,34 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     return map;
   }, [raceResults, teamNameMap]);
 
+  const classColors = useMemo(() => {
+    const map: Record<string, string> = { ...DEFAULT_CLASS_COLORS };
+    if (seasonClasses) {
+      for (const sc of seasonClasses) map[sc.class_name] = sc.color;
+    }
+    return map;
+  }, [seasonClasses]);
+
+  const classOrder = useMemo(() => {
+    if (seasonClasses && seasonClasses.length > 0) {
+      return seasonClasses.map(sc => sc.class_name);
+    }
+    return DEFAULT_CLASS_ORDER;
+  }, [seasonClasses]);
+
   const allClasses = useMemo(() => {
     const classes = new Set<string>();
     for (const [, info] of carInfoMap) {
       if (info.className) classes.add(info.className);
     }
     return Array.from(classes).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
-      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      const ai = classOrder.indexOf(a);
+      const aiU = ai === -1 ? classOrder.indexOf(a.toUpperCase()) : ai;
+      const bi = classOrder.indexOf(b);
+      const biU = bi === -1 ? classOrder.indexOf(b.toUpperCase()) : bi;
+      return (aiU === -1 ? 999 : aiU) - (biU === -1 ? 999 : biU);
     });
-  }, [carInfoMap]);
+  }, [carInfoMap, classOrder]);
 
   const effectiveClasses = selectedClasses.size > 0 ? selectedClasses : new Set(allClasses);
 
@@ -637,7 +655,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     if (compareMode && compareCars.size > 0) {
       // Compare mode: flat list, no class headers
       for (const car of visibleCars) {
-        const classColor = getClassColor(car.className);
+        const classColor = getClassColor(car.className, classColors);
         drawCarRow(car, y, classColor);
         y += effectiveRowHeight + ROW_GAP;
       }
@@ -647,7 +665,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         const isExpanded = expandedClasses.has(cls);
         const maxPerClass = compact ? COMPACT_CARS_PER_CLASS : DEFAULT_CARS_PER_CLASS;
         const shown = isExpanded ? group : group.slice(0, maxPerClass);
-        const classColor = getClassColor(cls);
+        const classColor = getClassColor(cls, classColors);
 
         // Class header (hide in compact mode)
         if (!compact) {
@@ -929,7 +947,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
               <div className="flex flex-wrap gap-1">
                 {allClasses.map(cls => {
                   const isActive = selectedClasses.size === 0 || selectedClasses.has(cls);
-                  const color = getClassColor(cls);
+                  const color = getClassColor(cls, classColors);
                   return (
                     <button
                       key={cls}

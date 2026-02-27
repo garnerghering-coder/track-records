@@ -186,6 +186,7 @@ export default function EventPage() {
             layout={(event as any).v2_circuits?.v2_circuit_layouts}
             raceSession={raceSessionForHero || null}
             annotationSections={heroAnnotations}
+            seasonClasses={seasonClasses}
           />
         </div>
 
@@ -216,9 +217,10 @@ export default function EventPage() {
                       setActiveSubTab={setActiveSubTab}
                       isMulticlass={isMulticlass}
                       layout={(event as any).v2_circuits?.v2_circuit_layouts}
+                      seasonClasses={seasonClasses}
                     />
                   ) : (
-                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} layout={(event as any).v2_circuits?.v2_circuit_layouts} />
+                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} layout={(event as any).v2_circuits?.v2_circuit_layouts} seasonClasses={seasonClasses} />
                   )}
                 </TabsContent>
               ))}
@@ -244,6 +246,7 @@ function EnduranceRaceView({
   setActiveSubTab,
   isMulticlass,
   layout,
+  seasonClasses,
 }: {
   parentSession: any;
   hourSessions: any[];
@@ -255,6 +258,7 @@ function EnduranceRaceView({
   setActiveSubTab: (v: string) => void;
   isMulticlass?: boolean;
   layout?: any;
+  seasonClasses?: any[];
 }) {
   const [customElapsed, setCustomElapsed] = useState<number | null>(null);
 
@@ -312,6 +316,7 @@ function EnduranceRaceView({
           enduranceHourSessions={hourSessions}
           enduranceActiveHourId={isHourView ? displaySessionId : undefined}
           parentSessionId={parentSession.id}
+          seasonClasses={seasonClasses}
         />
       )}
     </div>
@@ -357,6 +362,7 @@ function SessionResults({
   enduranceHourSessions,
   enduranceActiveHourId,
   parentSessionId,
+  seasonClasses,
 }: {
   session: any;
   event: any;
@@ -372,6 +378,7 @@ function SessionResults({
   enduranceHourSessions?: any[];
   enduranceActiveHourId?: string;
   parentSessionId?: string;
+  seasonClasses?: any[];
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const [classFilter, setClassFilter] = useState<string>("all");
@@ -508,8 +515,17 @@ function SessionResults({
       const cls = (r as any).extra_data?.Class;
       if (cls) set.add(cls);
     }
+    // Sort by season class order if available
+    if (seasonClasses && seasonClasses.length > 0) {
+      const order = seasonClasses.map((sc: any) => sc.class_name);
+      return Array.from(set).sort((a, b) => {
+        const ai = order.indexOf(a);
+        const bi = order.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+    }
     return Array.from(set).sort();
-  }, [results]);
+  }, [results, seasonClasses]);
 
   // Filter results by class
   const filteredResults = useMemo(() => {
@@ -829,6 +845,7 @@ function SessionResults({
         isMulticlass={isMulticlass}
         activeHourId={enduranceActiveHourId}
         parentSessionId={parentSessionId}
+        seasonClasses={seasonClasses}
       />
     </div>
   );

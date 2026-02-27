@@ -9,6 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
+const DEFAULT_CLASS_COLORS = [
+  "#e63946", "#457b9d", "#2a9d8f", "#e9c46a", "#f4a261", "#264653", "#a855f7",
+  "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#ec4899",
+];
+
 interface SeasonEditDialogProps {
   season: any;
   open: boolean;
@@ -19,7 +24,7 @@ interface SeasonEditDialogProps {
 export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }: SeasonEditDialogProps) {
   const [cdm, setCdm] = useState("");
   const [isMulticlass, setIsMulticlass] = useState(false);
-  const [classes, setClasses] = useState<{ id?: string; class_name: string; cdm: string }[]>([]);
+  const [classes, setClasses] = useState<{ id?: string; class_name: string; cdm: string; color: string }[]>([]);
   const [newClassName, setNewClassName] = useState("");
 
   const { data: existingClasses = [] } = useQuery({
@@ -42,10 +47,11 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
   }, [season]);
 
   useEffect(() => {
-    setClasses(existingClasses.map((c: any) => ({
+    setClasses(existingClasses.map((c: any, i: number) => ({
       id: c.id,
       class_name: c.class_name,
       cdm: c.cdm != null ? String(c.cdm) : "",
+      color: c.color || DEFAULT_CLASS_COLORS[i % DEFAULT_CLASS_COLORS.length],
     })));
   }, [existingClasses]);
 
@@ -80,6 +86,7 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
             class_name: c.class_name,
             cdm: c.cdm ? parseFloat(c.cdm) : null,
             sort_order: i,
+            color: c.color,
           };
           if (c.id) {
             const { error: uErr } = await supabase.from("v2_season_classes").update(payload).eq("id", c.id);
@@ -101,7 +108,7 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
   const addClass = () => {
     const name = newClassName.trim();
     if (!name) return;
-    setClasses(prev => [...prev, { class_name: name, cdm: "" }]);
+    setClasses(prev => [...prev, { class_name: name, cdm: "", color: DEFAULT_CLASS_COLORS[prev.length % DEFAULT_CLASS_COLORS.length] }]);
     setNewClassName("");
   };
 
@@ -109,7 +116,7 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
     setClasses(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const updateClass = (idx: number, field: "class_name" | "cdm", value: string) => {
+  const updateClass = (idx: number, field: "class_name" | "cdm" | "color", value: string) => {
     setClasses(prev => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c));
   };
 
@@ -142,6 +149,13 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
               <Label className="text-sm font-medium">Classes</Label>
               {classes.map((c, idx) => (
                 <div key={idx} className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={c.color}
+                    onChange={e => updateClass(idx, "color", e.target.value)}
+                    className="w-7 h-7 rounded cursor-pointer border border-border shrink-0 p-0"
+                    title="Class color"
+                  />
                   <Input
                     value={c.class_name}
                     onChange={e => updateClass(idx, "class_name", e.target.value)}
