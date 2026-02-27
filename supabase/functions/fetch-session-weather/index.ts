@@ -72,6 +72,25 @@ function windDirectionStr(deg: number): string {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
+/**
+ * Compute the end date for multi-day sessions (e.g. 24h endurance races).
+ * If endTime <= startTime, the session crosses midnight so we add a day.
+ */
+function computeEndDate(sessionDate: string, startTime: string, endTime: string): string {
+  const startH = parseInt(startTime.split(":")[0]);
+  const endH = parseInt(endTime.split(":")[0]);
+  
+  if (endH > startH) {
+    // Same day
+    return sessionDate;
+  }
+  
+  // Crosses midnight — add 1 day
+  const d = new Date(sessionDate + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -102,24 +121,27 @@ Deno.serve(async (req) => {
 
     const startTime = session.start_time || "09:00";
     const endTime = session.end_time || "18:00";
+    const endDate = computeEndDate(sessionDate, startTime, endTime);
+    const isMultiDay = endDate !== sessionDate;
 
-    // Fetch from Open-Meteo Archive API
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${circuit.latitude}&longitude=${circuit.longitude}&start_date=${sessionDate}&end_date=${sessionDate}&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,winddirection_10m&timezone=auto`;
-
-    const resp = await fetch(url);
-    if (!resp.ok) {
+    // Fetch from Open-Meteo — use date range for multi-day sessions
+    const fetchWeather = async (startDate: string, ed: string) => {
+      const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${circuit.latitude}&longitude=${circuit.longitude}&start_date=${startDate}&end_date=${ed}&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,winddirection_10m&timezone=auto`;
+      const resp = await fetch(url);
+      if (resp.ok) return resp.json();
+      
       // Try forecast API for recent/future dates
-      const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${circuit.latitude}&longitude=${circuit.longitude}&start_date=${sessionDate}&end_date=${sessionDate}&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,winddirection_10m&timezone=auto&past_days=7`;
+      const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${circuit.latitude}&longitude=${circuit.longitude}&start_date=${startDate}&end_date=${ed}&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,winddirection_10m&timezone=auto&past_days=7`;
       const forecastResp = await fetch(forecastUrl);
-      if (!forecastResp.ok) throw new Error("Weather data not available for this date.");
-      var weatherData = await forecastResp.json();
-    } else {
-      var weatherData = await resp.json();
-    }
+      if (!forecastResp.ok) throw new Error("Weather data not available for this date range.");
+      return forecastResp.json();
+    };
+
+    const weatherData = await fetchWeather(sessionDate, endDate);
 
     if (!weatherData.hourly?.time?.length) throw new Error("No hourly weather data returned.");
 
-    // Filter to session hours
+    // Filter to session hours (handling multi-day)
     const startHour = parseInt(startTime.split(":")[0]);
     const endHour = parseInt(endTime.split(":")[0]);
 
@@ -127,9 +149,21 @@ Deno.serve(async (req) => {
     const sessionHours: HourlyWeather[] = [];
 
     for (let i = 0; i < hourly.time.length; i++) {
-      // Parse hour directly from string (e.g. "2024-01-15T14:00") to avoid timezone shifts
-      const hour = parseInt(hourly.time[i].split("T")[1]?.split(":")[0] ?? "0");
-      if (hour >= startHour && hour <= endHour) {
+      const timeStr = hourly.time[i]; // e.g. "2025-01-24T14:00"
+      const dateStr = timeStr.split("T")[0];
+      const hour = parseInt(timeStr.split("T")[1]?.split(":")[0] ?? "0");
+
+      let include = false;
+      if (isMultiDay) {
+        // Day 1: from startHour to 23
+        if (dateStr === sessionDate && hour >= startHour) include = true;
+        // Day 2: from 0 to endHour
+        if (dateStr === endDate && hour <= endHour) include = true;
+      } else {
+        if (hour >= startHour && hour <= endHour) include = true;
+      }
+
+      if (include) {
         sessionHours.push({
           time: hourly.time[i],
           temperature_2m: hourly.temperature_2m[i],
@@ -171,7 +205,6 @@ Deno.serve(async (req) => {
     }
 
     // Build condition summary and emoji sequence (with day/night awareness)
-    // Use unique code+timeOfDay combos for more representative emojis
     const emojiSet: string[] = [];
     const seenEmojis = new Set<string>();
     for (const h of sessionHours) {

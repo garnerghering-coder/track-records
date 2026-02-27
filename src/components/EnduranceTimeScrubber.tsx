@@ -270,8 +270,72 @@ export default function EnduranceTimeScrubber({
     ? (matchedVirtualHour ? matchedVirtualHour.value : "custom")
     : activeSubTab;
 
-  // Weather for the race session
-  const raceWeather = weatherMap?.[parentSessionId] || null;
+  // Time-specific weather: compute from hourly_data + start_time + elapsed
+  const timeSpecificWeather = useMemo(() => {
+    if (customElapsed == null) return null;
+    const fullWeather = weatherMap?.[parentSessionId];
+    if (!fullWeather?.hourly_data?.length) return fullWeather || null;
+
+    const startTime = parentSession?.start_time || "12:00";
+    const startH = parseInt(startTime.split(":")[0]);
+    const startM = parseInt(startTime.split(":")[1] || "0");
+    const startTotalMin = startH * 60 + startM;
+    const elapsedMin = Math.floor(customElapsed / 60);
+    const targetTotalMin = startTotalMin + elapsedMin;
+    const targetHour = Math.floor(targetTotalMin / 60) % 24;
+
+    // Find the hourly entry closest to targetHour
+    const hourlyData = fullWeather.hourly_data as any[];
+    let best = hourlyData[0];
+    let bestDist = Infinity;
+    for (const h of hourlyData) {
+      const hHour = parseInt(h.time?.split("T")[1]?.split(":")[0] ?? "0");
+      // Handle midnight wrap (e.g. target=2, entry=2 for next-day data)
+      const dist = Math.min(
+        Math.abs(hHour - targetHour),
+        Math.abs(hHour - targetHour + 24),
+        Math.abs(hHour - targetHour - 24)
+      );
+      if (dist < bestDist) { bestDist = dist; best = h; }
+    }
+
+    if (!best) return fullWeather;
+
+    // Build a weather snapshot from that single hour
+    const hour = parseInt(best.time?.split("T")[1]?.split(":")[0] ?? "12");
+    const isNight = hour >= 20 || hour < 6;
+    const isDusk = hour >= 18 && hour < 20;
+    const isDawn = hour >= 6 && hour < 8;
+    const code = best.weathercode ?? 0;
+
+    // Simple emoji logic matching the edge function
+    let emoji = "🌤️";
+    if (code === 0) emoji = isNight ? "🌙" : isDusk ? "🌇" : isDawn ? "🌅" : "☀️";
+    else if (code <= 3) emoji = isNight ? "🌙" : isDusk ? "🌇" : isDawn ? "🌅" : "🌤️";
+    else if (code <= 48) emoji = "🌫️";
+    else if (code <= 57) emoji = "🌧️";
+    else if (code <= 67) emoji = "🌧️";
+    else if (code <= 77) emoji = "🌨️";
+    else if (code <= 86) emoji = "🌨️";
+    else if (code >= 95) emoji = "⛈️";
+
+    const descriptions: Record<number, string> = {
+      0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+    };
+    const summary = descriptions[code] || (code <= 48 ? "Fog" : code <= 65 ? "Rain" : code <= 77 ? "Snow" : code >= 95 ? "Thunderstorm" : "Mixed");
+
+    return {
+      condition_summary: summary,
+      condition_emoji: emoji,
+      air_temp_min: best.temperature_2m != null ? Math.round(best.temperature_2m * 10) / 10 : null,
+      air_temp_max: best.temperature_2m != null ? Math.round(best.temperature_2m * 10) / 10 : null,
+      rain_mm: best.precipitation > 0 ? Math.round(best.precipitation * 10) / 10 : null,
+      rain_detail: null,
+      wind_summary: best.windspeed_10m != null ? `${Math.round(best.windspeed_10m)} km/h` : null,
+      track_temp_min: null,
+      track_temp_max: null,
+    };
+  }, [customElapsed, weatherMap, parentSessionId, parentSession]);
 
   // Time label for display
   const timeLabel = matchedVirtualHour
@@ -387,7 +451,7 @@ export default function EnduranceTimeScrubber({
           standings={customStandings}
           timeLabel={timeLabel || formatElapsedLabel(customElapsed)}
           isMulticlass={isMulticlass}
-          weather={raceWeather}
+          weather={timeSpecificWeather}
           event={event}
           parentSession={parentSession}
           teamNameMap={teamNameMap}
