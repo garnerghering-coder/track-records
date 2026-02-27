@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -373,6 +374,7 @@ function SessionResults({
   parentSessionId?: string;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [classFilter, setClassFilter] = useState<string>("all");
   const type = session.session_type;
   const isRace = type === "race" || type === "sprint_race" || type === "endurance_race";
   const isQual = type === "qualifying" || type === "sprint_qualifying";
@@ -499,6 +501,22 @@ function SessionResults({
 
   const hasInt = results.some((r: any) => r.extra_data?.Int);
 
+  // Extract unique classes for filtering
+  const uniqueClasses = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of results) {
+      const cls = (r as any).extra_data?.Class;
+      if (cls) set.add(cls);
+    }
+    return Array.from(set).sort();
+  }, [results]);
+
+  // Filter results by class
+  const filteredResults = useMemo(() => {
+    if (classFilter === "all") return results;
+    return results.filter((r: any) => (r as any).extra_data?.Class === classFilter);
+  }, [results, classFilter]);
+
   // Column visibility
   const hasCarNumber = results.some((r: any) => r.car_number);
   const hasCar = results.some((r: any) => r.v2_cars);
@@ -614,28 +632,41 @@ function SessionResults({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold">{session.name}</h3>
-          {!isOverallEnduranceView && <WeatherBubble weather={weatherMap[session.id] || null} />}
-          {!isOverallEnduranceView && !weatherMap[session.id] && (
-            <Badge variant="outline" className="text-[10px]">{type.replace(/_/g, " ")}</Badge>
-          )}
-          {session.date && <span className="text-xs text-muted-foreground">{session.date.split("T")[0]}{(session as any).start_time ? ` · ${(session as any).start_time}` : ""}</span>}
-        </div>
-        <Button variant="outline" size="sm" onClick={handleExportClick}>
-          <FileDown className="h-3.5 w-3.5 mr-1" />Export PDF
-        </Button>
-        <PdfExportDialog
-          open={exportOpen}
-          onOpenChange={setExportOpen}
-          sessionName={session.name}
-          hasMultipleSessions={allSessions.length > 1}
-          onExport={handleExport}
-        />
-      </div>
-
       <div className="overflow-x-auto border border-border rounded-lg">
+        <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-semibold text-card-foreground uppercase tracking-wide">
+              {session.name}
+            </h4>
+            {!isOverallEnduranceView && <WeatherBubble weather={weatherMap[session.id] || null} />}
+            {session.date && <span className="text-[10px] text-muted-foreground">{session.date.split("T")[0]}{(session as any).start_time ? ` · ${(session as any).start_time}` : ""}</span>}
+          </div>
+          <div className="flex items-center gap-2">
+            {isMulticlass && uniqueClasses.length > 1 && (
+              <Select value={classFilter} onValueChange={setClassFilter}>
+                <SelectTrigger className="h-7 w-[130px] text-[11px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-[11px]">All Classes</SelectItem>
+                  {uniqueClasses.map(cls => (
+                    <SelectItem key={cls} value={cls} className="text-[11px]">{cls}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleExportClick}>
+              <FileDown className="h-3 w-3" />PDF
+            </Button>
+            <PdfExportDialog
+              open={exportOpen}
+              onOpenChange={setExportOpen}
+              sessionName={session.name}
+              hasMultipleSessions={allSessions.length > 1}
+              onExport={handleExport}
+            />
+          </div>
+        </div>
         <Table>
           <TableHeader>
            <TableRow className="bg-muted/50">
@@ -658,7 +689,7 @@ function SessionResults({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {results.map((r: any, i: number) => (
+            {filteredResults.map((r: any, i: number) => (
               <TableRow key={r.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                 <TableCell className="font-bold text-center">{r.position}</TableCell>
                 {isRace && hasRefData && (
@@ -764,7 +795,7 @@ function SessionResults({
                 {extraDataKeys.some(c => c.key === "Tires") && !isOverallEnduranceView && <TableCell className="text-xs">{(r.extra_data as any)?.Tires || "—"}</TableCell>}
               </TableRow>
             ))}
-            {results.length === 0 && <TableRow><TableCell colSpan={20} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
+            {filteredResults.length === 0 && <TableRow><TableCell colSpan={20} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>

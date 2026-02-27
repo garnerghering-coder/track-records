@@ -124,6 +124,20 @@ export default function EnduranceTimeScrubber({
     enabled: hasLapData,
   });
 
+  // Fetch pit stops to determine which driver is in each car at a given time
+  const { data: pitStops = [] } = useQuery({
+    queryKey: ["scrubber_pitstops", parentSessionId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("v2_pit_stops" as any)
+        .select("car_number, driver_id, pit_in_elapsed, pit_out_elapsed")
+        .eq("session_id", parentSessionId)
+        .order("pit_in_elapsed");
+      return (data || []) as unknown as { car_number: string; driver_id: string | null; pit_in_elapsed: number | null; pit_out_elapsed: number | null }[];
+    },
+    enabled: hasLapData,
+  });
+
   // Compute standings at custom elapsed time
   const customStandings = useMemo(() => {
     if (customElapsed == null || lapTimes.length === 0) return null;
@@ -136,9 +150,39 @@ export default function EnduranceTimeScrubber({
       metaMap.set(r.car_number, r);
     }
 
+    // Build a lookup: for each car_number, find the driver at this elapsed time
+    // using pit stop data. The driver who most recently pit_out before the elapsed time is current.
+    const currentDriverMap = new Map<string, string | null>();
+    if (pitStops.length > 0) {
+      // Group pit stops by car_number
+      const carPitStops = new Map<string, typeof pitStops>();
+      for (const ps of pitStops) {
+        if (!ps.car_number) continue;
+        if (!carPitStops.has(ps.car_number)) carPitStops.set(ps.car_number, []);
+        carPitStops.get(ps.car_number)!.push(ps);
+      }
+      for (const [carNum, stops] of carPitStops) {
+        // Find the most recent pit_out before customElapsed
+        let currentDriverId: string | null = null;
+        for (const ps of stops) {
+          if (ps.pit_out_elapsed != null && ps.pit_out_elapsed <= customElapsed && ps.driver_id) {
+            currentDriverId = ps.driver_id;
+          }
+        }
+        // If no pit_out found yet, also check if the first pit_in hasn't happened
+        // meaning the starting driver is still in the car
+        if (!currentDriverId && stops.length > 0) {
+          const firstPitIn = stops[0].pit_in_elapsed;
+          if (firstPitIn != null && customElapsed < firstPitIn && stops[0].driver_id) {
+            currentDriverId = stops[0].driver_id;
+          }
+        }
+        currentDriverMap.set(carNum, currentDriverId);
+      }
+    }
+
     // Compute class positions
     const classCounters: Record<string, number> = {};
-    // Track previous car in each class for interval calc
     const classPrevCar: Record<string, { lapsCompleted: number; elapsed: number }> = {};
 
     return standings.map((s, i) => {
@@ -155,7 +199,7 @@ export default function EnduranceTimeScrubber({
       // Calculate interval to previous car in same class
       let interval = "";
       if (classCounters[cls] === 1) {
-        interval = ""; // class leader
+        interval = "";
       } else {
         const prev = classPrevCar[cls];
         if (prev) {
@@ -173,19 +217,35 @@ export default function EnduranceTimeScrubber({
       const car = meta?.v2_cars || null;
       const carLabel = car ? [car.manufacturer, car.model_name].filter(Boolean).join(" ") : "";
 
+      // Determine current driver from pit stop data
+      let currentDriver: { id: string | null; name: string; nationality: string | null } | null = null;
+      const allDrivers = meta?._allDrivers || [];
+      if (currentDriverMap.has(s.carNumber)) {
+        const driverId = currentDriverMap.get(s.carNumber);
+        if (driverId) {
+          currentDriver = allDrivers.find((d: any) => d.id === driverId) || null;
+        }
+      }
+      // If we couldn't determine from pit stops (no pit data for this car), 
+      // fall back to first driver listed
+      if (!currentDriver && allDrivers.length === 1) {
+        currentDriver = allDrivers[0];
+      }
+
       return {
         ...s,
         className: cls,
         classPosition: classCounters[cls],
         teamName,
         teamId: meta?.team_id,
-        drivers: meta?._allDrivers || [],
+        drivers: allDrivers,
+        currentDriver,
         car,
         carLabel,
         interval,
       };
     });
-  }, [customElapsed, lapTimes, raceResultsMeta, teamNameMap]);
+  }, [customElapsed, lapTimes, raceResultsMeta, teamNameMap, pitStops]);
 
   // Generate virtual hour markers from lap data duration
   const virtualHours = useMemo(() => {
