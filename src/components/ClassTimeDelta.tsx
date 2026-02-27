@@ -85,17 +85,31 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
   const { data: lapTimes = [], isLoading } = useQuery({
     queryKey: ["lap_times", sessionId],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("v2_lap_times" as any)
-        .select("car_number, lap_number, elapsed")
-        .eq("session_id", sessionId)
-        .order("car_number")
-        .order("elapsed", { ascending: true });
-      return (data || []).map((r: any) => ({
-        car_number: r.car_number,
-        lap_number: r.lap_number,
-        elapsed: Number(r.elapsed),
-      })) as LapTime[];
+      // Paginate to overcome Supabase's 1000-row default limit
+      const PAGE_SIZE = 1000;
+      const allRows: LapTime[] = [];
+      let offset = 0;
+      let done = false;
+      while (!done) {
+        const { data } = await supabase
+          .from("v2_lap_times" as any)
+          .select("car_number, lap_number, elapsed")
+          .eq("session_id", sessionId)
+          .order("car_number")
+          .order("elapsed", { ascending: true })
+          .range(offset, offset + PAGE_SIZE - 1);
+        const rows = data || [];
+        for (const r of rows) {
+          allRows.push({
+            car_number: (r as any).car_number,
+            lap_number: (r as any).lap_number,
+            elapsed: Number((r as any).elapsed),
+          });
+        }
+        if (rows.length < PAGE_SIZE) done = true;
+        else offset += PAGE_SIZE;
+      }
+      return allRows;
     },
   });
 
