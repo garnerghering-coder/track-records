@@ -103,8 +103,10 @@ function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?
   const textSize = isWinner ? "text-[13px]" : "text-[11px]";
   const flagSize = isWinner ? 14 : 12;
   const liveryWidth = isWinner ? "w-[180px] xl:w-[240px]" : "w-[140px] xl:w-[180px]";
-  const metaSize = isWinner ? "text-xs" : "text-[10px]";
+  const metaSize = isWinner ? "text-[12px]" : "text-[11px]";
   const lapsSize = isWinner ? "text-[11px]" : "text-[10px]";
+
+  const teamLabel = [entry.car_number ? `#${entry.car_number}` : null, entry.teamName].filter(Boolean).join(" ");
 
   return (
     <div className={`flex items-center gap-3 ${isWinner ? "py-2" : "py-1.5"}`}>
@@ -121,11 +123,10 @@ function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?
             ))}
           </div>
           <div className={`flex flex-col ${metaSize} text-muted-foreground min-w-0 shrink-0`}>
-            {entry.car_number && <span className="font-mono whitespace-nowrap">#{entry.car_number}</span>}
             {entry.team_id ? (
-              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{entry.teamName}</Link>
+              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{teamLabel}</Link>
             ) : (
-              <span className="whitespace-nowrap">{entry.teamName}</span>
+              <span className="whitespace-nowrap">{teamLabel}</span>
             )}
             {entry.carName && (
               <span className="text-muted-foreground/70 whitespace-nowrap">{entry.carName}</span>
