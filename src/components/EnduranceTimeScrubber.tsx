@@ -1,12 +1,14 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileDown } from "lucide-react";
 import FlagImage from "@/components/FlagImage";
+import WeatherBubble from "@/components/WeatherBubble";
 import { Link } from "react-router-dom";
 import {
   fetchAllLapTimes,
@@ -14,6 +16,7 @@ import {
   formatElapsedLabel,
   type LapTimeRow,
 } from "@/lib/lap-position-calc";
+import ComputedStandingsTable from "@/components/ComputedStandingsTable";
 
 interface HourSession {
   id: string;
@@ -29,6 +32,9 @@ interface EnduranceTimeScrubberProps {
   setActiveSubTab: (v: string) => void;
   onCustomElapsed: (elapsed: number | null) => void;
   isMulticlass?: boolean;
+  weatherMap?: Record<string, any>;
+  parentSession?: any;
+  event?: any;
 }
 
 export default function EnduranceTimeScrubber({
@@ -39,6 +45,9 @@ export default function EnduranceTimeScrubber({
   setActiveSubTab,
   onCustomElapsed,
   isMulticlass,
+  weatherMap,
+  parentSession,
+  event,
 }: EnduranceTimeScrubberProps) {
   const [customElapsed, setCustomElapsed] = useState<number | null>(null);
   const [timeInput, setTimeInput] = useState("");
@@ -129,8 +138,10 @@ export default function EnduranceTimeScrubber({
 
     // Compute class positions
     const classCounters: Record<string, number> = {};
+    // Track previous car in each class for interval calc
+    const classPrevCar: Record<string, { lapsCompleted: number; elapsed: number }> = {};
 
-    return standings.map(s => {
+    return standings.map((s, i) => {
       const meta = metaMap.get(s.carNumber);
       const cls = meta?.extra_data?.Class || meta?.extra_data?.class || "";
       if (!classCounters[cls]) classCounters[cls] = 0;
@@ -141,6 +152,27 @@ export default function EnduranceTimeScrubber({
         ? teamNameMap[teamId]
         : meta?.v2_teams?.short_name || meta?.v2_teams?.full_name || "";
 
+      // Calculate interval to previous car in same class
+      let interval = "";
+      if (classCounters[cls] === 1) {
+        interval = ""; // class leader
+      } else {
+        const prev = classPrevCar[cls];
+        if (prev) {
+          const lapDiff = prev.lapsCompleted - s.lapsCompleted;
+          if (lapDiff > 0) {
+            interval = `+${lapDiff} ${lapDiff === 1 ? "Lap" : "Laps"}`;
+          } else {
+            const timeDiff = s.elapsed - prev.elapsed;
+            interval = `+${timeDiff.toFixed(3)}`;
+          }
+        }
+      }
+      classPrevCar[cls] = { lapsCompleted: s.lapsCompleted, elapsed: s.elapsed };
+
+      const car = meta?.v2_cars || null;
+      const carLabel = car ? [car.manufacturer, car.model_name].filter(Boolean).join(" ") : "";
+
       return {
         ...s,
         className: cls,
@@ -148,7 +180,9 @@ export default function EnduranceTimeScrubber({
         teamName,
         teamId: meta?.team_id,
         drivers: meta?._allDrivers || [],
-        car: meta?.v2_cars || null,
+        car,
+        carLabel,
+        interval,
       };
     });
   }, [customElapsed, lapTimes, raceResultsMeta, teamNameMap]);
@@ -178,7 +212,6 @@ export default function EnduranceTimeScrubber({
         options.push({ value: vh.value, label: vh.label });
       }
     } else {
-      // Fallback: use imported hour sessions if no lap data
       for (const hs of hourSessions) {
         options.push({ value: hs.id, label: hs.name });
       }
@@ -194,7 +227,6 @@ export default function EnduranceTimeScrubber({
       setTimeInput(formatElapsedLabel(mid));
       onCustomElapsed(mid);
     } else if (value.startsWith("virtual-hour-")) {
-      // Virtual hour: compute standings at that elapsed time
       const vh = virtualHours.find(v => v.value === value);
       if (vh) {
         setCustomElapsed(vh.elapsed);
@@ -237,6 +269,16 @@ export default function EnduranceTimeScrubber({
   const currentValue = customElapsed != null
     ? (matchedVirtualHour ? matchedVirtualHour.value : "custom")
     : activeSubTab;
+
+  // Weather for the race session
+  const raceWeather = weatherMap?.[parentSessionId] || null;
+
+  // Time label for display
+  const timeLabel = matchedVirtualHour
+    ? matchedVirtualHour.label
+    : customElapsed != null
+      ? formatElapsedLabel(customElapsed)
+      : null;
 
   if (!hasLapData) {
     // No lap data: render simple sub-tab bar (existing behavior)
@@ -341,75 +383,15 @@ export default function EnduranceTimeScrubber({
 
       {/* Custom standings table */}
       {customElapsed != null && customStandings && (
-        <div className="overflow-x-auto border border-border rounded-lg">
-          <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-card-foreground">
-              Standings at {matchedVirtualHour ? matchedVirtualHour.label : formatElapsedLabel(customElapsed)}
-            </h4>
-            <Badge variant="outline" className="text-[10px]">Computed from lap data</Badge>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="w-12">Pos</TableHead>
-                {isMulticlass && <TableHead className="w-12">PIC</TableHead>}
-                {isMulticlass && <TableHead>Class</TableHead>}
-                <TableHead className="w-14">No.</TableHead>
-                <TableHead>Driver(s)</TableHead>
-                <TableHead>Team</TableHead>
-                <TableHead className="text-center">Laps</TableHead>
-                <TableHead>Gap</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customStandings.map((s, i) => {
-                const leaderLaps = customStandings[0]?.lapsCompleted || 0;
-                const leaderElapsed = customStandings[0]?.elapsed || 0;
-                let gap = "—";
-                if (i > 0) {
-                  const lapDiff = leaderLaps - s.lapsCompleted;
-                  if (lapDiff > 0) {
-                    gap = `+${lapDiff} ${lapDiff === 1 ? "Lap" : "Laps"}`;
-                  } else {
-                    const timeDiff = s.elapsed - leaderElapsed;
-                    gap = `+${timeDiff.toFixed(3)}`;
-                  }
-                }
-                return (
-                  <TableRow key={s.carNumber} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                    <TableCell className="font-bold text-center">{s.position}</TableCell>
-                    {isMulticlass && <TableCell className="text-xs">{s.classPosition}</TableCell>}
-                    {isMulticlass && <TableCell className="text-xs">{s.className || "—"}</TableCell>}
-                    <TableCell className="text-center font-mono text-xs">{s.carNumber}</TableCell>
-                    <TableCell className="font-medium whitespace-nowrap">
-                      {s.drivers.length === 0 ? "—" : (
-                        <div className="flex flex-col">
-                          {s.drivers.map((d: any, idx: number) => (
-                            <span key={idx} className="leading-[22px] whitespace-nowrap">
-                              {d.id ? (
-                                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors inline-flex items-center gap-1">
-                                  <FlagImage nationality={d.nationality} size={14} />
-                                  {d.name}
-                                </Link>
-                              ) : d.name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground whitespace-nowrap">
-                      {s.teamId ? (
-                        <Link to={`/team/${s.teamId}`} className="hover:text-primary transition-colors">{s.teamName}</Link>
-                      ) : s.teamName || "—"}
-                    </TableCell>
-                    <TableCell className="text-center text-xs">{s.lapsCompleted}</TableCell>
-                    <TableCell className="font-mono text-xs">{i === 0 ? "Leader" : gap}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+        <ComputedStandingsTable
+          standings={customStandings}
+          timeLabel={timeLabel || formatElapsedLabel(customElapsed)}
+          isMulticlass={isMulticlass}
+          weather={raceWeather}
+          event={event}
+          parentSession={parentSession}
+          teamNameMap={teamNameMap}
+        />
       )}
     </div>
   );
