@@ -1619,6 +1619,41 @@ export type Database = {
           },
         ]
       }
+      v2_lap_times: {
+        Row: {
+          car_number: string
+          created_at: string
+          elapsed: number
+          id: string
+          lap_number: number
+          session_id: string
+        }
+        Insert: {
+          car_number: string
+          created_at?: string
+          elapsed: number
+          id?: string
+          lap_number: number
+          session_id: string
+        }
+        Update: {
+          car_number?: string
+          created_at?: string
+          elapsed?: number
+          id?: string
+          lap_number?: number
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_lap_times_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_pit_stops: {
         Row: {
           car_number: string | null

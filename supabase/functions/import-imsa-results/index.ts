@@ -1810,6 +1810,24 @@ serve(async (req) => {
               await insertRowsInChunks(adminClient, "v2_flag_segments", flagSegments.map(s => ({ ...s, session_id: parentSessionId })));
             }
             console.log(`Flag segments saved for parent ${parentSessionId}: ${flagSegments.length} segments`);
+
+            // Persist per-lap timing data for Class Time Delta chart
+            const lapTimeRows: any[] = [];
+            for (const [carNumber, laps] of timeCardLapsByCar) {
+              for (const lap of laps) {
+                lapTimeRows.push({
+                  session_id: parentSessionId,
+                  car_number: carNumber,
+                  lap_number: lap.lapNumber ?? 0,
+                  elapsed: round3(lap.elapsedSec),
+                });
+              }
+            }
+            if (lapTimeRows.length > 0) {
+              await adminClient.from("v2_lap_times").delete().eq("session_id", parentSessionId);
+              await insertRowsInChunks(adminClient, "v2_lap_times", lapTimeRows);
+              console.log(`Lap times saved for parent ${parentSessionId}: ${lapTimeRows.length} rows`);
+            }
           }
 
           for (const [hourNumber, sessionId] of hourSessionIdByHour.entries()) {
