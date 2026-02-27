@@ -698,14 +698,50 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
             </button>
           </div>
 
-          {/* Zoom presets + reset */}
+          {/* Delta range presets */}
+          <div className="flex gap-1 items-center">
+            <span className="text-[10px] text-muted-foreground mr-0.5">Δ Range:</span>
+            {(deltaMode === "leader"
+              ? [
+                  { label: "Auto", max: null },
+                  { label: "30s", max: 30 },
+                  { label: "60s", max: 60 },
+                  { label: "3m", max: 180 },
+                  { label: "5m", max: 300 },
+                ]
+              : [
+                  { label: "Auto", max: null },
+                  { label: "5s", max: 5 },
+                  { label: "15s", max: 15 },
+                  { label: "30s", max: 30 },
+                  { label: "60s", max: 60 },
+                ]
+            ).map(p => {
+              const isActive = p.max === null ? yZoomRange === null : (yZoomRange && yZoomRange[0] === 0 && yZoomRange[1] === p.max);
+              return (
+                <button
+                  key={p.label}
+                  onClick={() => setYZoomRange(p.max === null ? null : [0, p.max])}
+                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
+                    isActive
+                      ? "border-primary/30 text-primary bg-primary/10"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Time zoom presets + reset */}
           <div className="flex gap-1">
             {zoomPresets.map((p, i) => (
               <button
                 key={i}
-                onClick={() => { setZoomRange(p.range); setYZoomRange(null); }}
+                onClick={() => { setZoomRange(p.range); }}
                 className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
-                  (p.range === null && zoomRange === null && yZoomRange === null) || (p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1])
+                  (p.range === null && zoomRange === null) || (p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1])
                     ? "border-primary/30 text-primary bg-primary/10"
                     : "border-border text-muted-foreground hover:text-foreground"
                 }`}
@@ -718,7 +754,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
                 onClick={() => { setZoomRange(null); setYZoomRange(null); }}
                 className="px-2 py-0.5 rounded text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
               >
-                Reset Zoom
+                Reset All
               </button>
             )}
           </div>
