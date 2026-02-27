@@ -352,6 +352,7 @@ function SessionResults({
   layout,
   enduranceHourSessions,
   enduranceActiveHourId,
+  parentSessionId,
 }: {
   session: any;
   event: any;
@@ -366,6 +367,7 @@ function SessionResults({
   layout?: any;
   enduranceHourSessions?: any[];
   enduranceActiveHourId?: string;
+  parentSessionId?: string;
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const type = session.session_type;
@@ -792,6 +794,7 @@ function SessionResults({
         teamNameMap={teamNameMap}
         isMulticlass={isMulticlass}
         activeHourId={enduranceActiveHourId}
+        parentSessionId={parentSessionId}
       />
     </div>
   );

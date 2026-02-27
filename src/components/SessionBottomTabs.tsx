@@ -17,6 +17,7 @@ interface SessionBottomTabsProps {
   teamNameMap: Record<string, string>;
   isMulticlass?: boolean;
   activeHourId?: string;
+  parentSessionId?: string;
 }
 
 // ── Race Control with multi-select filters ────────────────────────────
@@ -150,6 +151,7 @@ export default function SessionBottomTabs({
   teamNameMap,
   isMulticlass,
   activeHourId,
+  parentSessionId,
 }: SessionBottomTabsProps) {
   // Determine which tabs are available (ordered: Strategy, Progression, Race Control, Fingerprint)
   const tabs: { id: string; label: string }[] = [];
@@ -265,6 +267,7 @@ export default function SessionBottomTabs({
               teamNameMap={teamNameMap}
               activeHourId={activeHourId}
               isMulticlass={isMulticlass}
+              parentSessionId={parentSessionId}
             />
           </div>
         )}
