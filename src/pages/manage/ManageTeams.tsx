@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Tags } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ManageTeams() {
   const qc = useQueryClient();
@@ -20,6 +21,7 @@ export default function ManageTeams() {
   const [aliasTeam, setAliasTeam] = useState<any>(null);
   const [aliasForm, setAliasForm] = useState({ season_id: "", display_name: "" });
   const [carForm, setCarForm] = useState({ season_id: "", car_id: "" });
+  const [unusedOnly, setUnusedOnly] = useState(false);
 
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ["v2_teams"],
@@ -64,15 +66,35 @@ export default function ManageTeams() {
     enabled: !!aliasTeam,
   });
 
+  const { data: usedTeamIds } = useQuery({
+    queryKey: ["used_team_ids"],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      const tables = ["v2_race_results", "v2_qualifying_results", "v2_practice_results"] as const;
+      for (const table of tables) {
+        const { data } = await supabase.from(table).select("team_id").not("team_id", "is", null);
+        data?.forEach((r: any) => ids.add(r.team_id));
+      }
+      return ids;
+    },
+    enabled: unusedOnly,
+  });
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return teams;
-    const q = search.toLowerCase();
-    return teams.filter((t: any) =>
-      t.full_name.toLowerCase().includes(q) ||
-      (t.short_name || "").toLowerCase().includes(q) ||
-      (t.nationality || "").toLowerCase().includes(q)
-    );
-  }, [teams, search]);
+    let list = teams;
+    if (unusedOnly && usedTeamIds) {
+      list = list.filter((t: any) => !usedTeamIds.has(t.id));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((t: any) =>
+        t.full_name.toLowerCase().includes(q) ||
+        (t.short_name || "").toLowerCase().includes(q) ||
+        (t.nationality || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [teams, search, unusedOnly, usedTeamIds]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -158,9 +180,15 @@ export default function ManageTeams() {
         <h1 className="text-2xl font-bold">Teams</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Team</Button>
       </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search teams…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search teams…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+          <Checkbox checked={unusedOnly} onCheckedChange={(c) => setUnusedOnly(!!c)} />
+          Unused only
+        </label>
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>

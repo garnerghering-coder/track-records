@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Sparkles, RefreshCw, Calculator } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Driver { id: string; full_name: string; short_name: string | null; nationality: string | null; date_of_birth: string | null; }
 
@@ -17,6 +18,7 @@ export default function ManageDrivers() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ full_name: "", nationality: "", date_of_birth: "" });
   const [search, setSearch] = useState("");
+  const [unusedOnly, setUnusedOnly] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [recalcSingle, setRecalcSingle] = useState<string | null>(null);
@@ -26,14 +28,34 @@ export default function ManageDrivers() {
     queryFn: async () => { const { data, error } = await supabase.from("v2_drivers").select("*").order("full_name"); if (error) throw error; return data as Driver[]; },
   });
 
+  const { data: usedDriverIds } = useQuery({
+    queryKey: ["used_driver_ids"],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      const tables = ["v2_race_results", "v2_qualifying_results", "v2_practice_results"] as const;
+      for (const table of tables) {
+        const { data } = await supabase.from(table).select("driver_id").not("driver_id", "is", null);
+        data?.forEach((r: any) => ids.add(r.driver_id));
+      }
+      return ids;
+    },
+    enabled: unusedOnly,
+  });
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return drivers;
-    const q = search.toLowerCase();
-    return drivers.filter(d =>
-      d.full_name.toLowerCase().includes(q) ||
-      (d.nationality || "").toLowerCase().includes(q)
-    );
-  }, [drivers, search]);
+    let list = drivers;
+    if (unusedOnly && usedDriverIds) {
+      list = list.filter(d => !usedDriverIds.has(d.id));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(d =>
+        d.full_name.toLowerCase().includes(q) ||
+        (d.nationality || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [drivers, search, unusedOnly, usedDriverIds]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -120,9 +142,15 @@ export default function ManageDrivers() {
           <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Driver</Button>
         </div>
       </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search drivers…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search drivers…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+          <Checkbox checked={unusedOnly} onCheckedChange={(c) => setUnusedOnly(!!c)} />
+          Unused only
+        </label>
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
