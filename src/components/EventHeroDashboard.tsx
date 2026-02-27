@@ -18,6 +18,7 @@ interface WinnerEntry {
   gap_to_leader: string | null;
   team_id: string | null;
   teamName: string;
+  carName: string | null;
   className: string;
   drivers: { id: string | null; name: string; nationality: string | null }[];
   liveryUrl: string | null;
@@ -98,33 +99,42 @@ function RaceControlMini({ sections }: { sections: any[] }) {
 
 // ── Winner Card ──────────────────────────────────────────────────────
 
-function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; showGap?: boolean; showPosition?: boolean }) {
+function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?: boolean; isWinner?: boolean }) {
+  const textSize = isWinner ? "text-[13px]" : "text-[11px]";
+  const flagSize = isWinner ? 14 : 12;
+  const liveryWidth = isWinner ? "w-[180px] xl:w-[240px]" : "w-[140px] xl:w-[180px]";
+  const metaSize = isWinner ? "text-xs" : "text-[10px]";
+  const lapsSize = isWinner ? "text-[11px]" : "text-[10px]";
+
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className={`flex items-center gap-3 ${isWinner ? "py-2" : "py-1.5"}`}>
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-start gap-3">
           <div className="flex flex-col gap-0.5 shrink-0">
             {entry.drivers.map((d, i) => (
-              <span key={i} className="text-[13px] font-medium text-foreground whitespace-nowrap flex items-center gap-1">
-                <FlagImage nationality={d.nationality} size={14} />
+              <span key={i} className={`${textSize} font-medium text-foreground whitespace-nowrap flex items-center gap-1`}>
+                <FlagImage nationality={d.nationality} size={flagSize} />
                 {d.id ? (
                   <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
                 ) : d.name}
               </span>
             ))}
           </div>
-          <div className="flex flex-col text-xs text-muted-foreground min-w-0">
+          <div className={`flex flex-col ${metaSize} text-muted-foreground min-w-0 shrink-0`}>
             {entry.car_number && <span className="font-mono whitespace-nowrap">#{entry.car_number}</span>}
             {entry.team_id ? (
-              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors truncate">{entry.teamName}</Link>
+              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{entry.teamName}</Link>
             ) : (
-              <span className="truncate">{entry.teamName}</span>
+              <span className="whitespace-nowrap">{entry.teamName}</span>
+            )}
+            {entry.carName && (
+              <span className="text-muted-foreground/70 whitespace-nowrap">{entry.carName}</span>
             )}
           </div>
         </div>
       </div>
 
-      <div className="shrink-0 w-[180px] xl:w-[240px]">
+      <div className={`shrink-0 ${liveryWidth}`}>
         {entry.liveryUrl ? (
           <img
             src={entry.liveryUrl}
@@ -137,17 +147,17 @@ function WinnerCard({ entry, showGap, showPosition }: { entry: WinnerEntry; show
             className="w-full bg-muted/30 border border-border rounded flex items-center justify-center"
             style={{ aspectRatio: "922/235" }}
           >
-            <span className="text-xs text-muted-foreground font-mono">#{entry.car_number || "?"}</span>
+            <span className="text-[10px] text-muted-foreground font-mono">#{entry.car_number || "?"}</span>
           </div>
         )}
       </div>
 
       <div className="shrink-0 text-right space-y-0.5 min-w-[50px]">
         {entry.laps_completed != null && (
-          <p className="text-[11px] text-muted-foreground">{entry.laps_completed} laps</p>
+          <p className={`${lapsSize} text-muted-foreground`}>{entry.laps_completed} laps</p>
         )}
         {showGap && entry.gap_to_leader && entry.position > 1 && (
-          <p className="text-[11px] text-muted-foreground">{entry.gap_to_leader}</p>
+          <p className={`${lapsSize} text-muted-foreground`}>{entry.gap_to_leader}</p>
         )}
       </div>
     </div>
@@ -291,7 +301,7 @@ export default function EventHeroDashboard({
     queryFn: async () => {
       const { data } = await supabase
         .from("v2_race_results" as any)
-        .select("*, v2_drivers(id, full_name, nationality), v2_teams(id, full_name, short_name)")
+        .select("*, v2_drivers(id, full_name, nationality), v2_teams(id, full_name, short_name), v2_cars(id, model_name, manufacturer)")
         .eq("session_id", resultsSessionId)
         .order("position");
       return (data || []) as any[];
@@ -361,6 +371,7 @@ export default function EventHeroDashboard({
         const r = sorted[i];
         const teamId = r.v2_teams?.id || r.team_id;
         const teamName = teamId && teamNameMap[teamId] ? teamNameMap[teamId] : r.v2_teams?.short_name || r.v2_teams?.full_name || "—";
+        const carName = r.v2_cars ? (r.v2_cars.manufacturer ? `${r.v2_cars.manufacturer} ${r.v2_cars.model_name}` : r.v2_cars.model_name) : null;
         // Use endurance driver map if available, otherwise fallback to single driver from results
         const drivers = (r.car_number && enduranceDriverMap[r.car_number]?.length > 0)
           ? enduranceDriverMap[r.car_number]
@@ -371,6 +382,7 @@ export default function EventHeroDashboard({
           gap_to_leader: r.gap_to_leader,
           team_id: teamId,
           teamName,
+          carName,
           className: cls,
           drivers,
           liveryUrl: r.car_number ? liveryMap[r.car_number] || null : null,
@@ -429,7 +441,7 @@ export default function EventHeroDashboard({
                           <span className="text-[10px] font-semibold text-muted-foreground uppercase">P{w.position}</span>
                         </div>
                       )}
-                      <WinnerCard entry={w} showGap={showTop3} showPosition={false} />
+                      <WinnerCard entry={w} showGap={showTop3} isWinner={w.position === 1} />
                     </div>
                   ))}
               </div>
