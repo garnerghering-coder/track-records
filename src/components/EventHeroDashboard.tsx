@@ -35,6 +35,7 @@ interface EventHeroDashboardProps {
   layout: any;
   raceSession: any | null;
   annotationSections: any[];
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }
 
 // ── Weather Card ─────────────────────────────────────────────────────
@@ -160,11 +161,13 @@ function MiniVisualization({
   hourSessions,
   teamNameMap,
   isMulticlass,
+  seasonClasses,
 }: {
   raceSession: any;
   hourSessions: any[];
   teamNameMap: Record<string, string>;
   isMulticlass: boolean;
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }) {
   const hasHours = hourSessions.length > 0;
 
@@ -243,17 +246,17 @@ function MiniVisualization({
       <div className="h-[280px] overflow-hidden relative">
         {activeVizTab === "strategy" && (
           <div className="h-full">
-            <StrategyTimeline sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
+            <StrategyTimeline sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
         {activeVizTab === "time-delta" && hasLapTimes && (
           <div className="h-full">
-            <ClassTimeDelta sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
+            <ClassTimeDelta sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
         {activeVizTab === "progression" && hasHours && (
           <div className="h-full">
-            <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
+            <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
       </div>
@@ -274,6 +277,7 @@ export default function EventHeroDashboard({
   layout,
   raceSession,
   annotationSections,
+  seasonClasses,
 }: EventHeroDashboardProps) {
   const seasonId = (event as any)?.v2_seasons?.id;
   const isEndurance = raceSession?.session_type === "endurance_race";
@@ -439,6 +443,7 @@ export default function EventHeroDashboard({
               hourSessions={hourSessions}
               teamNameMap={teamNameMap}
               isMulticlass={isMulticlass}
+              seasonClasses={seasonClasses}
             />
 
             {hasFingerprint && layoutData && trackMetrics && (

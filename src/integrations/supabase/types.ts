@@ -1973,6 +1973,7 @@ export type Database = {
         Row: {
           cdm: number | null
           class_name: string
+          color: string
           created_at: string
           id: string
           season_id: string
@@ -1981,6 +1982,7 @@ export type Database = {
         Insert: {
           cdm?: number | null
           class_name: string
+          color?: string
           created_at?: string
           id?: string
           season_id: string
@@ -1989,6 +1991,7 @@ export type Database = {
         Update: {
           cdm?: number | null
           class_name?: string
+          color?: string
           created_at?: string
           id?: string
           season_id?: string

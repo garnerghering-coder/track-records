@@ -18,6 +18,7 @@ interface SessionBottomTabsProps {
   isMulticlass?: boolean;
   activeHourId?: string;
   parentSessionId?: string;
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }
 
 // ── Race Control with multi-select filters ────────────────────────────
@@ -152,6 +153,7 @@ export default function SessionBottomTabs({
   isMulticlass,
   activeHourId,
   parentSessionId,
+  seasonClasses,
 }: SessionBottomTabsProps) {
   // Determine which tabs are available (ordered: Strategy, Progression, Race Control, Fingerprint)
   const tabs: { id: string; label: string }[] = [];
@@ -268,19 +270,20 @@ export default function SessionBottomTabs({
               activeHourId={activeHourId}
               isMulticlass={isMulticlass}
               parentSessionId={parentSessionId}
+              seasonClasses={seasonClasses}
             />
           </div>
         )}
 
         {resolvedTab === "strategy" && (
           <div className="p-5">
-            <StrategyTimeline sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} />
+            <StrategyTimeline sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
           </div>
         )}
 
         {resolvedTab === "time-delta" && (
           <div className="p-5">
-            <ClassTimeDelta sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} />
+            <ClassTimeDelta sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
           </div>
         )}
       </div>

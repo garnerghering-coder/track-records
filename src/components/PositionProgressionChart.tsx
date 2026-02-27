@@ -55,13 +55,14 @@ interface Props {
   isMulticlass?: boolean;
   compact?: boolean;
   parentSessionId?: string;
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }
 
 // ── Class colors (matching ClassTimeDelta) ────────────────────────────
 
-const CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const DEFAULT_CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const CLASS_COLORS: Record<string, string> = {
+const DEFAULT_CLASS_COLORS: Record<string, string> = {
   GTP: "#e63946", GTDPRO: "#457b9d", GTD: "#2a9d8f",
   LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
 };
@@ -96,6 +97,7 @@ export default function PositionProgressionChart({
   isMulticlass,
   compact,
   parentSessionId,
+  seasonClasses,
 }: Props) {
   const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
   const [highlightedCar, setHighlightedCar] = useState<string | null>(null);
@@ -114,6 +116,30 @@ export default function PositionProgressionChart({
       setViewMode("overall");
     }
   }, [isClassFiltered]);
+
+  // ── Class colors and order from season config ────────────────
+  const classColors = useMemo(() => {
+    const map: Record<string, string> = { ...DEFAULT_CLASS_COLORS };
+    if (seasonClasses) {
+      for (const sc of seasonClasses) map[sc.class_name] = sc.color;
+    }
+    return map;
+  }, [seasonClasses]);
+
+  const classOrder = useMemo(() => {
+    if (seasonClasses && seasonClasses.length > 0) {
+      return seasonClasses.map(sc => sc.class_name);
+    }
+    return DEFAULT_CLASS_ORDER;
+  }, [seasonClasses]);
+
+  const sortClassesFn = useCallback((a: string, b: string) => {
+    const ai = classOrder.indexOf(a);
+    const aiU = ai === -1 ? classOrder.indexOf(a.toUpperCase()) : ai;
+    const bi = classOrder.indexOf(b);
+    const biU = bi === -1 ? classOrder.indexOf(b.toUpperCase()) : bi;
+    return (aiU === -1 ? 999 : aiU) - (biU === -1 ? 999 : biU);
+  }, [classOrder]);
 
   // ── Check if lap data exists for continuous mode ─────────────
   const { data: lapTimeCount = 0 } = useQuery({
@@ -189,11 +215,7 @@ export default function PositionProgressionChart({
       if (teamName) carTeamMap.set(r.car_number, teamName);
     }
 
-    const allClasses = Array.from(new Set(carClassMap.values())).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
-      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    });
+    const allClasses = Array.from(new Set(carClassMap.values())).sort(sortClassesFn);
     const allCarNumbers = Array.from(new Set(lapTimes.map(lt => lt.car_number))).sort((a, b) => {
       const na = parseInt(a, 10), nb = parseInt(b, 10);
       if (!isNaN(na) && !isNaN(nb)) return na - nb;
@@ -384,11 +406,7 @@ export default function PositionProgressionChart({
       return a.localeCompare(b);
     });
 
-    const sortedClasses = Array.from(classSet).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
-      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    });
+    const sortedClasses = Array.from(classSet).sort(sortClassesFn);
 
     return { carSeries: series, allClasses: sortedClasses, allCarNumbers: carNumbers, discreteCarClassMap: carClassMap };
   }, [useContinuous, allHourResults, hourSessions, teamNameMap]);
@@ -428,13 +446,13 @@ export default function PositionProgressionChart({
       const cls = isContinuousMode
         ? continuousData?.carSeriesInfo.find(c => c.carNumber === carNumber)?.className
         : carSeries.find(c => c.carNumber === carNumber)?.className;
-      const baseColor = CLASS_COLORS[(cls || "").toUpperCase()] || "#6b7280";
+      const baseColor = classColors[cls || ""] || classColors[(cls || "").toUpperCase()] || DEFAULT_CLASS_COLORS[(cls || "").toUpperCase()] || "#6b7280";
       // Shade within class for differentiation
       const classMembers = carsInView.filter(cn => {
         const cnCls = isContinuousMode
           ? continuousData?.carSeriesInfo.find(c => c.carNumber === cn)?.className
           : carSeries.find(c => c.carNumber === cn)?.className;
-        return (cnCls || "").toUpperCase() === (cls || "").toUpperCase();
+        return (cnCls || "") === (cls || "");
       });
       const idx = classMembers.indexOf(carNumber);
       return shadeColor(baseColor, Math.max(0, idx), classMembers.length);
@@ -443,7 +461,7 @@ export default function PositionProgressionChart({
       const idx = carsInView.indexOf(carNumber);
       return INDIVIDUAL_COLORS[Math.max(0, idx) % INDIVIDUAL_COLORS.length];
     }
-  }, [isClassFiltered, isContinuousMode, continuousData, carSeries]);
+  }, [isClassFiltered, isContinuousMode, continuousData, carSeries, classColors]);
 
   // Build chart data
   const { chartData, maxPosition } = useMemo(() => {

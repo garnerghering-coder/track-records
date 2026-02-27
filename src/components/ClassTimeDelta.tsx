@@ -26,9 +26,9 @@ interface CarMeta {
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const DEFAULT_CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const CLASS_COLORS: Record<string, string> = {
+const DEFAULT_CLASS_COLORS: Record<string, string> = {
   GTP: "#e63946", GTDPRO: "#457b9d", GTD: "#2a9d8f",
   LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
 };
@@ -73,9 +73,10 @@ interface ClassTimeDeltaProps {
   teamNameMap: Record<string, string>;
   isMulticlass?: boolean;
   compact?: boolean;
+  seasonClasses?: { class_name: string; color: string; sort_order: number }[];
 }
 
-export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, compact }: ClassTimeDeltaProps) {
+export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, compact, seasonClasses }: ClassTimeDeltaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; lines: string[] } | null>(null);
@@ -175,15 +176,32 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     return map;
   }, [raceResults, teamNameMap]);
 
+  const classColors = useMemo(() => {
+    const map: Record<string, string> = { ...DEFAULT_CLASS_COLORS };
+    if (seasonClasses) {
+      for (const sc of seasonClasses) map[sc.class_name] = sc.color;
+    }
+    return map;
+  }, [seasonClasses]);
+
+  const classOrder = useMemo(() => {
+    if (seasonClasses && seasonClasses.length > 0) {
+      return seasonClasses.map(sc => sc.class_name);
+    }
+    return DEFAULT_CLASS_ORDER;
+  }, [seasonClasses]);
+
   const allClasses = useMemo(() => {
     const classes = new Set<string>();
     for (const [, m] of carMetaMap) if (m.className) classes.add(m.className);
     return Array.from(classes).sort((a, b) => {
-      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
-      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      const ai = classOrder.indexOf(a);
+      const aiU = ai === -1 ? classOrder.indexOf(a.toUpperCase()) : ai;
+      const bi = classOrder.indexOf(b);
+      const biU = bi === -1 ? classOrder.indexOf(b.toUpperCase()) : bi;
+      return (aiU === -1 ? 999 : aiU) - (biU === -1 ? 999 : biU);
     });
-  }, [carMetaMap]);
+  }, [carMetaMap, classOrder]);
 
   // "All" when selectedClass is null, otherwise filter to specific class
   const isAllView = selectedClass === null;
@@ -333,17 +351,17 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     if (isAllView) {
       // Color by class
       const meta = carMetaMap.get(cn);
-      const cls = meta?.className?.toUpperCase() || "";
-      const baseColor = CLASS_COLORS[cls] || "#6b7280";
+      const cls = meta?.className || "";
+      const baseColor = classColors[cls] || classColors[cls.toUpperCase()] || DEFAULT_CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
       // Shade within class for slight differentiation
-      const classMembers = Array.from(carMetaMap.entries()).filter(([, m]) => m.className?.toUpperCase() === cls);
+      const classMembers = Array.from(carMetaMap.entries()).filter(([, m]) => m.className === cls);
       const idxInClass = classMembers.findIndex(([c]) => c === cn);
       return shadeColor(baseColor, idxInClass, classMembers.length);
     } else {
       // Individual car colors
       return INDIVIDUAL_COLORS[index % INDIVIDUAL_COLORS.length];
     }
-  }, [isAllView, carMetaMap]);
+  }, [isAllView, carMetaMap, classColors]);
 
   // ── Canvas rendering ──────────────────────────────────────────
 
@@ -653,7 +671,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
                     ? "border-primary/30 text-primary bg-primary/10"
                     : "border-border text-muted-foreground bg-muted/50 hover:text-foreground"
                 }`}
-                style={cls === activeClass ? { borderColor: CLASS_COLORS[cls.toUpperCase()] + "60", color: CLASS_COLORS[cls.toUpperCase()] } : {}}
+                style={cls === activeClass ? { borderColor: (classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280") + "60", color: classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280" } : {}}
               >
                 {cls}
               </button>
