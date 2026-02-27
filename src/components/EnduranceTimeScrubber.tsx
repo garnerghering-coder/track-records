@@ -310,34 +310,20 @@ export default function EnduranceTimeScrubber({
         )}
       </div>
 
-      {/* Quick hour buttons (always visible) */}
-      <div className="flex flex-wrap gap-1">
-        <button
-          onClick={() => handleDropdownChange("race-results")}
-          className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-            activeSubTab === "race-results" && customElapsed == null
-              ? "bg-background text-foreground shadow-sm border border-border"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Final
-        </button>
-        {hasLapData ? (
-          virtualHours.map(vh => (
-            <button
-              key={vh.value}
-              onClick={() => handleDropdownChange(vh.value)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                customElapsed === vh.elapsed
-                  ? "bg-background text-foreground shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {vh.label}
-            </button>
-          ))
-        ) : (
-          hourSessions.map(hs => (
+      {/* Fallback: quick hour buttons only when no lap data (legacy imported hours) */}
+      {!hasLapData && hourSessions.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={() => handleDropdownChange("race-results")}
+            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              activeSubTab === "race-results" && customElapsed == null
+                ? "bg-background text-foreground shadow-sm border border-border"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Final
+          </button>
+          {hourSessions.map(hs => (
             <button
               key={hs.id}
               onClick={() => handleDropdownChange(hs.id)}
@@ -349,9 +335,9 @@ export default function EnduranceTimeScrubber({
             >
               {hs.name}
             </button>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Custom standings table */}
       {customElapsed != null && customStandings && (
