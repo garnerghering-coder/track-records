@@ -21,6 +21,7 @@ import TrackFingerprint from "@/components/TrackFingerprint";
 import { computeTrackMetrics } from "@/lib/track-calculations";
 import SessionBottomTabs from "@/components/SessionBottomTabs";
 import EventHeroDashboard from "@/components/EventHeroDashboard";
+import EnduranceTimeScrubber from "@/components/EnduranceTimeScrubber";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -254,6 +255,8 @@ function EnduranceRaceView({
   isMulticlass?: boolean;
   layout?: any;
 }) {
+  const [customElapsed, setCustomElapsed] = useState<number | null>(null);
+
   // The sub-tabs: "Race Results" + each hour
   const subTabs = [
     { id: "race-results", label: "Race Results", sessionId: parentSession.id },
@@ -267,50 +270,46 @@ function EnduranceRaceView({
     ? parentSession
     : hourSessions.find((h: any) => h.id === displaySessionId) || parentSession;
 
-  // For +/- calculation, we need to know the "reference" session
-  // - "Race Results" and "Hour 1": compare to qualifying
-  // - "Hour N" (N>1): compare to "Hour N-1"
   const currentHourIndex = hourSessions.findIndex((h: any) => h.id === displaySessionId);
   const isHourView = currentHourIndex >= 0;
   const isFirstHour = isHourView && currentHourIndex === 0;
-  const useQualifyingRef = !isHourView || isFirstHour; // Race Results or Hour 1
+  const useQualifyingRef = !isHourView || isFirstHour;
   const prevHourSession = isHourView && currentHourIndex > 0 ? hourSessions[currentHourIndex - 1] : null;
+
+  const showStoredResults = customElapsed == null;
 
   return (
     <div className="space-y-4">
-      {/* Sub-tab bar */}
-      <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-lg">
-        {subTabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSubTab(tab.id)}
-            className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
-              activeSubTab === tab.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Results for the selected sub-tab */}
-      <SessionResults
-        session={displaySession}
-        event={event}
+      {/* Time scrubber (replaces simple sub-tab bar when lap data exists) */}
+      <EnduranceTimeScrubber
+        parentSessionId={parentSession.id}
+        hourSessions={hourSessions}
         teamNameMap={teamNameMap}
-        allSessions={allSessions}
-        weatherMap={weatherMap}
-        positionRefMode={useQualifyingRef ? "qualifying" : "previous-hour"}
-        prevHourSessionId={prevHourSession?.id || null}
-        hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
-        isOverallEnduranceView={!isHourView}
+        activeSubTab={activeSubTab}
+        setActiveSubTab={(v) => { setCustomElapsed(null); setActiveSubTab(v); }}
+        onCustomElapsed={setCustomElapsed}
         isMulticlass={isMulticlass}
-        layout={layout}
-        enduranceHourSessions={hourSessions}
-        enduranceActiveHourId={isHourView ? displaySessionId : undefined}
       />
+
+      {/* Stored results (hidden when viewing custom time standings) */}
+      {showStoredResults && (
+        <SessionResults
+          session={displaySession}
+          event={event}
+          teamNameMap={teamNameMap}
+          allSessions={allSessions}
+          weatherMap={weatherMap}
+          positionRefMode={useQualifyingRef ? "qualifying" : "previous-hour"}
+          prevHourSessionId={prevHourSession?.id || null}
+          hideStatus={isHourView && currentHourIndex < hourSessions.length - 1}
+          isOverallEnduranceView={!isHourView}
+          isMulticlass={isMulticlass}
+          layout={layout}
+          enduranceHourSessions={hourSessions}
+          enduranceActiveHourId={isHourView ? displaySessionId : undefined}
+          parentSessionId={parentSession.id}
+        />
+      )}
     </div>
   );
 }

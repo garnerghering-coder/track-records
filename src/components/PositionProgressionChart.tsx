@@ -11,6 +11,14 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
+import {
+  fetchAllLapTimes,
+  computeStandingsAtTime,
+  generateSampleTimestamps,
+  formatElapsedLabel,
+  getTickIntervalSeconds,
+  type LapTimeRow,
+} from "@/lib/lap-position-calc";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -46,6 +54,7 @@ interface Props {
   activeHourId?: string;
   isMulticlass?: boolean;
   compact?: boolean;
+  parentSessionId?: string;
 }
 
 // ── Deterministic color palette ──────────────────────────────────────
@@ -54,7 +63,7 @@ const COLORS = [
   "#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4",
   "#f97316","#14b8a6","#a855f7","#e11d48","#84cc16","#0ea5e9","#d946ef",
   "#facc15","#64748b","#fb923c","#4ade80","#38bdf8","#c084fc","#f472b6",
-  "#2dd4bf","#fbbf24","#a3e635","#818cf8","#fb7185","#34d399","#fde047",
+  "#2dd4bf","#fbbf24","#a3e635","#818cf8","#fb7185","#34d399","#fef08a",
   "#67e8f9","#c4b5fd","#f9a8d4","#5eead4","#fdba74","#bef264","#93c5fd",
   "#fda4af","#6ee7b7","#fef08a","#a5f3fc","#ddd6fe","#fbcfe8","#99f6e4",
 ];
@@ -72,6 +81,7 @@ export default function PositionProgressionChart({
   activeHourId,
   isMulticlass,
   compact,
+  parentSessionId,
 }: Props) {
   const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set());
   const [highlightedCar, setHighlightedCar] = useState<string | null>(null);
@@ -81,13 +91,177 @@ export default function PositionProgressionChart({
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch all hour results in one batch
+  // ── Check if lap data exists for continuous mode ─────────────
+  const { data: lapTimeCount = 0 } = useQuery({
+    queryKey: ["progression_lap_check", parentSessionId],
+    queryFn: async () => {
+      if (!parentSessionId) return 0;
+      const { count } = await supabase
+        .from("v2_lap_times" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", parentSessionId);
+      return count || 0;
+    },
+    enabled: !!parentSessionId,
+  });
+
+  const useContinuous = lapTimeCount > 0 && !!parentSessionId;
+
+  // ── Continuous mode: fetch lap times ─────────────────────────
+  const { data: lapTimes = [] } = useQuery({
+    queryKey: ["progression_laps", parentSessionId],
+    queryFn: () => fetchAllLapTimes(supabase, parentSessionId!),
+    enabled: useContinuous,
+  });
+
+  // Fetch race results for metadata (class, team, etc.)
+  const { data: raceResultsMeta = [] } = useQuery({
+    queryKey: ["progression_meta", parentSessionId],
+    queryFn: async () => {
+      const allResults: any[] = [];
+      let offset = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("v2_race_results" as any)
+          .select("car_number, position, team_id, extra_data, v2_teams(id, full_name, short_name)")
+          .eq("session_id", parentSessionId!)
+          .order("position")
+          .range(offset, offset + 999);
+        const batch = (data || []) as any[];
+        allResults.push(...batch);
+        if (batch.length < 1000) break;
+        offset += 1000;
+      }
+      // Dedupe by car_number
+      const seen = new Set<string>();
+      return allResults.filter((r: any) => {
+        if (!r.car_number || seen.has(r.car_number)) return false;
+        seen.add(r.car_number);
+        return true;
+      });
+    },
+    enabled: useContinuous,
+  });
+
+  // ── Continuous mode: compute positions at sampled timestamps ─
+  const continuousData = useMemo(() => {
+    if (!useContinuous || lapTimes.length === 0) return null;
+
+    // Get time range
+    let minE = Infinity, maxE = -Infinity;
+    for (const lt of lapTimes) {
+      if (lt.elapsed < minE) minE = lt.elapsed;
+      if (lt.elapsed > maxE) maxE = lt.elapsed;
+    }
+    if (!isFinite(minE)) return null;
+
+    // Build car metadata
+    const carClassMap = new Map<string, string>();
+    const carTeamMap = new Map<string, string>();
+    for (const r of raceResultsMeta) {
+      const cls = r.extra_data?.Class || r.extra_data?.class || "";
+      if (cls) carClassMap.set(r.car_number, cls);
+      const teamId = r.v2_teams?.id;
+      const teamName = teamId && teamNameMap[teamId]
+        ? teamNameMap[teamId]
+        : r.v2_teams?.short_name || r.v2_teams?.full_name || "";
+      if (teamName) carTeamMap.set(r.car_number, teamName);
+    }
+
+    const allClasses = Array.from(new Set(carClassMap.values())).sort();
+    const allCarNumbers = Array.from(new Set(lapTimes.map(lt => lt.car_number))).sort((a, b) => {
+      const na = parseInt(a, 10), nb = parseInt(b, 10);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.localeCompare(b);
+    });
+
+    // Generate sample timestamps
+    const timestamps = generateSampleTimestamps(minE, maxE, compact);
+
+    // Pre-sort lap times for efficient binary search
+    // Sort by car_number, then elapsed
+    const sortedByCarElapsed = [...lapTimes].sort((a, b) =>
+      a.car_number === b.car_number ? a.elapsed - b.elapsed : a.car_number.localeCompare(b.car_number)
+    );
+
+    // Build per-car sorted arrays for faster lookups
+    const carLapArrays = new Map<string, LapTimeRow[]>();
+    for (const lt of sortedByCarElapsed) {
+      if (!carLapArrays.has(lt.car_number)) carLapArrays.set(lt.car_number, []);
+      carLapArrays.get(lt.car_number)!.push(lt);
+    }
+
+    // Compute positions at each timestamp
+    const chartData: Record<string, any>[] = [];
+    let maxPos = 0;
+
+    // Precompute car latest lap at each timestamp efficiently
+    // For each car, maintain a pointer into its sorted lap array
+    const carPointers = new Map<string, number>();
+    for (const cn of allCarNumbers) carPointers.set(cn, 0);
+
+    for (const t of timestamps) {
+      const point: Record<string, any> = { elapsed: t, elapsedLabel: formatElapsedLabel(t) };
+
+      // For each car, advance pointer to find latest lap at time t
+      const standings: { cn: string; laps: number; elapsed: number }[] = [];
+      for (const cn of allCarNumbers) {
+        const laps = carLapArrays.get(cn);
+        if (!laps || laps.length === 0) continue;
+        let ptr = carPointers.get(cn)!;
+        while (ptr < laps.length - 1 && laps[ptr + 1].elapsed <= t) ptr++;
+        carPointers.set(cn, ptr);
+        if (laps[ptr].elapsed <= t) {
+          standings.push({ cn, laps: laps[ptr].lap_number, elapsed: laps[ptr].elapsed });
+        }
+      }
+
+      // Sort by laps desc, then elapsed asc
+      standings.sort((a, b) => {
+        if (b.laps !== a.laps) return b.laps - a.laps;
+        return a.elapsed - b.elapsed;
+      });
+
+      // Assign positions (overall and class)
+      const classCounters: Record<string, number> = {};
+      standings.forEach((s, i) => {
+        const pos = i + 1;
+        if (pos > maxPos) maxPos = pos;
+        const cls = carClassMap.get(s.cn) || "";
+        if (!classCounters[cls]) classCounters[cls] = 0;
+        classCounters[cls]++;
+        point[`car_${s.cn}`] = pos;
+        point[`pic_${s.cn}`] = classCounters[cls];
+      });
+
+      chartData.push(point);
+    }
+
+    // Build car series info for legend/filtering
+    const carSeriesInfo = allCarNumbers.map(cn => ({
+      carNumber: cn,
+      className: carClassMap.get(cn) || null,
+      teamName: carTeamMap.get(cn) || null,
+    }));
+
+    return {
+      chartData,
+      maxPosition: maxPos,
+      allClasses,
+      allCarNumbers,
+      carSeriesInfo,
+      duration: maxE - minE,
+      minElapsed: minE,
+      maxElapsed: maxE,
+    };
+  }, [useContinuous, lapTimes, raceResultsMeta, teamNameMap, compact]);
+
+  // ── Discrete mode: Fetch hour results ────────────────────────
   const hourIds = hourSessions.map((h) => h.id);
   const { data: allHourResults = [], isLoading } = useQuery({
     queryKey: ["position_progression", hourIds.join(",")],
     queryFn: async () => {
       if (hourIds.length === 0) return [];
-      // Fetch in batches to avoid Supabase's 1000-row default limit
       const allResults: any[] = [];
       const batchSize = 1000;
       let offset = 0;
@@ -107,14 +281,14 @@ export default function PositionProgressionChart({
       }
       return allResults;
     },
-    enabled: hourIds.length > 0,
+    enabled: hourIds.length > 0 && !useContinuous,
   });
 
-  // Build per-car time series
-  const { carSeries, allClasses, allCarNumbers } = useMemo(() => {
-    if (allHourResults.length === 0) return { carSeries: [], allClasses: [] as string[], allCarNumbers: [] as string[] };
+  // ── Discrete mode: Build per-car time series ─────────────────
+  const { carSeries, allClasses: discreteClasses, allCarNumbers: discreteCarNumbers } = useMemo(() => {
+    if (useContinuous || allHourResults.length === 0)
+      return { carSeries: [], allClasses: [] as string[], allCarNumbers: [] as string[] };
 
-    // Map session_id -> hour index
     const hourIndexMap: Record<string, number> = {};
     const hourLabelMap: Record<string, string> = {};
     hourSessions.forEach((h, i) => {
@@ -122,7 +296,6 @@ export default function PositionProgressionChart({
       hourLabelMap[h.id] = h.name;
     });
 
-    // Group by car_number
     const carMap = new Map<string, CarHourPoint[]>();
     const carTeamMap = new Map<string, string>();
     const carClassMap = new Map<string, string>();
@@ -160,7 +333,6 @@ export default function PositionProgressionChart({
       });
     }
 
-    // Detect DNF: if laps stop progressing for the remaining hours
     const totalHours = hourSessions.length;
     const series: CarTimeSeries[] = [];
     const carNumbers: string[] = [];
@@ -169,13 +341,10 @@ export default function PositionProgressionChart({
       points.sort((a, b) => a.hour - b.hour);
       carNumbers.push(cn);
 
-      // Detect DNF by checking if laps stall permanently
       let retired = false;
       if (points.length > 0 && points[points.length - 1].hour < totalHours) {
-        // Car doesn't appear in later hours - likely retired
         retired = true;
       } else if (points.length >= 2) {
-        // Check if laps stall at the end
         let lastProgressHour = 0;
         for (let i = 1; i < points.length; i++) {
           const prevLaps = points[i - 1].lapsCompleted;
@@ -184,54 +353,72 @@ export default function PositionProgressionChart({
             lastProgressHour = i;
           }
         }
-        // If laps stopped progressing for the final 2+ hours, mark as retired
-        // But only trim if there's genuinely no progress at the very end
         if (lastProgressHour < points.length - 2) {
-          // Keep points up through lastProgressHour + 1 (the first stall hour)
           const trimmedPoints = points.slice(0, lastProgressHour + 2);
-          series.push({
-            carNumber: cn,
-            className: carClassMap.get(cn) || null,
-            teamName: carTeamMap.get(cn) || null,
-            points: trimmedPoints,
-            retired: true,
-          });
+          series.push({ carNumber: cn, className: carClassMap.get(cn) || null, teamName: carTeamMap.get(cn) || null, points: trimmedPoints, retired: true });
           continue;
         }
       }
 
-      series.push({
-        carNumber: cn,
-        className: carClassMap.get(cn) || null,
-        teamName: carTeamMap.get(cn) || null,
-        points,
-        retired,
-      });
+      series.push({ carNumber: cn, className: carClassMap.get(cn) || null, teamName: carTeamMap.get(cn) || null, points, retired });
     }
 
-    // Sort car numbers numerically
     carNumbers.sort((a, b) => {
-      const na = parseInt(a, 10);
-      const nb = parseInt(b, 10);
+      const na = parseInt(a, 10), nb = parseInt(b, 10);
       if (!isNaN(na) && !isNaN(nb)) return na - nb;
       return a.localeCompare(b);
     });
 
-    return {
-      carSeries: series,
-      allClasses: Array.from(classSet).sort(),
-      allCarNumbers: carNumbers,
-    };
-  }, [allHourResults, hourSessions, teamNameMap]);
+    return { carSeries: series, allClasses: Array.from(classSet).sort(), allCarNumbers: carNumbers };
+  }, [useContinuous, allHourResults, hourSessions, teamNameMap]);
+
+  // ── Unified data resolution ──────────────────────────────────
+
+  const isContinuousMode = useContinuous && !!continuousData;
+
+  const allClasses = isContinuousMode ? continuousData.allClasses : discreteClasses;
+  const allCarNumbers = isContinuousMode ? continuousData.allCarNumbers : discreteCarNumbers;
 
   // Filter by class
-  const filteredSeries = useMemo(() => {
-    if (selectedClasses.size === 0) return carSeries;
-    return carSeries.filter((c) => c.className && selectedClasses.has(c.className));
-  }, [carSeries, selectedClasses]);
+  const filteredCarNumbers = useMemo(() => {
+    if (selectedClasses.size === 0) return allCarNumbers;
+    if (isContinuousMode) {
+      return continuousData!.carSeriesInfo
+        .filter(c => c.className && selectedClasses.has(c.className))
+        .map(c => c.carNumber);
+    }
+    return carSeries
+      .filter(c => c.className && selectedClasses.has(c.className))
+      .map(c => c.carNumber);
+  }, [selectedClasses, allCarNumbers, isContinuousMode, continuousData, carSeries]);
 
-  // Build recharts data: each hour is a data point, with car_XX keys for each car
+  const filteredSeries = useMemo(() => {
+    if (useContinuous) return []; // Not used in continuous mode
+    if (selectedClasses.size === 0) return carSeries;
+    return carSeries.filter(c => c.className && selectedClasses.has(c.className));
+  }, [carSeries, selectedClasses, useContinuous]);
+
+  // Build chart data
   const { chartData, maxPosition } = useMemo(() => {
+    if (isContinuousMode) {
+      // Filter continuous chart data to only include selected cars
+      const posKey = viewMode === "class" ? "pic_" : "car_";
+      let maxPos = 0;
+      const data = continuousData!.chartData.map(pt => {
+        const filtered: Record<string, any> = { elapsed: pt.elapsed, elapsedLabel: pt.elapsedLabel };
+        for (const cn of filteredCarNumbers) {
+          const val = pt[`${posKey}${cn}`];
+          if (val != null) {
+            filtered[`car_${cn}`] = val;
+            if (val > maxPos) maxPos = val;
+          }
+        }
+        return filtered;
+      });
+      return { chartData: data, maxPosition: maxPos };
+    }
+
+    // Discrete mode
     const totalHours = hourSessions.length;
     const data: Record<string, any>[] = [];
     let maxPos = 0;
@@ -251,10 +438,11 @@ export default function PositionProgressionChart({
     }
 
     return { chartData: data, maxPosition: maxPos };
-  }, [filteredSeries, hourSessions, viewMode]);
+  }, [isContinuousMode, continuousData, filteredCarNumbers, filteredSeries, hourSessions, viewMode]);
 
-  // Build tooltip lookup: hour -> carNumber -> point data
+  // Tooltip lookup (discrete mode only)
   const tooltipLookup = useMemo(() => {
+    if (isContinuousMode) return {};
     const lookup: Record<number, Record<string, CarHourPoint>> = {};
     for (const car of filteredSeries) {
       for (const pt of car.points) {
@@ -263,7 +451,7 @@ export default function PositionProgressionChart({
       }
     }
     return lookup;
-  }, [filteredSeries]);
+  }, [filteredSeries, isContinuousMode]);
 
   const toggleClass = useCallback((cls: string) => {
     setSelectedClasses((prev) => {
@@ -274,15 +462,34 @@ export default function PositionProgressionChart({
     });
   }, []);
 
-  // Active hour index for reference line
   const activeHourIndex = activeHourId
     ? hourSessions.findIndex((h) => h.id === activeHourId) + 1
     : null;
 
-  if (isLoading) return null;
-  if (filteredSeries.length === 0 && carSeries.length === 0) return null;
+  // X-axis tick formatting for continuous mode
+  const tickInterval = isContinuousMode
+    ? getTickIntervalSeconds(continuousData!.duration)
+    : null;
+
+  const xAxisTicks = useMemo(() => {
+    if (!isContinuousMode || !continuousData) return undefined;
+    const ticks: number[] = [];
+    const start = Math.ceil(continuousData.minElapsed / tickInterval!) * tickInterval!;
+    for (let t = start; t <= continuousData.maxElapsed; t += tickInterval!) {
+      ticks.push(t);
+    }
+    return ticks;
+  }, [isContinuousMode, continuousData, tickInterval]);
+
+  if (isLoading && !useContinuous) return null;
+  if (!isContinuousMode && filteredSeries.length === 0 && carSeries.length === 0) return null;
+  if (isContinuousMode && chartData.length === 0) return null;
 
   const showClassFilter = allClasses.length > 1;
+  const carsToRender = isContinuousMode ? filteredCarNumbers : filteredSeries.map(c => c.carNumber);
+  const carInfoForLegend = isContinuousMode
+    ? continuousData!.carSeriesInfo.filter(c => filteredCarNumbers.includes(c.carNumber))
+    : filteredSeries.map(c => ({ carNumber: c.carNumber, className: c.className, teamName: c.teamName }));
 
   return (
     <div className={compact ? "h-full flex flex-col" : "rounded-lg border border-border bg-card p-4 space-y-4"}>
@@ -332,7 +539,7 @@ export default function PositionProgressionChart({
       <div
         ref={chartContainerRef}
         className={`w-full relative ${compact ? "flex-1" : ""}`}
-        style={compact ? undefined : { height: Math.min(500, Math.max(300, maxPosition * 16 + 60)) }}
+        style={compact ? undefined : { height: Math.min(500, Math.max(300, (maxPosition || 10) * 16 + 60)) }}
         onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
       >
         <ResponsiveContainer width="100%" height="100%">
@@ -340,57 +547,80 @@ export default function PositionProgressionChart({
             data={chartData}
             margin={{ top: 10, right: compact ? 25 : 10, bottom: 10, left: compact ? 5 : 50 }}
             onMouseMove={(state: any) => {
-              if (!state || state.activeTooltipIndex == null || !state.chartX || !state.chartY) {
-                return;
-              }
-              const hourIdx = state.activeTooltipIndex;
-              const hour = hourIdx + 1;
-              if (hour < 1 || hour > hourSessions.length) return;
+              if (!state || state.activeTooltipIndex == null || !state.chartX || !state.chartY) return;
 
-              // Map chartY to position using the Y axis scale (reversed)
-              // Fallback: estimate from chart dimensions
               const containerEl = chartContainerRef.current;
               const containerH = containerEl?.clientHeight || 400;
-              // Recharts margins: top 10, bottom 10 + axis ~20
               const plotTop = 10;
               const plotBottom = containerH - 40;
               const plotHeight = plotBottom - plotTop;
               const yFrac = Math.max(0, Math.min(1, (state.chartY - plotTop) / plotHeight));
               const mousePos = 1 + yFrac * ((maxPosition || 1) - 1);
 
-              // Find nearest car at this hour
-              const hourData = tooltipLookup[hour] || {};
-              let nearestCar: string | null = null;
-              let nearestDist = Infinity;
-
-              for (const cn of Object.keys(hourData)) {
-                const pt = hourData[cn];
-                const pos = viewMode === "class" && pt.classPosition ? parseInt(pt.classPosition, 10) : pt.position;
-                if (pos === null) continue;
-                const dist = Math.abs(pos - mousePos);
-                if (dist < nearestDist) {
-                  nearestDist = dist;
-                  nearestCar = cn;
+              if (isContinuousMode) {
+                // Continuous mode tooltip
+                const pt = chartData[state.activeTooltipIndex];
+                if (!pt) return;
+                let nearestCar: string | null = null;
+                let nearestDist = Infinity;
+                for (const cn of carsToRender) {
+                  const pos = pt[`car_${cn}`];
+                  if (pos == null) continue;
+                  const dist = Math.abs(pos - mousePos);
+                  if (dist < nearestDist) { nearestDist = dist; nearestCar = cn; }
                 }
-              }
-
-              if (nearestCar && nearestDist < 3) {
-                setHoveredCar(nearestCar);
-                setHoveredHour(hour);
-                setTooltipPos({ x: state.chartX + 60, y: state.chartY });
+                if (nearestCar && nearestDist < 3) {
+                  setHoveredCar(nearestCar);
+                  setHoveredHour(state.activeTooltipIndex);
+                  setTooltipPos({ x: state.chartX + 60, y: state.chartY });
+                } else {
+                  setHoveredCar(null); setTooltipPos(null);
+                }
               } else {
-                setHoveredCar(null);
-                setTooltipPos(null);
+                // Discrete mode tooltip
+                const hourIdx = state.activeTooltipIndex;
+                const hour = hourIdx + 1;
+                if (hour < 1 || hour > hourSessions.length) return;
+                const hourData = tooltipLookup[hour] || {};
+                let nearestCar: string | null = null;
+                let nearestDist = Infinity;
+                for (const cn of Object.keys(hourData)) {
+                  const pt = hourData[cn];
+                  const pos = viewMode === "class" && pt.classPosition ? parseInt(pt.classPosition, 10) : pt.position;
+                  if (pos === null) continue;
+                  const dist = Math.abs(pos - mousePos);
+                  if (dist < nearestDist) { nearestDist = dist; nearestCar = cn; }
+                }
+                if (nearestCar && nearestDist < 3) {
+                  setHoveredCar(nearestCar);
+                  setHoveredHour(hour);
+                  setTooltipPos({ x: state.chartX + 60, y: state.chartY });
+                } else {
+                  setHoveredCar(null); setTooltipPos(null);
+                }
               }
             }}
             onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
           >
-            <XAxis
-              dataKey="hourLabel"
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              tickLine={false}
-            />
+            {isContinuousMode ? (
+              <XAxis
+                dataKey="elapsed"
+                type="number"
+                domain={[continuousData!.minElapsed, continuousData!.maxElapsed]}
+                ticks={xAxisTicks}
+                tickFormatter={(v: number) => formatElapsedLabel(v)}
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={false}
+              />
+            ) : (
+              <XAxis
+                dataKey="hourLabel"
+                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                tickLine={false}
+              />
+            )}
             <YAxis
               reversed
               domain={[1, maxPosition || 1]}
@@ -402,7 +632,7 @@ export default function PositionProgressionChart({
               {...(!compact && { label: { value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } } })}
             />
             <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
-            {activeHourIndex && activeHourIndex > 0 && (
+            {!isContinuousMode && activeHourIndex && activeHourIndex > 0 && (
               <ReferenceLine
                 x={hourSessions[activeHourIndex - 1]?.name}
                 stroke="hsl(var(--primary))"
@@ -410,21 +640,21 @@ export default function PositionProgressionChart({
                 strokeOpacity={0.5}
               />
             )}
-            {filteredSeries.map((car) => {
-              const isActive = hoveredCar === car.carNumber || highlightedCar === car.carNumber;
+            {carsToRender.map((cn) => {
+              const isActive = hoveredCar === cn || highlightedCar === cn;
               const anyHighlight = hoveredCar || highlightedCar;
               return (
                 <Line
-                  key={car.carNumber}
+                  key={cn}
                   type="linear"
-                  dataKey={`car_${car.carNumber}`}
-                  stroke={getCarColor(car.carNumber, allCarNumbers)}
+                  dataKey={`car_${cn}`}
+                  stroke={getCarColor(cn, allCarNumbers)}
                   strokeWidth={isActive ? 3 : 1.5}
                   strokeOpacity={anyHighlight ? (isActive ? 1 : 0.12) : 0.8}
-                  dot={{
+                  dot={isContinuousMode ? false : {
                     r: isActive ? 3.5 : 2.5,
                     strokeWidth: 0,
-                    fill: getCarColor(car.carNumber, allCarNumbers),
+                    fill: getCarColor(cn, allCarNumbers),
                     fillOpacity: anyHighlight ? (isActive ? 1 : 0.12) : 0.8,
                   }}
                   activeDot={false}
@@ -436,19 +666,42 @@ export default function PositionProgressionChart({
           </LineChart>
         </ResponsiveContainer>
 
-        {/* Custom tooltip near cursor */}
-        {hoveredCar && hoveredHour && tooltipPos && tooltipLookup[hoveredHour]?.[hoveredCar] && (() => {
-          const pt = tooltipLookup[hoveredHour][hoveredCar];
+        {/* Custom tooltip */}
+        {hoveredCar && hoveredHour != null && tooltipPos && (() => {
           const containerWidth = chartContainerRef.current?.clientWidth || 600;
           const flipX = tooltipPos.x > containerWidth - 200;
+
+          if (isContinuousMode) {
+            const pt = chartData[hoveredHour];
+            if (!pt) return null;
+            const meta = continuousData!.carSeriesInfo.find(c => c.carNumber === hoveredCar);
+            const pos = pt[`car_${hoveredCar}`];
+            const pic = pt[`pic_${hoveredCar}`];
+            return (
+              <div
+                className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
+                style={{ left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10, top: Math.max(10, tooltipPos.y - 40), zIndex: 50 }}
+              >
+                <div className="font-semibold text-popover-foreground">#{hoveredCar}</div>
+                {meta?.teamName && <div className="text-muted-foreground">{meta.teamName}</div>}
+                <div className="flex gap-3 text-popover-foreground">
+                  {pos && <span>P{pos}</span>}
+                  {meta?.className && <span>{meta.className}</span>}
+                  {pic && <span>PIC {pic}</span>}
+                </div>
+                <div className="text-muted-foreground">{pt.elapsedLabel}</div>
+              </div>
+            );
+          }
+
+          // Discrete mode tooltip
+          const hour = hoveredHour;
+          const pt = tooltipLookup[hour]?.[hoveredCar];
+          if (!pt) return null;
           return (
             <div
               className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
-              style={{
-                left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10,
-                top: Math.max(10, tooltipPos.y - 40),
-                zIndex: 50,
-              }}
+              style={{ left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10, top: Math.max(10, tooltipPos.y - 40), zIndex: 50 }}
             >
               <div className="font-semibold text-popover-foreground">#{pt.carNumber}</div>
               {pt.teamName && <div className="text-muted-foreground">{pt.teamName}</div>}
@@ -467,7 +720,7 @@ export default function PositionProgressionChart({
       {/* Car legend — hidden in compact mode */}
       {!compact && (
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
-        {filteredSeries.map((car) => (
+        {carInfoForLegend.map((car) => (
           <button
             key={car.carNumber}
             className={`inline-flex items-center gap-1 transition-opacity ${
