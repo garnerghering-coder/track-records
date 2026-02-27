@@ -289,6 +289,9 @@ function EnduranceRaceView({
         setActiveSubTab={(v) => { setCustomElapsed(null); setActiveSubTab(v); }}
         onCustomElapsed={setCustomElapsed}
         isMulticlass={isMulticlass}
+        weatherMap={weatherMap}
+        parentSession={parentSession}
+        event={event}
       />
 
       {/* Stored results (hidden when viewing custom time standings) */}
