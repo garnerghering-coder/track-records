@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -57,9 +57,18 @@ interface Props {
   parentSessionId?: string;
 }
 
-// ── Deterministic color palette ──────────────────────────────────────
+// ── Class colors (matching ClassTimeDelta) ────────────────────────────
 
-const COLORS = [
+const CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+
+const CLASS_COLORS: Record<string, string> = {
+  GTP: "#e63946", GTDPRO: "#457b9d", GTD: "#2a9d8f",
+  LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
+};
+
+// ── Individual car color palette ─────────────────────────────────────
+
+const INDIVIDUAL_COLORS = [
   "#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4",
   "#f97316","#14b8a6","#a855f7","#e11d48","#84cc16","#0ea5e9","#d946ef",
   "#facc15","#64748b","#fb923c","#4ade80","#38bdf8","#c084fc","#f472b6",
@@ -68,9 +77,14 @@ const COLORS = [
   "#fda4af","#6ee7b7","#fef08a","#a5f3fc","#ddd6fe","#fbcfe8","#99f6e4",
 ];
 
-function getCarColor(carNumber: string, allCars: string[]): string {
-  const idx = allCars.indexOf(carNumber);
-  return COLORS[idx % COLORS.length];
+function shadeColor(hex: string, index: number, total: number): string {
+  if (total <= 1) return hex;
+  const factor = 0.7 + (0.6 * index) / Math.max(total - 1, 1);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const clamp = (v: number) => Math.min(255, Math.max(0, Math.round(v * factor)));
+  return `rgb(${clamp(r)}, ${clamp(g)}, ${clamp(b)})`;
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -90,6 +104,16 @@ export default function PositionProgressionChart({
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-switch to class position when filtering by class
+  const isClassFiltered = selectedClasses.size > 0;
+  useEffect(() => {
+    if (isClassFiltered) {
+      setViewMode("class");
+    } else {
+      setViewMode("overall");
+    }
+  }, [isClassFiltered]);
 
   // ── Check if lap data exists for continuous mode ─────────────
   const { data: lapTimeCount = 0 } = useQuery({
@@ -132,7 +156,6 @@ export default function PositionProgressionChart({
         if (batch.length < 1000) break;
         offset += 1000;
       }
-      // Dedupe by car_number
       const seen = new Set<string>();
       return allResults.filter((r: any) => {
         if (!r.car_number || seen.has(r.car_number)) return false;
@@ -147,7 +170,6 @@ export default function PositionProgressionChart({
   const continuousData = useMemo(() => {
     if (!useContinuous || lapTimes.length === 0) return null;
 
-    // Get time range
     let minE = Infinity, maxE = -Infinity;
     for (const lt of lapTimes) {
       if (lt.elapsed < minE) minE = lt.elapsed;
@@ -155,7 +177,6 @@ export default function PositionProgressionChart({
     }
     if (!isFinite(minE)) return null;
 
-    // Build car metadata
     const carClassMap = new Map<string, string>();
     const carTeamMap = new Map<string, string>();
     for (const r of raceResultsMeta) {
@@ -168,42 +189,38 @@ export default function PositionProgressionChart({
       if (teamName) carTeamMap.set(r.car_number, teamName);
     }
 
-    const allClasses = Array.from(new Set(carClassMap.values())).sort();
+    const allClasses = Array.from(new Set(carClassMap.values())).sort((a, b) => {
+      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
+      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
     const allCarNumbers = Array.from(new Set(lapTimes.map(lt => lt.car_number))).sort((a, b) => {
       const na = parseInt(a, 10), nb = parseInt(b, 10);
       if (!isNaN(na) && !isNaN(nb)) return na - nb;
       return a.localeCompare(b);
     });
 
-    // Generate sample timestamps
     const timestamps = generateSampleTimestamps(minE, maxE, compact);
 
-    // Pre-sort lap times for efficient binary search
-    // Sort by car_number, then elapsed
     const sortedByCarElapsed = [...lapTimes].sort((a, b) =>
       a.car_number === b.car_number ? a.elapsed - b.elapsed : a.car_number.localeCompare(b.car_number)
     );
 
-    // Build per-car sorted arrays for faster lookups
     const carLapArrays = new Map<string, LapTimeRow[]>();
     for (const lt of sortedByCarElapsed) {
       if (!carLapArrays.has(lt.car_number)) carLapArrays.set(lt.car_number, []);
       carLapArrays.get(lt.car_number)!.push(lt);
     }
 
-    // Compute positions at each timestamp
     const chartData: Record<string, any>[] = [];
     let maxPos = 0;
 
-    // Precompute car latest lap at each timestamp efficiently
-    // For each car, maintain a pointer into its sorted lap array
     const carPointers = new Map<string, number>();
     for (const cn of allCarNumbers) carPointers.set(cn, 0);
 
     for (const t of timestamps) {
       const point: Record<string, any> = { elapsed: t, elapsedLabel: formatElapsedLabel(t) };
 
-      // For each car, advance pointer to find latest lap at time t
       const standings: { cn: string; laps: number; elapsed: number }[] = [];
       for (const cn of allCarNumbers) {
         const laps = carLapArrays.get(cn);
@@ -216,13 +233,11 @@ export default function PositionProgressionChart({
         }
       }
 
-      // Sort by laps desc, then elapsed asc
       standings.sort((a, b) => {
         if (b.laps !== a.laps) return b.laps - a.laps;
         return a.elapsed - b.elapsed;
       });
 
-      // Assign positions (overall and class)
       const classCounters: Record<string, number> = {};
       standings.forEach((s, i) => {
         const pos = i + 1;
@@ -237,7 +252,6 @@ export default function PositionProgressionChart({
       chartData.push(point);
     }
 
-    // Build car series info for legend/filtering
     const carSeriesInfo = allCarNumbers.map(cn => ({
       carNumber: cn,
       className: carClassMap.get(cn) || null,
@@ -253,6 +267,7 @@ export default function PositionProgressionChart({
       duration: maxE - minE,
       minElapsed: minE,
       maxElapsed: maxE,
+      carClassMap,
     };
   }, [useContinuous, lapTimes, raceResultsMeta, teamNameMap, compact]);
 
@@ -285,9 +300,9 @@ export default function PositionProgressionChart({
   });
 
   // ── Discrete mode: Build per-car time series ─────────────────
-  const { carSeries, allClasses: discreteClasses, allCarNumbers: discreteCarNumbers } = useMemo(() => {
+  const { carSeries, allClasses: discreteClasses, allCarNumbers: discreteCarNumbers, discreteCarClassMap } = useMemo(() => {
     if (useContinuous || allHourResults.length === 0)
-      return { carSeries: [], allClasses: [] as string[], allCarNumbers: [] as string[] };
+      return { carSeries: [], allClasses: [] as string[], allCarNumbers: [] as string[], discreteCarClassMap: new Map<string, string>() };
 
     const hourIndexMap: Record<string, number> = {};
     const hourLabelMap: Record<string, string> = {};
@@ -369,7 +384,13 @@ export default function PositionProgressionChart({
       return a.localeCompare(b);
     });
 
-    return { carSeries: series, allClasses: Array.from(classSet).sort(), allCarNumbers: carNumbers };
+    const sortedClasses = Array.from(classSet).sort((a, b) => {
+      const ai = CLASS_ORDER.indexOf(a.toUpperCase());
+      const bi = CLASS_ORDER.indexOf(b.toUpperCase());
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+
+    return { carSeries: series, allClasses: sortedClasses, allCarNumbers: carNumbers, discreteCarClassMap: carClassMap };
   }, [useContinuous, allHourResults, hourSessions, teamNameMap]);
 
   // ── Unified data resolution ──────────────────────────────────
@@ -393,15 +414,40 @@ export default function PositionProgressionChart({
   }, [selectedClasses, allCarNumbers, isContinuousMode, continuousData, carSeries]);
 
   const filteredSeries = useMemo(() => {
-    if (useContinuous) return []; // Not used in continuous mode
+    if (useContinuous) return [];
     if (selectedClasses.size === 0) return carSeries;
     return carSeries.filter(c => c.className && selectedClasses.has(c.className));
   }, [carSeries, selectedClasses, useContinuous]);
 
+  // ── Color logic ──────────────────────────────────────────────
+  // All classes view: color by class. Single class view: individual car colors.
+
+  const getCarColor = useCallback((carNumber: string, carsInView: string[]): string => {
+    if (!isClassFiltered) {
+      // All-classes view: color by class
+      const cls = isContinuousMode
+        ? continuousData?.carSeriesInfo.find(c => c.carNumber === carNumber)?.className
+        : carSeries.find(c => c.carNumber === carNumber)?.className;
+      const baseColor = CLASS_COLORS[(cls || "").toUpperCase()] || "#6b7280";
+      // Shade within class for differentiation
+      const classMembers = carsInView.filter(cn => {
+        const cnCls = isContinuousMode
+          ? continuousData?.carSeriesInfo.find(c => c.carNumber === cn)?.className
+          : carSeries.find(c => c.carNumber === cn)?.className;
+        return (cnCls || "").toUpperCase() === (cls || "").toUpperCase();
+      });
+      const idx = classMembers.indexOf(carNumber);
+      return shadeColor(baseColor, Math.max(0, idx), classMembers.length);
+    } else {
+      // Class-filtered: individual colors
+      const idx = carsInView.indexOf(carNumber);
+      return INDIVIDUAL_COLORS[Math.max(0, idx) % INDIVIDUAL_COLORS.length];
+    }
+  }, [isClassFiltered, isContinuousMode, continuousData, carSeries]);
+
   // Build chart data
   const { chartData, maxPosition } = useMemo(() => {
     if (isContinuousMode) {
-      // Filter continuous chart data to only include selected cars
       const posKey = viewMode === "class" ? "pic_" : "car_";
       let maxPos = 0;
       const data = continuousData!.chartData.map(pt => {
@@ -558,7 +604,6 @@ export default function PositionProgressionChart({
               const mousePos = 1 + yFrac * ((maxPosition || 1) - 1);
 
               if (isContinuousMode) {
-                // Continuous mode tooltip
                 const pt = chartData[state.activeTooltipIndex];
                 if (!pt) return;
                 let nearestCar: string | null = null;
@@ -577,7 +622,6 @@ export default function PositionProgressionChart({
                   setHoveredCar(null); setTooltipPos(null);
                 }
               } else {
-                // Discrete mode tooltip
                 const hourIdx = state.activeTooltipIndex;
                 const hour = hourIdx + 1;
                 if (hour < 1 || hour > hourSessions.length) return;
@@ -648,13 +692,13 @@ export default function PositionProgressionChart({
                   key={cn}
                   type="linear"
                   dataKey={`car_${cn}`}
-                  stroke={getCarColor(cn, allCarNumbers)}
+                  stroke={getCarColor(cn, carsToRender)}
                   strokeWidth={isActive ? 3 : 1.5}
                   strokeOpacity={anyHighlight ? (isActive ? 1 : 0.12) : 0.8}
                   dot={isContinuousMode ? false : {
                     r: isActive ? 3.5 : 2.5,
                     strokeWidth: 0,
-                    fill: getCarColor(cn, allCarNumbers),
+                    fill: getCarColor(cn, carsToRender),
                     fillOpacity: anyHighlight ? (isActive ? 1 : 0.12) : 0.8,
                   }}
                   activeDot={false}
@@ -676,7 +720,7 @@ export default function PositionProgressionChart({
             if (!pt) return null;
             const meta = continuousData!.carSeriesInfo.find(c => c.carNumber === hoveredCar);
             const pos = pt[`car_${hoveredCar}`];
-            const pic = pt[`pic_${hoveredCar}`];
+            const pic = continuousData!.chartData[hoveredHour]?.[`pic_${hoveredCar}`];
             return (
               <div
                 className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
@@ -717,7 +761,7 @@ export default function PositionProgressionChart({
         })()}
       </div>
 
-      {/* Car legend — hidden in compact mode */}
+      {/* Car legend */}
       {!compact && (
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
         {carInfoForLegend.map((car) => (
@@ -734,7 +778,7 @@ export default function PositionProgressionChart({
           >
             <span
               className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
-              style={{ backgroundColor: getCarColor(car.carNumber, allCarNumbers) }}
+              style={{ backgroundColor: getCarColor(car.carNumber, carsToRender) }}
             />
             <span className="text-muted-foreground">
               #{car.carNumber}

@@ -33,6 +33,13 @@ const CLASS_COLORS: Record<string, string> = {
   LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
 };
 
+const INDIVIDUAL_COLORS = [
+  "#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4",
+  "#f97316","#14b8a6","#a855f7","#e11d48","#84cc16","#0ea5e9","#d946ef",
+  "#facc15","#64748b","#fb923c","#4ade80","#38bdf8","#c084fc","#f472b6",
+  "#2dd4bf","#fbbf24","#a3e635","#818cf8","#fb7185","#34d399","#fef08a",
+];
+
 const FLAG_COLORS: Record<string, string> = {
   GREEN: "rgba(34, 197, 94, 0.08)", YELLOW: "rgba(234, 179, 8, 0.12)",
   FCY: "rgba(251, 146, 60, 0.12)", RED: "rgba(239, 68, 68, 0.12)",
@@ -50,7 +57,6 @@ function formatElapsed(seconds: number): string {
 }
 
 function shadeColor(hex: string, index: number, total: number): string {
-  // Subtle shade variation within class color
   if (total <= 1) return hex;
   const factor = 0.7 + (0.6 * index) / Math.max(total - 1, 1);
   const r = parseInt(hex.slice(1, 3), 16);
@@ -73,19 +79,20 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; lines: string[] } | null>(null);
+  // null = "All" view
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [deltaMode, setDeltaMode] = useState<"leader" | "interval">("leader");
   const [zoomRange, setZoomRange] = useState<[number, number] | null>(null);
+  const [yZoomRange, setYZoomRange] = useState<[number, number] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<number | null>(null);
-  const [dragEnd, setDragEnd] = useState<number | null>(null);
+  const [dragStartPx, setDragStartPx] = useState<{ x: number; y: number } | null>(null);
+  const [dragEndPx, setDragEndPx] = useState<{ x: number; y: number } | null>(null);
 
   // ── Data fetching ─────────────────────────────────────────────
 
   const { data: lapTimes = [], isLoading } = useQuery({
     queryKey: ["lap_times", sessionId],
     queryFn: async () => {
-      // Paginate to overcome Supabase's 1000-row default limit
       const PAGE_SIZE = 1000;
       const allRows: LapTime[] = [];
       let offset = 0;
@@ -145,7 +152,6 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
 
   const carMetaMap = useMemo(() => {
     const map = new Map<string, CarMeta>();
-    // Group by class to compute PIC
     const byClass: Record<string, any[]> = {};
     for (const r of raceResults) {
       const cls = r.extra_data?.Class || r.extra_data?.class || "";
@@ -179,87 +185,35 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     });
   }, [carMetaMap]);
 
-  // Auto-select first class
-  const activeClass = selectedClass && allClasses.includes(selectedClass) ? selectedClass : allClasses[0] || null;
+  // "All" when selectedClass is null, otherwise filter to specific class
+  const isAllView = selectedClass === null;
+  const activeClass = !isAllView && selectedClass && allClasses.includes(selectedClass) ? selectedClass : null;
 
-  // Group lap times by car, filter to active class
+  // Group lap times by car, filter by class (or show all)
   const classLapData = useMemo(() => {
-    if (!activeClass) return new Map<string, LapTime[]>();
-    const carsInClass = new Set<string>();
+    const targetCars = new Set<string>();
     for (const [cn, m] of carMetaMap) {
-      if (m.className === activeClass) carsInClass.add(cn);
+      if (isAllView || m.className === activeClass) targetCars.add(cn);
     }
     const map = new Map<string, LapTime[]>();
     for (const lt of lapTimes) {
-      if (!carsInClass.has(lt.car_number)) continue;
+      if (!targetCars.has(lt.car_number)) continue;
       if (!map.has(lt.car_number)) map.set(lt.car_number, []);
       map.get(lt.car_number)!.push(lt);
     }
     return map;
-  }, [lapTimes, carMetaMap, activeClass]);
+  }, [lapTimes, carMetaMap, isAllView, activeClass]);
 
   // Compute delta series for each car
   const deltaSeries = useMemo(() => {
     if (classLapData.size === 0) return new Map<string, { elapsed: number; delta: number }[]>();
 
-    // Build a unified timeline: at each lap crossing for any car, compute all cars' elapsed
-    // For "Gap to Leader": leader at each timestamp has delta=0, others = their_elapsed - leader_elapsed
-    // For "Interval": gap to car immediately ahead in class position order at that timestamp
-
-    // First, build interpolation functions per car
-    const carElapsedFns = new Map<string, (t: number) => number | null>();
-    const carTimeRanges = new Map<string, [number, number]>();
-
-    for (const [cn, laps] of classLapData) {
-      if (laps.length < 2) continue;
-      carTimeRanges.set(cn, [laps[0].elapsed, laps[laps.length - 1].elapsed]);
-      carElapsedFns.set(cn, (t: number) => {
-        // Binary search for the two surrounding laps
-        if (t <= laps[0].elapsed) return laps[0].elapsed;
-        if (t >= laps[laps.length - 1].elapsed) return laps[laps.length - 1].elapsed;
-        let lo = 0, hi = laps.length - 1;
-        while (lo < hi - 1) {
-          const mid = (lo + hi) >> 1;
-          if (laps[mid].elapsed <= t) lo = mid; else hi = mid;
-        }
-        // Linear interpolation of "laps completed" as a progress metric
-        const frac = (t - laps[lo].elapsed) / (laps[hi].elapsed - laps[lo].elapsed);
-        return lo + frac; // fractional lap index
-      });
-    }
-
-    // Collect all unique timestamps (lap crossings) across all cars in this class
-    const allTimestamps = new Set<number>();
-    for (const [, laps] of classLapData) {
-      for (const l of laps) allTimestamps.add(l.elapsed);
-    }
-    const sortedTimestamps = Array.from(allTimestamps).sort((a, b) => a - b);
-
-    // For performance with large grids, sample every Nth timestamp
-    const maxSamples = compact ? 500 : 2000;
-    let sampledTimestamps = sortedTimestamps;
-    if (sortedTimestamps.length > maxSamples) {
-      const step = Math.ceil(sortedTimestamps.length / maxSamples);
-      sampledTimestamps = sortedTimestamps.filter((_, i) => i % step === 0);
-      // Always include first and last
-      if (sampledTimestamps[sampledTimestamps.length - 1] !== sortedTimestamps[sortedTimestamps.length - 1]) {
-        sampledTimestamps.push(sortedTimestamps[sortedTimestamps.length - 1]);
-      }
-    }
-
-    // At each timestamp, compute each car's cumulative elapsed time (directly from their lap data)
-    // The "time delta" is simply: car_elapsed_at_this_lap - leader_elapsed_at_same_lap_count
-    // But we need a different approach: for a given session time T, each car has completed
-    // a certain elapsed time. The leader is the car with the most elapsed at time T.
-    // Actually, for gap-to-leader, we compute: for each car's lap completion time,
-    // what's the time difference between this car and the class leader at the same "distance" (lap count).
-
-    // Simpler approach: use lap-indexed deltas
-    // For each car, at lap N, the elapsed time is known.
-    // The class leader at lap N is the car with the minimum elapsed at lap N.
-    // Delta = car_elapsed_at_lap_N - min_elapsed_at_lap_N
-
     const cars = Array.from(classLapData.keys()).sort((a, b) => {
+      if (isAllView) {
+        const pa = carMetaMap.get(a)?.position || 999;
+        const pb = carMetaMap.get(b)?.position || 999;
+        return pa - pb;
+      }
       const pa = carMetaMap.get(a)?.classPosition || 999;
       const pb = carMetaMap.get(b)?.classPosition || 999;
       return pa - pb;
@@ -281,17 +235,16 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     const result = new Map<string, { elapsed: number; delta: number }[]>();
 
     if (deltaMode === "leader") {
-      // For each lap, find the minimum elapsed (leader), compute delta for each car
       for (const cn of cars) result.set(cn, []);
-
       for (let lap = 1; lap <= maxLap; lap++) {
+        // When in "All" view, leader = overall leader (min elapsed across ALL cars)
+        // When in class view, leader = class leader
         let minElapsed = Infinity;
         for (const cn of cars) {
           const e = carLapElapsed.get(cn)?.get(lap);
           if (e != null && e < minElapsed) minElapsed = e;
         }
         if (!isFinite(minElapsed)) continue;
-
         for (const cn of cars) {
           const e = carLapElapsed.get(cn)?.get(lap);
           if (e == null) continue;
@@ -299,18 +252,14 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
         }
       }
     } else {
-      // Interval mode: gap to car immediately ahead at each lap
       for (const cn of cars) result.set(cn, []);
-
       for (let lap = 1; lap <= maxLap; lap++) {
-        // Get all cars that completed this lap, sorted by elapsed (fastest = ahead)
         const atLap: { cn: string; elapsed: number }[] = [];
         for (const cn of cars) {
           const e = carLapElapsed.get(cn)?.get(lap);
           if (e != null) atLap.push({ cn, elapsed: e });
         }
         atLap.sort((a, b) => a.elapsed - b.elapsed);
-
         for (let i = 0; i < atLap.length; i++) {
           const delta = i === 0 ? 0 : atLap[i].elapsed - atLap[i - 1].elapsed;
           result.get(atLap[i].cn)!.push({ elapsed: atLap[i].elapsed, delta });
@@ -319,7 +268,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
 
     return result;
-  }, [classLapData, carMetaMap, deltaMode, compact]);
+  }, [classLapData, carMetaMap, deltaMode, isAllView]);
 
   // Time range
   const timeRange = useMemo(() => {
@@ -334,19 +283,25 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     return [min, max] as [number, number];
   }, [deltaSeries]);
 
-  // Max delta for Y axis
-  const maxDelta = useMemo(() => {
+  const viewRange = zoomRange || timeRange;
+  const viewDuration = viewRange[1] - viewRange[0] || 1;
+
+  // Visible max delta for Y-axis (auto-scale to visible data, or use yZoomRange)
+  const autoMaxDelta = useMemo(() => {
     let max = 0;
     for (const [, series] of deltaSeries) {
       for (const pt of series) {
-        if (pt.delta > max) max = pt.delta;
+        if (pt.elapsed >= viewRange[0] && pt.elapsed <= viewRange[1]) {
+          if (pt.delta > max) max = pt.delta;
+        }
       }
     }
-    return Math.max(max, 10); // minimum 10s range
-  }, [deltaSeries]);
+    return Math.max(max * 1.1, 5);
+  }, [deltaSeries, viewRange]);
 
-  const viewRange = zoomRange || timeRange;
-  const viewDuration = viewRange[1] - viewRange[0] || 1;
+  const visMaxDelta = yZoomRange ? yZoomRange[1] : autoMaxDelta;
+  const visMinDelta = yZoomRange ? yZoomRange[0] : 0;
+  const deltaRange = visMaxDelta - visMinDelta || 1;
 
   // Zoom presets
   const totalDurationH = Math.ceil((timeRange[1] - timeRange[0]) / 3600);
@@ -365,6 +320,30 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
     return presets;
   }, [totalDurationH, timeRange]);
+
+  // Reset zoom when class changes
+  useEffect(() => {
+    setZoomRange(null);
+    setYZoomRange(null);
+  }, [selectedClass]);
+
+  // ── Color logic ───────────────────────────────────────────────
+
+  const getCarColor = useCallback((cn: string, index: number, totalInGroup: number) => {
+    if (isAllView) {
+      // Color by class
+      const meta = carMetaMap.get(cn);
+      const cls = meta?.className?.toUpperCase() || "";
+      const baseColor = CLASS_COLORS[cls] || "#6b7280";
+      // Shade within class for slight differentiation
+      const classMembers = Array.from(carMetaMap.entries()).filter(([, m]) => m.className?.toUpperCase() === cls);
+      const idxInClass = classMembers.findIndex(([c]) => c === cn);
+      return shadeColor(baseColor, idxInClass, classMembers.length);
+    } else {
+      // Individual car colors
+      return INDIVIDUAL_COLORS[index % INDIVIDUAL_COLORS.length];
+    }
+  }, [isAllView, carMetaMap]);
 
   // ── Canvas rendering ──────────────────────────────────────────
 
@@ -391,19 +370,8 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    // Visible delta range: auto-scale Y to visible data
-    let visMaxDelta = 0;
-    for (const [, series] of deltaSeries) {
-      for (const pt of series) {
-        if (pt.elapsed >= viewRange[0] && pt.elapsed <= viewRange[1]) {
-          if (pt.delta > visMaxDelta) visMaxDelta = pt.delta;
-        }
-      }
-    }
-    visMaxDelta = Math.max(visMaxDelta * 1.1, 5); // 10% padding, min 5s
-
     const x = (elapsed: number) => MARGIN.left + ((elapsed - viewRange[0]) / viewDuration) * chartW;
-    const y = (delta: number) => MARGIN.top + (delta / visMaxDelta) * chartH;
+    const y = (delta: number) => MARGIN.top + ((delta - visMinDelta) / deltaRange) * chartH;
 
     // ── Flag bands ──
     for (const seg of flagSegments) {
@@ -420,9 +388,11 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     // ── Grid lines (Y axis) ──
     ctx.strokeStyle = "rgba(107, 114, 128, 0.15)";
     ctx.lineWidth = 0.5;
-    const yTickInterval = visMaxDelta > 300 ? 60 : visMaxDelta > 60 ? 10 : visMaxDelta > 20 ? 5 : 1;
-    for (let d = 0; d <= visMaxDelta; d += yTickInterval) {
+    const yTickInterval = deltaRange > 300 ? 60 : deltaRange > 60 ? 10 : deltaRange > 20 ? 5 : 1;
+    const firstYTick = Math.ceil(visMinDelta / yTickInterval) * yTickInterval;
+    for (let d = firstYTick; d <= visMaxDelta; d += yTickInterval) {
       const yy = y(d);
+      if (yy < MARGIN.top || yy > MARGIN.top + chartH) continue;
       ctx.beginPath();
       ctx.moveTo(MARGIN.left, yy);
       ctx.lineTo(MARGIN.left + chartW, yy);
@@ -454,27 +424,29 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
 
     // ── Zero baseline ──
-    ctx.strokeStyle = "rgba(107, 114, 128, 0.4)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(MARGIN.left, y(0));
-    ctx.lineTo(MARGIN.left + chartW, y(0));
-    ctx.stroke();
+    if (visMinDelta <= 0 && visMaxDelta >= 0) {
+      ctx.strokeStyle = "rgba(107, 114, 128, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(MARGIN.left, y(0));
+      ctx.lineTo(MARGIN.left + chartW, y(0));
+      ctx.stroke();
+    }
 
     // ── Draw lines ──
     const cars = Array.from(deltaSeries.keys()).sort((a, b) => {
-      const pa = carMetaMap.get(a)?.classPosition || 999;
-      const pb = carMetaMap.get(b)?.classPosition || 999;
-      return pa - pb;
+      if (isAllView) {
+        return (carMetaMap.get(a)?.position || 999) - (carMetaMap.get(b)?.position || 999);
+      }
+      return (carMetaMap.get(a)?.classPosition || 999) - (carMetaMap.get(b)?.classPosition || 999);
     });
-    const classColor = CLASS_COLORS[activeClass?.toUpperCase() || ""] || "#6b7280";
 
     for (let ci = 0; ci < cars.length; ci++) {
       const cn = cars[ci];
       const series = deltaSeries.get(cn)!;
       if (series.length < 2) continue;
 
-      const color = shadeColor(classColor, ci, cars.length);
+      const color = getCarColor(cn, ci, cars.length);
       ctx.strokeStyle = color;
       ctx.lineWidth = ci === 0 ? 2 : 1.2;
       ctx.globalAlpha = ci === 0 ? 1 : 0.7;
@@ -482,8 +454,9 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       let started = false;
       for (const pt of series) {
         if (pt.elapsed < viewRange[0] || pt.elapsed > viewRange[1]) continue;
+        const clampedDelta = Math.max(visMinDelta, Math.min(pt.delta, visMaxDelta));
         const px = x(pt.elapsed);
-        const py = y(Math.min(pt.delta, visMaxDelta));
+        const py = y(clampedDelta);
         if (!started) { ctx.moveTo(px, py); started = true; }
         else ctx.lineTo(px, py);
       }
@@ -501,21 +474,23 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       ctx.save();
       ctx.translate(12, MARGIN.top + chartH / 2);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillText(deltaMode === "leader" ? "Gap to Class Leader (s)" : "Interval to Car Ahead (s)", 0, 0);
+      ctx.fillText(deltaMode === "leader" ? "Gap to Leader (s)" : "Interval to Car Ahead (s)", 0, 0);
       ctx.restore();
     }
 
-    // ── Drag selection overlay ──
-    if (isDragging && dragStart != null && dragEnd != null) {
-      const x1 = Math.min(dragStart, dragEnd);
-      const x2 = Math.max(dragStart, dragEnd);
+    // ── Drag selection overlay (2D rectangle) ──
+    if (isDragging && dragStartPx && dragEndPx) {
+      const x1 = Math.min(dragStartPx.x, dragEndPx.x);
+      const x2 = Math.max(dragStartPx.x, dragEndPx.x);
+      const y1 = Math.min(dragStartPx.y, dragEndPx.y);
+      const y2 = Math.max(dragStartPx.y, dragEndPx.y);
       ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
-      ctx.fillRect(x1, MARGIN.top, x2 - x1, chartH);
+      ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
       ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(x1, MARGIN.top, x2 - x1, chartH);
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
     }
-  }, [deltaSeries, flagSegments, viewRange, viewDuration, compact, isDragging, dragStart, dragEnd, activeClass, carMetaMap, deltaMode, MARGIN]);
+  }, [deltaSeries, flagSegments, viewRange, viewDuration, compact, isDragging, dragStartPx, dragEndPx, isAllView, carMetaMap, deltaMode, MARGIN, getCarColor, visMinDelta, visMaxDelta, deltaRange]);
 
   useEffect(() => {
     drawCanvas();
@@ -527,24 +502,17 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     return () => obs.disconnect();
   }, [drawCanvas]);
 
-  // ── Mouse handlers ────────────────────────────────────────────
-
-  const pixelToElapsed = useCallback((px: number) => {
-    const container = containerRef.current;
-    if (!container) return viewRange[0];
-    const rect = container.getBoundingClientRect();
-    const relX = px - rect.left;
-    const chartW = container.clientWidth - MARGIN.left - MARGIN.right;
-    const frac = (relX - MARGIN.left) / chartW;
-    return viewRange[0] + frac * viewDuration;
-  }, [viewRange, viewDuration, MARGIN]);
+  // ── Mouse handlers (2D drag-to-zoom) ──────────────────────────
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    const elapsed = pixelToElapsed(e.clientX);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
     setIsDragging(true);
-    setDragStart(e.clientX - (containerRef.current?.getBoundingClientRect().left || 0));
-    setDragEnd(e.clientX - (containerRef.current?.getBoundingClientRect().left || 0));
-  }, [pixelToElapsed]);
+    setDragStartPx({ x: relX, y: relY });
+    setDragEndPx({ x: relX, y: relY });
+  }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const container = containerRef.current;
@@ -552,12 +520,12 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     const rect = container.getBoundingClientRect();
 
     if (isDragging) {
-      setDragEnd(e.clientX - rect.left);
+      setDragEndPx({ x: e.clientX - rect.left, y: e.clientY - rect.top });
       setTooltip(null);
       return;
     }
 
-    // Tooltip: find nearest line
+    // Tooltip
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
     const chartW = container.clientWidth - MARGIN.left - MARGIN.right;
@@ -570,25 +538,14 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
 
     const hoverElapsed = viewRange[0] + ((relX - MARGIN.left) / chartW) * viewDuration;
+    const yScale = (d: number) => MARGIN.top + ((d - visMinDelta) / deltaRange) * chartH;
 
-    // Find closest car line at this elapsed
     let bestCar: string | null = null;
     let bestDist = Infinity;
     let bestDelta = 0;
     let bestElapsed = 0;
 
-    let visMaxDelta = 0;
-    for (const [, series] of deltaSeries) {
-      for (const pt of series) {
-        if (pt.elapsed >= viewRange[0] && pt.elapsed <= viewRange[1] && pt.delta > visMaxDelta) visMaxDelta = pt.delta;
-      }
-    }
-    visMaxDelta = Math.max(visMaxDelta * 1.1, 5);
-
-    const yScale = (d: number) => MARGIN.top + (d / visMaxDelta) * chartH;
-
     for (const [cn, series] of deltaSeries) {
-      // Binary search for closest point
       let lo = 0, hi = series.length - 1;
       while (lo < hi - 1) {
         const mid = (lo + hi) >> 1;
@@ -598,7 +555,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
         if (idx < 0 || idx >= series.length) continue;
         const pt = series[idx];
         const px = MARGIN.left + ((pt.elapsed - viewRange[0]) / viewDuration) * chartW;
-        const py = yScale(Math.min(pt.delta, visMaxDelta));
+        const py = yScale(Math.min(Math.max(pt.delta, visMinDelta), visMaxDelta));
         const dist = Math.sqrt((relX - px) ** 2 + (relY - py) ** 2);
         if (dist < bestDist && dist < 30) {
           bestDist = dist;
@@ -621,26 +578,44 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     } else {
       setTooltip(null);
     }
-  }, [isDragging, deltaSeries, carMetaMap, viewRange, viewDuration, compact, deltaMode, MARGIN]);
+  }, [isDragging, deltaSeries, carMetaMap, viewRange, viewDuration, compact, deltaMode, MARGIN, visMinDelta, visMaxDelta, deltaRange]);
 
   const handleMouseUp = useCallback(() => {
-    if (isDragging && dragStart != null && dragEnd != null) {
+    if (isDragging && dragStartPx && dragEndPx) {
       const container = containerRef.current;
       if (container) {
         const chartW = container.clientWidth - MARGIN.left - MARGIN.right;
-        const x1 = Math.min(dragStart, dragEnd);
-        const x2 = Math.max(dragStart, dragEnd);
-        if (x2 - x1 > 10) {
-          const e1 = viewRange[0] + ((x1 - MARGIN.left) / chartW) * viewDuration;
-          const e2 = viewRange[0] + ((x2 - MARGIN.left) / chartW) * viewDuration;
-          setZoomRange([Math.max(e1, timeRange[0]), Math.min(e2, timeRange[1])]);
+        const height = compact ? 260 : 400;
+        const chartH = height - MARGIN.top - MARGIN.bottom;
+
+        const px1 = Math.min(dragStartPx.x, dragEndPx.x);
+        const px2 = Math.max(dragStartPx.x, dragEndPx.x);
+        const py1 = Math.min(dragStartPx.y, dragEndPx.y);
+        const py2 = Math.max(dragStartPx.y, dragEndPx.y);
+
+        const xSpan = px2 - px1;
+        const ySpan = py2 - py1;
+
+        if (xSpan > 10 || ySpan > 10) {
+          // X zoom
+          if (xSpan > 10) {
+            const e1 = viewRange[0] + ((px1 - MARGIN.left) / chartW) * viewDuration;
+            const e2 = viewRange[0] + ((px2 - MARGIN.left) / chartW) * viewDuration;
+            setZoomRange([Math.max(e1, timeRange[0]), Math.min(e2, timeRange[1])]);
+          }
+          // Y zoom
+          if (ySpan > 10) {
+            const d1 = visMinDelta + ((py1 - MARGIN.top) / chartH) * deltaRange;
+            const d2 = visMinDelta + ((py2 - MARGIN.top) / chartH) * deltaRange;
+            setYZoomRange([Math.max(0, Math.min(d1, d2)), Math.max(d1, d2)]);
+          }
         }
       }
     }
     setIsDragging(false);
-    setDragStart(null);
-    setDragEnd(null);
-  }, [isDragging, dragStart, dragEnd, viewRange, viewDuration, timeRange, MARGIN]);
+    setDragStartPx(null);
+    setDragEndPx(null);
+  }, [isDragging, dragStartPx, dragEndPx, viewRange, viewDuration, timeRange, MARGIN, compact, visMinDelta, deltaRange]);
 
   // ── Render ────────────────────────────────────────────────────
 
@@ -657,8 +632,18 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       {/* Controls */}
       {!compact && (
         <div className="flex flex-wrap items-center gap-2">
-          {/* Class filter */}
+          {/* Class filter with "All" */}
           <div className="flex gap-1">
+            <button
+              onClick={() => setSelectedClass(null)}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+                isAllView
+                  ? "border-primary/30 text-primary bg-primary/10"
+                  : "border-border text-muted-foreground bg-muted/50 hover:text-foreground"
+              }`}
+            >
+              All
+            </button>
             {allClasses.map(cls => (
               <button
                 key={cls}
@@ -695,14 +680,14 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
             </button>
           </div>
 
-          {/* Zoom presets */}
+          {/* Zoom presets + reset */}
           <div className="flex gap-1">
             {zoomPresets.map((p, i) => (
               <button
                 key={i}
-                onClick={() => setZoomRange(p.range)}
+                onClick={() => { setZoomRange(p.range); setYZoomRange(null); }}
                 className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
-                  (p.range === null && zoomRange === null) || (p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1])
+                  (p.range === null && zoomRange === null && yZoomRange === null) || (p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1])
                     ? "border-primary/30 text-primary bg-primary/10"
                     : "border-border text-muted-foreground hover:text-foreground"
                 }`}
@@ -710,6 +695,14 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
                 {p.label}
               </button>
             ))}
+            {(zoomRange || yZoomRange) && (
+              <button
+                onClick={() => { setZoomRange(null); setYZoomRange(null); }}
+                className="px-2 py-0.5 rounded text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
+              >
+                Reset Zoom
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -744,14 +737,17 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
         )}
       </div>
 
-      {/* Legend (non-compact) */}
-      {!compact && activeClass && (
+      {/* Legend */}
+      {!compact && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
           {Array.from(deltaSeries.keys())
-            .sort((a, b) => (carMetaMap.get(a)?.classPosition || 999) - (carMetaMap.get(b)?.classPosition || 999))
+            .sort((a, b) => {
+              if (isAllView) return (carMetaMap.get(a)?.position || 999) - (carMetaMap.get(b)?.position || 999);
+              return (carMetaMap.get(a)?.classPosition || 999) - (carMetaMap.get(b)?.classPosition || 999);
+            })
             .map((cn, i, arr) => {
               const meta = carMetaMap.get(cn);
-              const color = shadeColor(CLASS_COLORS[activeClass.toUpperCase()] || "#6b7280", i, arr.length);
+              const color = getCarColor(cn, i, arr.length);
               return (
                 <div key={cn} className="flex items-center gap-1 text-[10px] text-muted-foreground">
                   <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: color }} />
