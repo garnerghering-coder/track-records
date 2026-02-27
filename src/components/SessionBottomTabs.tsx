@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import TrackFingerprint from "@/components/TrackFingerprint";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
 import StrategyTimeline from "@/components/StrategyTimeline";
+import ClassTimeDelta from "@/components/ClassTimeDelta";
 import { computeTrackMetrics } from "@/lib/track-calculations";
 
 interface SessionBottomTabsProps {
@@ -186,8 +187,22 @@ export default function SessionBottomTabs({
       return count || 0;
     },
   });
-  // Build tabs in desired order: Strategy, Progression, Race Control, Fingerprint
+
+  // 5. Class Time Delta (check if lap timing data exists)
+  const { data: lapTimeCount = 0 } = useQuery({
+    queryKey: ["lap_times_check", session.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("v2_lap_times" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", session.id);
+      return count || 0;
+    },
+  });
+
+  // Build tabs in desired order: Strategy, Class Time Delta, Progression, Race Control, Fingerprint
   if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy Timeline" });
+  if (lapTimeCount > 0) tabs.push({ id: "time-delta", label: "Class Time Delta" });
   if (hasProgression) tabs.push({ id: "progression", label: "Position Progression" });
   if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race Control" });
   if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit Fingerprint" });
@@ -257,6 +272,12 @@ export default function SessionBottomTabs({
         {resolvedTab === "strategy" && (
           <div className="p-5">
             <StrategyTimeline sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} />
+          </div>
+        )}
+
+        {resolvedTab === "time-delta" && (
+          <div className="p-5">
+            <ClassTimeDelta sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} />
           </div>
         )}
       </div>

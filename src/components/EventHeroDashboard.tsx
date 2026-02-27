@@ -7,6 +7,7 @@ import FlagImage from "@/components/FlagImage";
 import { computeTrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import StrategyTimeline from "@/components/StrategyTimeline";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
+import ClassTimeDelta from "@/components/ClassTimeDelta";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -166,7 +167,26 @@ function MiniVisualization({
   isMulticlass: boolean;
 }) {
   const hasHours = hourSessions.length > 0;
-  const tabs = useMemo(() => ["strategy", ...(hasHours ? ["progression"] : [])], [hasHours]);
+
+  // Check for lap timing data for time delta chart
+  const { data: hasLapTimes = false } = useQuery({
+    queryKey: ["hero_lap_times_check", raceSession?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("v2_lap_times" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", raceSession.id);
+      return (count || 0) > 0;
+    },
+    enabled: !!raceSession?.id,
+  });
+
+  const tabs = useMemo(() => [
+    "strategy",
+    ...(hasLapTimes ? ["time-delta"] : []),
+    ...(hasHours ? ["progression"] : []),
+  ], [hasHours, hasLapTimes]);
+
   const [activeVizTab, setActiveVizTab] = useState<string>("strategy");
   const [userInteracted, setUserInteracted] = useState(false);
 
@@ -191,6 +211,13 @@ function MiniVisualization({
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
+  const tabLabel = (tab: string) => {
+    if (tab === "strategy") return "Strategy";
+    if (tab === "time-delta") return "Time Delta";
+    if (tab === "progression") return "Progression";
+    return tab;
+  };
+
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
@@ -205,7 +232,7 @@ function MiniVisualization({
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {tab === "strategy" ? "Strategy Timeline" : "Position Progression"}
+              {tabLabel(tab)}
             </button>
           ))}
         </div>
@@ -217,6 +244,11 @@ function MiniVisualization({
         {activeVizTab === "strategy" && (
           <div className="h-full">
             <StrategyTimeline sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
+          </div>
+        )}
+        {activeVizTab === "time-delta" && hasLapTimes && (
+          <div className="h-full">
+            <ClassTimeDelta sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact />
           </div>
         )}
         {activeVizTab === "progression" && hasHours && (
