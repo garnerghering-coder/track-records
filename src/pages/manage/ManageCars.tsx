@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ManageCars() {
   const qc = useQueryClient();
@@ -15,20 +16,41 @@ export default function ManageCars() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ model_name: "", manufacturer: "" });
   const [search, setSearch] = useState("");
+  const [unusedOnly, setUnusedOnly] = useState(false);
 
   const { data: cars = [], isLoading } = useQuery({
     queryKey: ["v2_cars"],
     queryFn: async () => { const { data, error } = await supabase.from("v2_cars").select("*").order("model_name"); if (error) throw error; return data; },
   });
 
+  const { data: usedCarIds } = useQuery({
+    queryKey: ["used_car_ids"],
+    queryFn: async () => {
+      const ids = new Set<string>();
+      const tables = ["v2_race_results", "v2_qualifying_results", "v2_practice_results"] as const;
+      for (const table of tables) {
+        const { data } = await supabase.from(table).select("car_id").not("car_id", "is", null);
+        data?.forEach((r: any) => ids.add(r.car_id));
+      }
+      return ids;
+    },
+    enabled: unusedOnly,
+  });
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return cars;
-    const q = search.toLowerCase();
-    return cars.filter((c: any) =>
-      c.model_name.toLowerCase().includes(q) ||
-      (c.manufacturer || "").toLowerCase().includes(q)
-    );
-  }, [cars, search]);
+    let list = cars;
+    if (unusedOnly && usedCarIds) {
+      list = list.filter((c: any) => !usedCarIds.has(c.id));
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((c: any) =>
+        c.model_name.toLowerCase().includes(q) ||
+        (c.manufacturer || "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [cars, search, unusedOnly, usedCarIds]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -55,9 +77,15 @@ export default function ManageCars() {
         <h1 className="text-2xl font-bold">Cars</h1>
         <Button onClick={openNew} size="sm"><Plus className="h-4 w-4 mr-1" />New Car</Button>
       </div>
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Search cars…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search cars…" value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer whitespace-nowrap">
+          <Checkbox checked={unusedOnly} onCheckedChange={(c) => setUnusedOnly(!!c)} />
+          Unused only
+        </label>
       </div>
       {isLoading ? <p className="text-muted-foreground text-sm">Loading…</p> : (
         <Table>
