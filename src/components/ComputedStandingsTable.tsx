@@ -22,6 +22,7 @@ interface StandingRow {
   teamName: string;
   teamId: string | null;
   drivers: { id: string | null; name: string; nationality: string | null }[];
+  currentDriver?: { id: string | null; name: string; nationality: string | null } | null;
   car: { model_name: string; manufacturer: string | null } | null;
   carLabel: string;
   interval: string;
@@ -275,20 +276,36 @@ export default function ComputedStandingsTable({
               {isMulticlass && <TableCell className="text-xs">{s.className || "—"}</TableCell>}
               <TableCell className="text-center font-mono text-xs">{s.carNumber}</TableCell>
               <TableCell className="font-medium whitespace-nowrap">
-                {s.drivers.length === 0 ? "—" : (
-                  <div className="flex flex-col">
-                    {s.drivers.map((d, idx) => (
-                      <span key={idx} className="leading-[22px] whitespace-nowrap">
-                        {d.id ? (
-                          <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors inline-flex items-center gap-1">
-                            <FlagImage nationality={d.nationality} size={14} />
-                            {d.name}
+                {(() => {
+                  // Show current driver if available (time-specific), otherwise all
+                  if (s.currentDriver) {
+                    return (
+                      <span className="leading-[22px] whitespace-nowrap inline-flex items-center gap-1">
+                        <FlagImage nationality={s.currentDriver.nationality} size={14} />
+                        {s.currentDriver.id ? (
+                          <Link to={`/driver/${s.currentDriver.id}`} className="hover:text-primary transition-colors">
+                            {s.currentDriver.name}
                           </Link>
-                        ) : d.name}
+                        ) : s.currentDriver.name}
                       </span>
-                    ))}
-                  </div>
-                )}
+                    );
+                  }
+                  if (s.drivers.length === 0) return "—";
+                  return (
+                    <div className="flex flex-col">
+                      {s.drivers.map((d, idx) => (
+                        <span key={idx} className="leading-[22px] whitespace-nowrap inline-flex items-center gap-1">
+                          <FlagImage nationality={d.nationality} size={14} />
+                          {d.id ? (
+                            <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">
+                              {d.name}
+                            </Link>
+                          ) : d.name}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
               </TableCell>
               <TableCell className="text-muted-foreground whitespace-nowrap">
                 {s.teamId ? (
