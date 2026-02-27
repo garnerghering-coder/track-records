@@ -153,33 +153,61 @@ export default function EnduranceTimeScrubber({
     });
   }, [customElapsed, lapTimes, raceResultsMeta, teamNameMap]);
 
+  // Generate virtual hour markers from lap data duration
+  const virtualHours = useMemo(() => {
+    if (!hasLapData || timeRange.max <= 0) return [];
+    const totalHours = Math.ceil(timeRange.max / 3600);
+    const hours: { value: string; label: string; elapsed: number }[] = [];
+    for (let h = 1; h <= totalHours; h++) {
+      const elapsed = h * 3600;
+      if (elapsed <= timeRange.max) {
+        hours.push({ value: `virtual-hour-${h}`, label: `Hour ${h}`, elapsed });
+      }
+    }
+    return hours;
+  }, [hasLapData, timeRange]);
+
   // Build dropdown options
   const dropdownOptions = useMemo(() => {
-    const options = [
+    const options: { value: string; label: string }[] = [
       { value: "race-results", label: "Race Results (Final)" },
-      ...hourSessions.map(hs => ({ value: hs.id, label: hs.name })),
     ];
     if (hasLapData) {
       options.push({ value: "custom", label: "Custom Time…" });
+      for (const vh of virtualHours) {
+        options.push({ value: vh.value, label: vh.label });
+      }
+    } else {
+      // Fallback: use imported hour sessions if no lap data
+      for (const hs of hourSessions) {
+        options.push({ value: hs.id, label: hs.name });
+      }
     }
     return options;
-  }, [hourSessions, hasLapData]);
+  }, [hourSessions, hasLapData, virtualHours]);
 
   // Handle dropdown change
   const handleDropdownChange = useCallback((value: string) => {
     if (value === "custom") {
-      // Switch to custom mode with middle of race
       const mid = (timeRange.min + timeRange.max) / 2;
       setCustomElapsed(mid);
       setTimeInput(formatElapsedLabel(mid));
       onCustomElapsed(mid);
+    } else if (value.startsWith("virtual-hour-")) {
+      // Virtual hour: compute standings at that elapsed time
+      const vh = virtualHours.find(v => v.value === value);
+      if (vh) {
+        setCustomElapsed(vh.elapsed);
+        setTimeInput(formatElapsedLabel(vh.elapsed));
+        onCustomElapsed(vh.elapsed);
+      }
     } else {
       setCustomElapsed(null);
       setTimeInput("");
       setActiveSubTab(value);
       onCustomElapsed(null);
     }
-  }, [setActiveSubTab, onCustomElapsed, timeRange]);
+  }, [setActiveSubTab, onCustomElapsed, timeRange, virtualHours]);
 
   // Handle slider change
   const handleSliderChange = useCallback((values: number[]) => {
@@ -203,7 +231,12 @@ export default function EnduranceTimeScrubber({
   }, [timeInput, timeRange, onCustomElapsed]);
 
   // Determine current dropdown value
-  const currentValue = customElapsed != null ? "custom" : activeSubTab;
+  const matchedVirtualHour = customElapsed != null
+    ? virtualHours.find(v => v.elapsed === customElapsed)
+    : null;
+  const currentValue = customElapsed != null
+    ? (matchedVirtualHour ? matchedVirtualHour.value : "custom")
+    : activeSubTab;
 
   if (!hasLapData) {
     // No lap data: render simple sub-tab bar (existing behavior)
@@ -289,19 +322,35 @@ export default function EnduranceTimeScrubber({
         >
           Final
         </button>
-        {hourSessions.map(hs => (
-          <button
-            key={hs.id}
-            onClick={() => handleDropdownChange(hs.id)}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-              activeSubTab === hs.id && customElapsed == null
-                ? "bg-background text-foreground shadow-sm border border-border"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {hs.name}
-          </button>
-        ))}
+        {hasLapData ? (
+          virtualHours.map(vh => (
+            <button
+              key={vh.value}
+              onClick={() => handleDropdownChange(vh.value)}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                customElapsed === vh.elapsed
+                  ? "bg-background text-foreground shadow-sm border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {vh.label}
+            </button>
+          ))
+        ) : (
+          hourSessions.map(hs => (
+            <button
+              key={hs.id}
+              onClick={() => handleDropdownChange(hs.id)}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                activeSubTab === hs.id && customElapsed == null
+                  ? "bg-background text-foreground shadow-sm border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {hs.name}
+            </button>
+          ))
+        )}
       </div>
 
       {/* Custom standings table */}
@@ -309,7 +358,7 @@ export default function EnduranceTimeScrubber({
         <div className="overflow-x-auto border border-border rounded-lg">
           <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
             <h4 className="text-xs font-semibold text-card-foreground">
-              Standings at {formatElapsedLabel(customElapsed)}
+              Standings at {matchedVirtualHour ? matchedVirtualHour.label : formatElapsedLabel(customElapsed)}
             </h4>
             <Badge variant="outline" className="text-[10px]">Computed from lap data</Badge>
           </div>
