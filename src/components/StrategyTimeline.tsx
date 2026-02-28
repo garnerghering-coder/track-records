@@ -37,6 +37,7 @@ interface CarInfo {
   teamName: string;
   className: string;
   position: number | null;
+  status: string | null;
 }
 
 interface HourPosition {
@@ -203,7 +204,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     queryFn: async () => {
       const { data } = await supabase
         .from("v2_race_results" as any)
-        .select("car_number, position, team_id, extra_data, v2_teams(full_name)")
+        .select("car_number, position, team_id, extra_data, status, v2_teams(full_name)")
         .eq("session_id", sessionId)
         .order("position", { ascending: true });
       return (data || []) as any[];
@@ -262,7 +263,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       if (!cn || map.has(cn)) continue;
       const cls = r.extra_data?.Class || r.extra_data?.class || "";
       const teamName = r.v2_teams?.full_name || teamNameMap[r.team_id] || "";
-      map.set(cn, { carNumber: cn, teamName, className: cls, position: r.position });
+      map.set(cn, { carNumber: cn, teamName, className: cls, position: r.position, status: r.status || null });
     }
     return map;
   }, [raceResults, teamNameMap]);
@@ -551,6 +552,79 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
 
       // Stints for this car
       const carStints = stints.filter(s => s.car_number === car.carNumber);
+
+      // ── Garage / DNF gaps ──
+      // Detect gaps between stints and after last stint
+      const GARAGE_THRESHOLD = 120; // 2 minutes minimum gap to show as garage
+      const raceEnd = timeRange[1];
+      const sortedStints = [...carStints].sort((a, b) => a.start_elapsed - b.start_elapsed);
+
+      const garageGaps: { start: number; end: number; isDnf: boolean }[] = [];
+
+      // Gaps between consecutive stints (garage time)
+      for (let i = 0; i < sortedStints.length - 1; i++) {
+        const gapStart = sortedStints[i].end_elapsed;
+        const gapEnd = sortedStints[i + 1].start_elapsed;
+        // Exclude pit stops from garage gaps by checking if pit stop fills the gap
+        const carPits = pitStops.filter(p => p.car_number === car.carNumber);
+        const hasPitInGap = carPits.some(p =>
+          p.pit_in_elapsed >= gapStart - 10 && (p.pit_out_elapsed || p.pit_in_elapsed) <= gapEnd + 10
+        );
+        if (!hasPitInGap && (gapEnd - gapStart) > GARAGE_THRESHOLD) {
+          garageGaps.push({ start: gapStart, end: gapEnd, isDnf: false });
+        }
+      }
+
+      // Gap after last stint to race end (DNF / retirement)
+      if (sortedStints.length > 0) {
+        const lastEnd = sortedStints[sortedStints.length - 1].end_elapsed;
+        if ((raceEnd - lastEnd) > GARAGE_THRESHOLD) {
+          const isDnf = car.status === "dnf" || car.status === "dns" || car.status === "dsq";
+          garageGaps.push({ start: lastEnd, end: raceEnd, isDnf });
+        }
+      }
+
+      // Draw garage/DNF overlays
+      for (const gap of garageGaps) {
+        if (gap.end <= viewRange[0] || gap.start >= viewRange[1]) continue;
+        const x1 = Math.max(elapsed2x(gap.start), labelW);
+        const x2 = Math.min(elapsed2x(gap.end), labelW + chartWidth);
+        const w = x2 - x1;
+        if (w < 2) continue;
+
+        const ry = y + 2;
+        const rh = effectiveRowHeight - 4;
+
+        // Hatched pattern
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.35;
+        ctx.beginPath();
+        ctx.rect(x1, ry, w, rh);
+        ctx.clip();
+
+        const hatchColor = gap.isDnf ? "#ef4444" : "#6b7280";
+        ctx.strokeStyle = hatchColor;
+        ctx.lineWidth = 0.8;
+        const spacing = 6;
+        for (let hx = x1 - rh; hx < x2 + rh; hx += spacing) {
+          ctx.beginPath();
+          ctx.moveTo(hx, ry + rh);
+          ctx.lineTo(hx + rh, ry);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // Label inside gap if wide enough
+        if (w > 28 && !compact) {
+          const label = gap.isDnf ? (car.status?.toUpperCase() || "DNF") : "GARAGE";
+          ctx.globalAlpha = alpha * 0.6;
+          ctx.fillStyle = gap.isDnf ? "#ef4444" : "#9ca3af";
+          ctx.font = "bold 7px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(label, x1 + w / 2, y + effectiveRowHeight / 2 + 2.5);
+        }
+      }
+
       for (const stint of carStints) {
         if (stint.end_elapsed <= viewRange[0] || stint.start_elapsed >= viewRange[1]) continue;
         const x1 = Math.max(elapsed2x(stint.start_elapsed), labelW);
@@ -691,7 +765,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         }
       }
     }
-  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars, compact]);
+  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars, compact, timeRange, classColors, carInfoMap]);
 
   useEffect(() => {
     drawCanvas();
