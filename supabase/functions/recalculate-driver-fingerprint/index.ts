@@ -493,6 +493,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     crs: number;
     sessionScore: number;
     hasCRS: boolean;
+    lapPaceScore: number | null;
   }
 
   const enriched: EnrichedResult[] = [];
@@ -517,9 +518,7 @@ async function calculateFingerprint(supabase: any, driverId: string) {
       crs = sr.nps - carAvgNPS;
       hasCRS = true;
     }
-    // Solo entry: skip CRS weight entirely — do NOT substitute CRS = 0
 
-    // Session score = NPS*w_nps + CRS*w_crs (or just NPS if solo)
     const sessionTypeKey = sr.sessionType.includes("race") ? "race" :
       sr.sessionType === "qualifying" ? "qualifying" : "practice";
     const w = WEIGHTS[sessionTypeKey] || WEIGHTS.practice;
@@ -528,11 +527,220 @@ async function calculateFingerprint(supabase: any, driverId: string) {
     if (hasCRS) {
       sessionScore = (w.nps * sr.nps + w.crs * crs) / (w.nps + w.crs);
     } else {
-      // Solo entry — skip CRS weight, use NPS only
       sessionScore = sr.nps;
     }
 
-    enriched.push({ ...sr, crs, sessionScore, hasCRS });
+    enriched.push({ ...sr, crs, sessionScore, hasCRS, lapPaceScore: null });
+  }
+
+  // ── 4b. Lap-time-based pace enhancement ─────────────────────
+  // For sessions with lap time data, compute how the driver's pace compares
+  // to the class average — this gives a much more granular performance signal
+  const raceSessionIds = [...new Set(enriched.filter(e => e.sessionType.includes("race")).map(e => e.sessionId))];
+  
+  if (raceSessionIds.length > 0) {
+    // Check for stint data linking driver to car
+    const stintChunks: string[][] = [];
+    for (let i = 0; i < raceSessionIds.length; i += 20) {
+      stintChunks.push(raceSessionIds.slice(i, i + 20));
+    }
+
+    interface StintData {
+      session_id: string;
+      car_number: string;
+      driver_id: string;
+      start_elapsed: number;
+      end_elapsed: number;
+    }
+
+    const driverStints: StintData[] = [];
+    for (const chunk of stintChunks) {
+      const { data: stints } = await supabase
+        .from("v2_stints")
+        .select("session_id, car_number, driver_id, start_elapsed, end_elapsed")
+        .eq("driver_id", driverId)
+        .in("session_id", chunk)
+        .limit(500);
+      if (stints) {
+        for (const s of stints) {
+          driverStints.push({
+            session_id: s.session_id,
+            car_number: s.car_number,
+            driver_id: s.driver_id,
+            start_elapsed: Number(s.start_elapsed),
+            end_elapsed: Number(s.end_elapsed),
+          });
+        }
+      }
+    }
+
+    if (driverStints.length > 0) {
+      // Group stints by session
+      const stintsBySession: Record<string, StintData[]> = {};
+      for (const s of driverStints) {
+        if (!stintsBySession[s.session_id]) stintsBySession[s.session_id] = [];
+        stintsBySession[s.session_id].push(s);
+      }
+
+      // For sessions with stints, fetch lap times to compute pace
+      const sessionsWithStints = Object.keys(stintsBySession);
+      for (let i = 0; i < sessionsWithStints.length; i += 5) {
+        const sessionBatch = sessionsWithStints.slice(i, i + 5);
+        
+        for (const sid of sessionBatch) {
+          const driverCarNumbers = [...new Set(stintsBySession[sid].map(s => s.car_number))];
+          
+          // Fetch all lap times for this session (sampled)
+          const { data: allLaps } = await supabase
+            .from("v2_lap_times")
+            .select("car_number, lap_number, elapsed")
+            .eq("session_id", sid)
+            .order("car_number")
+            .order("lap_number")
+            .limit(5000);
+          
+          if (!allLaps || allLaps.length < 10) continue;
+          
+          // Compute lap durations per car
+          const carLapDurations: Record<string, number[]> = {};
+          const lapsByCarSorted: Record<string, { lap: number; elapsed: number }[]> = {};
+          for (const l of allLaps) {
+            if (!lapsByCarSorted[l.car_number]) lapsByCarSorted[l.car_number] = [];
+            lapsByCarSorted[l.car_number].push({ lap: l.lap_number, elapsed: Number(l.elapsed) });
+          }
+          
+          for (const [cn, laps] of Object.entries(lapsByCarSorted)) {
+            laps.sort((a, b) => a.lap - b.lap);
+            const durations: number[] = [];
+            for (let j = 1; j < laps.length; j++) {
+              const dur = laps[j].elapsed - laps[j - 1].elapsed;
+              if (dur > 20 && dur < 600) { // reasonable lap time range
+                durations.push(dur);
+              }
+            }
+            if (durations.length > 0) carLapDurations[cn] = durations;
+          }
+          
+          // Compute class median pace for normalization
+          const enrichedForSession = enriched.filter(e => e.sessionId === sid);
+          const driverClass = enrichedForSession[0]?.resultRow.extra_data?.Class || "Overall";
+          
+          // Get all cars in the same class
+          const classCars = allSessionResults
+            .filter((r: any) => r.session_id === sid && (r.extra_data?.Class || "Overall") === driverClass)
+            .map((r: any) => r.car_number)
+            .filter(Boolean);
+          
+          const classMedianPaces: number[] = [];
+          for (const cn of classCars) {
+            const durations = carLapDurations[cn];
+            if (durations && durations.length >= 3) {
+              // Use median lap time (robust to outliers)
+              const sorted = [...durations].sort((a, b) => a - b);
+              const median = sorted[Math.floor(sorted.length / 2)];
+              classMedianPaces.push(median);
+            }
+          }
+          
+          if (classMedianPaces.length < 3) continue;
+          
+          const fieldMedian = classMedianPaces.sort((a, b) => a - b)[Math.floor(classMedianPaces.length / 2)];
+          
+          // Now compute the driver's pace during their stints
+          for (const carNum of driverCarNumbers) {
+            const driverDurations = carLapDurations[carNum];
+            if (!driverDurations || driverDurations.length < 3) continue;
+            
+            // Filter to laps during driver's stints only
+            const carLaps = lapsByCarSorted[carNum] || [];
+            const driverLapDurations: number[] = [];
+            const stintsForCar = stintsBySession[sid].filter(s => s.car_number === carNum);
+            
+            for (let j = 1; j < carLaps.length; j++) {
+              const lapElapsed = carLaps[j].elapsed;
+              const dur = lapElapsed - carLaps[j - 1].elapsed;
+              if (dur < 20 || dur > 600) continue;
+              
+              // Check if this lap was during a driver stint
+              const inStint = stintsForCar.some(s => lapElapsed >= s.start_elapsed && lapElapsed <= s.end_elapsed);
+              if (inStint) driverLapDurations.push(dur);
+            }
+            
+            if (driverLapDurations.length < 3) continue;
+            
+            // Driver's median pace
+            const driverSorted = [...driverLapDurations].sort((a, b) => a - b);
+            const driverMedian = driverSorted[Math.floor(driverSorted.length / 2)];
+            
+            // Pace ratio: <1 means faster than field, >1 means slower
+            const paceRatio = driverMedian / fieldMedian;
+            // Convert to 0-1 score: 0.95 ratio = excellent (1.0), 1.05 = poor (0.0)
+            const paceScore = clamp((1.05 - paceRatio) / 0.10, 0, 1);
+            
+            // Consistency bonus: low variance = more consistent driver
+            const driverStddev = stddev(driverLapDurations);
+            const consistencyRatio = driverStddev / driverMedian;
+            const consistencyScore = clamp((0.05 - consistencyRatio) / 0.04, 0, 1);
+            
+            // Combined lap performance score (70% pace, 30% consistency)
+            const lapScore = paceScore * 0.7 + consistencyScore * 0.3;
+            
+            // Apply to enriched results for this session
+            for (const e of enriched) {
+              if (e.sessionId === sid) {
+                e.lapPaceScore = lapScore;
+                // Blend lap score with existing session score (50/50 when lap data available)
+                e.sessionScore = e.sessionScore * 0.5 + lapScore * 0.5;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ── 4c. Spec series awareness ───────────────────────────────
+  // For spec series, all drivers use the same car, so CRS comparisons
+  // against teammates are especially meaningful (no equipment advantage)
+  // Check which seasons are spec series
+  const specSeasonIds = new Set<string>();
+  for (const [eventId, si] of Object.entries(eventSeasonMap)) {
+    // We'll check this below after fetching spec info
+  }
+  
+  // Fetch spec series info for involved seasons
+  const involvedSeasonIds = [...new Set(Object.values(eventSeasonMap).map(s => s.season_id))];
+  if (involvedSeasonIds.length > 0) {
+    for (let i = 0; i < involvedSeasonIds.length; i += 50) {
+      const chunk = involvedSeasonIds.slice(i, i + 50);
+      const { data: seasons } = await supabase
+        .from("v2_seasons")
+        .select("id, is_spec_series")
+        .in("id", chunk);
+      if (seasons) {
+        for (const s of seasons) {
+          if (s.is_spec_series) specSeasonIds.add(s.id);
+        }
+      }
+    }
+  }
+  
+  // For spec series events, CRS has higher weight (equipment is equalized)
+  for (const e of enriched) {
+    const si = eventSeasonMap[e.eventId];
+    if (si && specSeasonIds.has(si.season_id) && e.hasCRS) {
+      const sessionTypeKey = e.sessionType.includes("race") ? "race" :
+        e.sessionType === "qualifying" ? "qualifying" : "practice";
+      const w = WEIGHTS[sessionTypeKey] || WEIGHTS.practice;
+      // In spec series, increase CRS weight by 50% since car performance is equalized
+      const boostedCrsWeight = w.crs * 1.5;
+      e.sessionScore = (w.nps * e.nps! + boostedCrsWeight * e.crs) / (w.nps + boostedCrsWeight);
+      
+      // Re-blend with lap pace if available
+      if (e.lapPaceScore != null) {
+        e.sessionScore = e.sessionScore * 0.5 + e.lapPaceScore * 0.5;
+      }
+    }
   }
 
   // ── 5. Group by event → compute SWDS per event ─────────────

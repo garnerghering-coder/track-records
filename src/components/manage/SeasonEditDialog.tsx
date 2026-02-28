@@ -24,6 +24,9 @@ interface SeasonEditDialogProps {
 export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }: SeasonEditDialogProps) {
   const [cdm, setCdm] = useState("");
   const [isMulticlass, setIsMulticlass] = useState(false);
+  const [isSpecSeries, setIsSpecSeries] = useState(false);
+  const [specCarSearch, setSpecCarSearch] = useState("");
+  const [specCarId, setSpecCarId] = useState<string | null>(null);
   const [classes, setClasses] = useState<{ id?: string; class_name: string; cdm: string; color: string }[]>([]);
   const [newClassName, setNewClassName] = useState("");
 
@@ -41,9 +44,20 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
     enabled: open,
   });
 
+  const { data: carsList = [] } = useQuery({
+    queryKey: ["v2_cars_for_spec"],
+    queryFn: async () => {
+      const { data } = await supabase.from("v2_cars" as any).select("id, model_name, manufacturer").order("manufacturer").order("model_name");
+      return (data || []) as any[];
+    },
+    enabled: open && isSpecSeries,
+  });
+
   useEffect(() => {
     setCdm(season.cdm != null ? String(season.cdm) : "");
     setIsMulticlass(season.is_multiclass || false);
+    setIsSpecSeries(season.is_spec_series || false);
+    setSpecCarId(season.spec_car_id || null);
   }, [season]);
 
   useEffect(() => {
@@ -61,7 +75,9 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
       const { error } = await supabase.from("v2_seasons").update({
         cdm: cdm ? parseFloat(cdm) : null,
         is_multiclass: isMulticlass,
-      }).eq("id", season.id);
+        is_spec_series: isSpecSeries,
+        spec_car_id: isSpecSeries ? specCarId : null,
+      } as any).eq("id", season.id);
       if (error) throw error;
 
       if (isMulticlass) {
@@ -187,6 +203,53 @@ export default function SeasonEditDialog({ season, open, onOpenChange, onSaved }
                   <Plus className="h-3 w-3 mr-1" />Add
                 </Button>
               </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label>Spec Series</Label>
+              <p className="text-xs text-muted-foreground">All drivers use the same car model</p>
+            </div>
+            <Switch checked={isSpecSeries} onCheckedChange={setIsSpecSeries} />
+          </div>
+
+          {isSpecSeries && (
+            <div className="space-y-2 border rounded-md p-3 bg-muted/20">
+              <Label className="text-sm font-medium">Spec Car Model</Label>
+              <Input
+                placeholder="Search car model..."
+                value={specCarSearch}
+                onChange={e => setSpecCarSearch(e.target.value)}
+                className="h-8 text-sm"
+              />
+              <div className="max-h-32 overflow-y-auto space-y-0.5">
+                {carsList
+                  .filter((c: any) => {
+                    if (!specCarSearch.trim()) return true;
+                    const q = specCarSearch.toLowerCase();
+                    return (c.model_name || "").toLowerCase().includes(q) || (c.manufacturer || "").toLowerCase().includes(q);
+                  })
+                  .slice(0, 20)
+                  .map((c: any) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setSpecCarId(c.id); setSpecCarSearch(""); }}
+                      className={`w-full text-left px-2 py-1 rounded text-xs transition-colors ${
+                        specCarId === c.id ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {c.manufacturer ? `${c.manufacturer} ${c.model_name}` : c.model_name}
+                    </button>
+                  ))}
+              </div>
+              {specCarId && (
+                <p className="text-xs text-primary">
+                  Selected: {carsList.find((c: any) => c.id === specCarId)
+                    ? (() => { const c = carsList.find((c: any) => c.id === specCarId); return c.manufacturer ? `${c.manufacturer} ${c.model_name}` : c.model_name; })()
+                    : specCarId}
+                </p>
+              )}
             </div>
           )}
         </div>
