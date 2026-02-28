@@ -190,7 +190,7 @@ export default function SessionBottomTabs({
         .from("v2_stints" as any)
         .select("id", { count: "exact", head: true })
         .eq("session_id", session.id);
-      return count || 0;
+      return count ?? 0;
     },
   });
 

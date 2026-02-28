@@ -155,7 +155,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .select("*")
         .eq("session_id", sessionId)
         .order("start_elapsed", { ascending: true })
-        .limit(2000);
+        .limit(10000);
       return (data || []) as unknown as FlagSegment[];
     },
   });
@@ -169,7 +169,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .eq("session_id", sessionId)
         .order("car_number")
         .order("start_elapsed", { ascending: true })
-        .limit(5000);
+        .limit(10000);
       return (data || []).map((s: any) => ({
         ...s,
         start_elapsed: Number(s.start_elapsed),
@@ -188,7 +188,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .eq("session_id", sessionId)
         .order("car_number")
         .order("pit_in_elapsed", { ascending: true })
-        .limit(5000);
+        .limit(10000);
       return (data || []).map((p: any) => ({
         ...p,
         pit_in_elapsed: Number(p.pit_in_elapsed),

@@ -125,6 +125,7 @@ export default function ManageSessionResults() {
   const [rows, setRows] = useState<ResultRow[]>([]);
   const [pitStops, setPitStops] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
+  const [flagSegments, setFlagSegments] = useState<{ _key: string; flag_state: string; start_elapsed: string; end_elapsed: string }[]>([]);
   const [annotations, setAnnotations] = useState<{ _key: string; title: string; items: { _key: string; description: string; color: string }[] }[]>([]);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -294,6 +295,17 @@ export default function ManageSessionResults() {
             description: item.description || "",
             color: item.color || "#ef4444",
           })),
+        })));
+      }
+
+      // Load flag segments
+      const { data: flags } = await supabase.from("v2_flag_segments" as any).select("*").eq("session_id", sessionId!).order("start_elapsed", { ascending: true });
+      if (flags && (flags as any[]).length > 0) {
+        setFlagSegments((flags as any[]).map((f: any) => ({
+          _key: f.id,
+          flag_state: f.flag_state || "GREEN",
+          start_elapsed: String(f.start_elapsed ?? ""),
+          end_elapsed: String(f.end_elapsed ?? ""),
         })));
       }
     };
@@ -760,6 +772,21 @@ export default function ManageSessionResults() {
         }
       }
 
+      // Save flag segments
+      await supabase.from("v2_flag_segments" as any).delete().eq("session_id", sessionId!);
+      const flagInserts = flagSegments
+        .filter(f => f.start_elapsed !== "" && f.end_elapsed !== "")
+        .map(f => ({
+          session_id: sessionId!,
+          flag_state: f.flag_state || "GREEN",
+          start_elapsed: parseFloat(f.start_elapsed) || 0,
+          end_elapsed: parseFloat(f.end_elapsed) || 0,
+        }));
+      if (flagInserts.length > 0) {
+        const { error: flagErr } = await supabase.from("v2_flag_segments" as any).insert(flagInserts);
+        if (flagErr) throw flagErr;
+      }
+
       // Persist column order and optionally publish
       const sessionUpdate: any = { column_order: columnOrder };
       if (publish) {
@@ -782,7 +809,7 @@ export default function ManageSessionResults() {
     } finally {
       setSaving(false);
     }
-  }, [session, sessionId, rows, pitStops, incidents, annotations, customColumns, columnOrder, qc]);
+  }, [session, sessionId, rows, pitStops, incidents, annotations, flagSegments, customColumns, columnOrder, qc]);
 
   if (!session) return <div className="p-6 text-muted-foreground">Loading…</div>;
 
@@ -1050,6 +1077,52 @@ export default function ManageSessionResults() {
                 </div>
               ))}
               <Button variant="outline" size="sm" onClick={() => setIncidents(is => [...is, { _key: makeKey(), lap_number: "", description: "", penalty_type: "", outcome: "" }])}><Plus className="h-3 w-3 mr-1" />Add Incident</Button>
+            </CollapsibleContent>
+          </Collapsible>
+
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium"><ChevronDown className="h-4 w-4" />Flag Segments</CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              <p className="text-xs text-muted-foreground mb-2">Add flag periods (GREEN, YELLOW, RED, FCY, SC). Times in seconds from race start.</p>
+              {flagSegments.map((f, i) => (
+                <div key={f._key} className="flex items-center gap-2">
+                  <Select value={f.flag_state} onValueChange={v => setFlagSegments(fs => fs.map((ff, j) => j === i ? { ...ff, flag_state: v } : ff))}>
+                    <SelectTrigger className="h-7 w-24 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {["GREEN", "YELLOW", "RED", "FCY", "SC"].map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Input value={f.start_elapsed} onChange={e => setFlagSegments(fs => fs.map((ff, j) => j === i ? { ...ff, start_elapsed: e.target.value } : ff))} className="h-7 w-24 text-xs" placeholder="Start (sec)" type="number" />
+                  <Input value={f.end_elapsed} onChange={e => setFlagSegments(fs => fs.map((ff, j) => j === i ? { ...ff, end_elapsed: e.target.value } : ff))} className="h-7 w-24 text-xs" placeholder="End (sec)" type="number" />
+                  <span className="text-[10px] text-muted-foreground w-20">
+                    {f.start_elapsed && f.end_elapsed ? `${Math.round((parseFloat(f.end_elapsed) - parseFloat(f.start_elapsed)) / 60)}m` : ""}
+                  </span>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => setFlagSegments(fs => fs.filter((_, j) => j !== i))}><X className="h-3 w-3" /></Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFlagSegments(fs => [...fs, { _key: makeKey(), flag_state: "GREEN", start_elapsed: "", end_elapsed: "" }])}><Plus className="h-3 w-3 mr-1" />Add Flag Segment</Button>
+                {flagSegments.length === 0 && (
+                  <Button variant="outline" size="sm" onClick={() => {
+                    // Quick-fill: single green flag for entire race duration
+                    const maxLaps = Math.max(...rows.map(r => parseInt(r.laps_completed) || 0), 0);
+                    const totalTime = rows[0]?.total_time;
+                    let endSec = 0;
+                    if (totalTime) {
+                      // Parse time like "1:32:45.123" or "23:45:12.456"
+                      const parts = totalTime.split(":");
+                      if (parts.length === 3) endSec = parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+                      else if (parts.length === 2) endSec = parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+                    }
+                    if (endSec > 0) {
+                      setFlagSegments([{ _key: makeKey(), flag_state: "GREEN", start_elapsed: "0", end_elapsed: String(Math.ceil(endSec)) }]);
+                      toast.success("Added full-race green flag segment");
+                    } else {
+                      toast.error("Enter race results first to auto-fill");
+                    }
+                  }}>Quick Fill (All Green)</Button>
+                )}
+              </div>
             </CollapsibleContent>
           </Collapsible>
         </div>
