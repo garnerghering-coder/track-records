@@ -2013,7 +2013,9 @@ export type Database = {
           created_at: string
           id: string
           is_multiclass: boolean
+          is_spec_series: boolean
           series_id: string
+          spec_car_id: string | null
           year: number
         }
         Insert: {
@@ -2021,7 +2023,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_multiclass?: boolean
+          is_spec_series?: boolean
           series_id: string
+          spec_car_id?: string | null
           year: number
         }
         Update: {
@@ -2029,7 +2033,9 @@ export type Database = {
           created_at?: string
           id?: string
           is_multiclass?: boolean
+          is_spec_series?: boolean
           series_id?: string
+          spec_car_id?: string | null
           year?: number
         }
         Relationships: [
@@ -2038,6 +2044,13 @@ export type Database = {
             columns: ["series_id"]
             isOneToOne: false
             referencedRelation: "v2_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_seasons_spec_car_id_fkey"
+            columns: ["spec_car_id"]
+            isOneToOne: false
+            referencedRelation: "v2_cars"
             referencedColumns: ["id"]
           },
         ]

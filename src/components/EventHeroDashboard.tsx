@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, HelpCircle } from "lucide-react";
 import FlagImage from "@/components/FlagImage";
 import { computeTrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import StrategyTimeline from "@/components/StrategyTimeline";
@@ -111,7 +111,7 @@ function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?
   return (
     <div className={`flex items-center gap-3 ${isWinner ? "py-2" : "py-1.5"}`}>
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <div className="flex flex-col gap-0.5 shrink-0">
             {entry.drivers.map((d, i) => (
               <span key={i} className={`${textSize} font-medium text-foreground whitespace-nowrap flex items-center gap-1`}>
@@ -122,14 +122,14 @@ function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?
               </span>
             ))}
           </div>
-          <div className={`flex flex-col ${metaSize} text-muted-foreground min-w-0 shrink-0`}>
+          <div className={`flex flex-col ${metaSize} text-muted-foreground min-w-0`}>
             {entry.team_id ? (
-              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{teamLabel}</Link>
+              <Link to={`/team/${entry.team_id}`} className="hover:text-primary transition-colors truncate">{teamLabel}</Link>
             ) : (
-              <span className="whitespace-nowrap">{teamLabel}</span>
+              <span className="truncate">{teamLabel}</span>
             )}
             {entry.carName && (
-              <span className="text-muted-foreground/70 whitespace-nowrap">{entry.carName}</span>
+              <span className="text-muted-foreground/70 truncate">{entry.carName}</span>
             )}
           </div>
         </div>
@@ -195,20 +195,30 @@ function MiniVisualization({
     enabled: !!raceSession?.id,
   });
 
+  const helpText: Record<string, string> = {
+    "time-delta": "Gap between cars over time — see who's closing in or pulling away",
+    "strategy": "Pit stop strategy and stint timelines for each car",
+    "progression": "Position changes throughout the race, hour by hour",
+  };
+
   const tabs = useMemo(() => [
-    "strategy",
     ...(hasLapTimes ? ["time-delta"] : []),
+    "strategy",
     ...(hasHours ? ["progression"] : []),
   ], [hasHours, hasLapTimes]);
 
-  const [activeVizTab, setActiveVizTab] = useState<string>("strategy");
+  const [activeVizTab, setActiveVizTab] = useState<string>("");
   const [userInteracted, setUserInteracted] = useState(false);
+
+  // Set initial tab
+  const resolvedVizTab = activeVizTab && tabs.includes(activeVizTab) ? activeVizTab : tabs[0] || "strategy";
 
   useEffect(() => {
     if (userInteracted || tabs.length < 2) return;
     const interval = setInterval(() => {
       setActiveVizTab(prev => {
-        const idx = tabs.indexOf(prev);
+        const current = prev && tabs.includes(prev) ? prev : tabs[0];
+        const idx = tabs.indexOf(current);
         return tabs[(idx + 1) % tabs.length];
       });
     }, 12000);
@@ -233,21 +243,31 @@ function MiniVisualization({
   };
 
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="rounded-lg border border-border bg-card overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
-        <div className="flex gap-0.5">
+        <div className="flex gap-0.5 items-center">
           {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => handleTabClick(tab)}
-              className={`px-3 py-1 rounded text-[11px] font-semibold transition-colors ${
-                activeVizTab === tab
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {tabLabel(tab)}
-            </button>
+            <div key={tab} className="flex items-center gap-0.5">
+              <button
+                onClick={() => handleTabClick(tab)}
+                className={`px-3 py-1 rounded text-[11px] font-semibold transition-colors ${
+                  resolvedVizTab === tab
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {tabLabel(tab)}
+              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 text-muted-foreground/50 hover:text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[200px]">
+                  <p className="text-xs">{helpText[tab]}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           ))}
         </div>
         <button onClick={scrollToFull} className="text-muted-foreground hover:text-foreground transition-colors" title="View full size">
@@ -255,23 +275,24 @@ function MiniVisualization({
         </button>
       </div>
       <div className="h-[280px] overflow-hidden relative">
-        {activeVizTab === "strategy" && (
+        {resolvedVizTab === "strategy" && (
           <div className="h-full">
             <StrategyTimeline sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
-        {activeVizTab === "time-delta" && hasLapTimes && (
+        {resolvedVizTab === "time-delta" && hasLapTimes && (
           <div className="h-full">
             <ClassTimeDelta sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
-        {activeVizTab === "progression" && hasHours && (
+        {resolvedVizTab === "progression" && hasHours && (
           <div className="h-full">
             <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -291,10 +312,28 @@ export default function EventHeroDashboard({
   seasonClasses,
 }: EventHeroDashboardProps) {
   const seasonId = (event as any)?.v2_seasons?.id;
-  const isEndurance = raceSession?.session_type === "endurance_race";
-  const resultsSessionId = isEndurance && hourSessions.length > 0
-    ? hourSessions[hourSessions.length - 1].id
-    : raceSession?.id;
+
+  // Detect multiple race sessions (not endurance hour sub-sessions)
+  const raceSessions = useMemo(() => {
+    return sessions.filter((s: any) =>
+      s.session_type === "race" || s.session_type === "sprint_race" || s.session_type === "endurance_race"
+    );
+  }, [sessions]);
+
+  const [selectedRaceIdx, setSelectedRaceIdx] = useState(0);
+  const activeRaceSession = raceSessions.length > 0 ? raceSessions[selectedRaceIdx] || raceSessions[0] : raceSession;
+
+  const isEndurance = activeRaceSession?.session_type === "endurance_race";
+  const activeHourSessions = useMemo(() => {
+    if (!isEndurance || !activeRaceSession) return [];
+    return allSessions
+      .filter((s: any) => (s as any).parent_session_id === activeRaceSession.id)
+      .sort((a: any, b: any) => a.sort_order - b.sort_order);
+  }, [isEndurance, activeRaceSession, allSessions]);
+
+  const resultsSessionId = isEndurance && activeHourSessions.length > 0
+    ? activeHourSessions[activeHourSessions.length - 1].id
+    : activeRaceSession?.id;
 
   // Fetch position data from last hour session (1 driver per car)
   const { data: raceResults = [] } = useQuery({
@@ -310,8 +349,7 @@ export default function EventHeroDashboard({
     enabled: !!resultsSessionId,
   });
 
-  // For endurance races, fetch ALL drivers from the main race session (has 3-4 drivers per car)
-  const enduranceDriverSessionId = isEndurance ? raceSession?.id : null;
+  const enduranceDriverSessionId = isEndurance ? activeRaceSession?.id : null;
   const { data: enduranceDrivers = [] } = useQuery({
     queryKey: ["hero_endurance_drivers", enduranceDriverSessionId],
     queryFn: async () => {
@@ -395,7 +433,7 @@ export default function EventHeroDashboard({
   }, [raceResults, liveryMap, teamNameMap, enduranceDriverMap]);
 
   // Layout/fingerprint
-  const layoutId = raceSession?.layout_id || event?.layout_id;
+  const layoutId = activeRaceSession?.layout_id || event?.layout_id;
   const layoutData = layout && Array.isArray(layout)
     ? layout.find((l: any) => l.id === layoutId) || (layout.length === 1 ? layout[0] : null)
     : null;
@@ -410,14 +448,14 @@ export default function EventHeroDashboard({
     : null;
   const hasFingerprint = trackMetrics && (trackMetrics.tcs100 != null || trackMetrics.ei != null || trackMetrics.csi != null);
 
-  const raceWeather = raceSession ? weatherMap[raceSession.id] || null : null;
+  const raceWeather = activeRaceSession ? weatherMap[activeRaceSession.id] || null : null;
   const raceAnnotations = annotationSections.filter((s: any) => (s.v2_annotation_items || []).length > 0);
 
   const classNames = [...new Set(winners.map(w => w.className))];
   const showTop3 = classNames.length <= 2;
 
   // Early return AFTER all hooks
-  if (!raceSession) return null;
+  if (!activeRaceSession) return null;
   if (winners.length === 0 && !hasFingerprint && !raceWeather) return null;
 
   return (
@@ -426,6 +464,24 @@ export default function EventHeroDashboard({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* LEFT — Winners/Podium */}
           <div className="space-y-3">
+            {/* Multi-race toggle */}
+            {raceSessions.length > 1 && (
+              <div className="flex gap-1">
+                {raceSessions.map((rs: any, idx: number) => (
+                  <button
+                    key={rs.id}
+                    onClick={() => setSelectedRaceIdx(idx)}
+                    className={`px-3 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                      idx === selectedRaceIdx
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {rs.name}
+                  </button>
+                ))}
+              </div>
+            )}
             {classNames.map(cls => (
               <div key={cls} className="rounded-lg border border-border bg-card p-4">
                 {winners
@@ -452,8 +508,8 @@ export default function EventHeroDashboard({
           {/* RIGHT — Visualizations */}
           <div className="space-y-3">
             <MiniVisualization
-              raceSession={raceSession}
-              hourSessions={hourSessions}
+              raceSession={activeRaceSession}
+              hourSessions={activeHourSessions}
               teamNameMap={teamNameMap}
               isMulticlass={isMulticlass}
               seasonClasses={seasonClasses}

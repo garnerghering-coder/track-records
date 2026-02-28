@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TrackFingerprint from "@/components/TrackFingerprint";
 import PositionProgressionChart from "@/components/PositionProgressionChart";
 import StrategyTimeline from "@/components/StrategyTimeline";
@@ -204,9 +206,9 @@ export default function SessionBottomTabs({
     },
   });
 
-  // Build tabs in desired order: Strategy, Class Time Delta, Progression, Race Control, Fingerprint
-  if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy Timeline" });
+  // Build tabs in desired order: Time Delta, Strategy, Progression, Race Control, Fingerprint
   if (lapTimeCount > 0) tabs.push({ id: "time-delta", label: "Class Time Delta" });
+  if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy Timeline" });
   if (hasProgression) tabs.push({ id: "progression", label: "Position Progression" });
   if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race Control" });
   if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit Fingerprint" });
@@ -218,28 +220,48 @@ export default function SessionBottomTabs({
 
   if (tabs.length === 0) return null;
 
+  const tabHelpText: Record<string, string> = {
+    "time-delta": "Visualizes the gap between cars over time — see who's closing in or pulling away",
+    "strategy": "Pit stop strategy and stint timelines for each car throughout the race",
+    "progression": "How positions changed throughout the race, hour by hour",
+    "race-control": "Flags, penalties, and incidents reported during the session",
+    "fingerprint": "Circuit performance characteristics based on layout geometry",
+  };
+
   return (
+    <TooltipProvider delayDuration={200}>
     <div className="mt-6" data-session-bottom-tabs>
       {/* Manila folder tabs */}
       <div className="flex items-end gap-0.5">
         {tabs.map(tab => {
           const isActive = tab.id === resolvedTab;
           return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                relative px-4 py-2 text-xs sm:text-sm font-semibold transition-colors
-                rounded-t-lg border border-b-0
-                ${isActive
-                  ? "bg-card text-card-foreground border-border z-10"
-                  : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
-                }
-              `}
-              style={isActive ? { marginBottom: "-1px" } : {}}
-            >
-              {tab.label}
-            </button>
+            <div key={tab.id} className="flex items-center">
+              <button
+                onClick={() => setActiveTab(tab.id)}
+                className={`
+                  relative px-4 py-2 text-xs sm:text-sm font-semibold transition-colors
+                  rounded-t-lg border border-b-0
+                  ${isActive
+                    ? "bg-card text-card-foreground border-border z-10"
+                    : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
+                  }
+                `}
+                style={isActive ? { marginBottom: "-1px" } : {}}
+              >
+                {tab.label}
+              </button>
+              {tabHelpText[tab.id] && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground/40 hover:text-muted-foreground cursor-help -ml-1 mr-1" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px]">
+                    <p className="text-xs">{tabHelpText[tab.id]}</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           );
         })}
       </div>
@@ -288,5 +310,6 @@ export default function SessionBottomTabs({
         )}
       </div>
     </div>
+    </TooltipProvider>
   );
 }

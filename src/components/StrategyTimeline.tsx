@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -153,7 +154,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .from("v2_flag_segments" as any)
         .select("*")
         .eq("session_id", sessionId)
-        .order("start_elapsed", { ascending: true });
+        .order("start_elapsed", { ascending: true })
+        .limit(2000);
       return (data || []) as unknown as FlagSegment[];
     },
   });
@@ -166,7 +168,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .select("*, v2_drivers(full_name)")
         .eq("session_id", sessionId)
         .order("car_number")
-        .order("start_elapsed", { ascending: true });
+        .order("start_elapsed", { ascending: true })
+        .limit(5000);
       return (data || []).map((s: any) => ({
         ...s,
         start_elapsed: Number(s.start_elapsed),
@@ -184,7 +187,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         .select("*")
         .eq("session_id", sessionId)
         .order("car_number")
-        .order("pit_in_elapsed", { ascending: true });
+        .order("pit_in_elapsed", { ascending: true })
+        .limit(5000);
       return (data || []).map((p: any) => ({
         ...p,
         pit_in_elapsed: Number(p.pit_in_elapsed),
@@ -1072,8 +1076,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         />
       </div>
 
-      {/* Tooltip */}
-      {tooltip && (
+      {/* Tooltip — portaled to body to avoid overflow:hidden clipping */}
+      {tooltip && createPortal(
         <div
           className="fixed z-50 pointer-events-none bg-popover border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-popover-foreground"
           style={{
@@ -1087,7 +1091,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
               {line}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
