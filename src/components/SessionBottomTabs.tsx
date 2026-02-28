@@ -236,32 +236,33 @@ export default function SessionBottomTabs({
         {tabs.map(tab => {
           const isActive = tab.id === resolvedTab;
           return (
-            <div key={tab.id} className="flex items-center">
-              <button
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  relative px-4 py-2 text-xs sm:text-sm font-semibold transition-colors
-                  rounded-t-lg border border-b-0
-                  ${isActive
-                    ? "bg-card text-card-foreground border-border z-10"
-                    : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
-                  }
-                `}
-                style={isActive ? { marginBottom: "-1px" } : {}}
-              >
-                {tab.label}
-              </button>
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`
+                relative inline-flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold transition-colors
+                rounded-t-lg border border-b-0
+                ${isActive
+                  ? "bg-card text-card-foreground border-border z-10"
+                  : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
+                }
+              `}
+              style={isActive ? { marginBottom: "-1px" } : {}}
+            >
+              {tab.label}
               {tabHelpText[tab.id] && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-3 w-3 text-muted-foreground/40 hover:text-muted-foreground cursor-help -ml-1 mr-1" />
+                    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                      <HelpCircle className={`h-3 w-3 cursor-help ${isActive ? "text-muted-foreground/50 hover:text-muted-foreground" : "text-muted-foreground/30 hover:text-muted-foreground/60"}`} />
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-[220px]">
                     <p className="text-xs">{tabHelpText[tab.id]}</p>
                   </TooltipContent>
                 </Tooltip>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
