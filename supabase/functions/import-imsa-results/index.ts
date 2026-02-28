@@ -333,6 +333,90 @@ function parseStrategyFlagEvents(flagsData: any): StrategyFlagEvent[] {
   return events;
 }
 
+// ── PDF Flags Analysis fallback ──────────────────────────────────────
+
+/**
+ * Extract text from a PDF using Gemini Flash Lite as pure OCR (no interpretation).
+ */
+async function extractPdfText(pdfUrl: string): Promise<string | null> {
+  try {
+    const resp = await fetchWithRetry(pdfUrl);
+    if (!resp.ok) { console.log(`PDF fetch failed: ${resp.status} for ${pdfUrl}`); return null; }
+    const buf = await resp.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // Convert to base64 in chunks to avoid stack overflow on large PDFs
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+    }
+    const base64 = btoa(binary);
+
+    const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_KEY) { console.log("No LOVABLE_API_KEY for PDF extraction"); return null; }
+
+    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Return the exact text content of this document. Preserve the table structure with | as column separator. No interpretation, just the raw text." },
+            { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+          ],
+        }],
+      }),
+    });
+    if (!aiResp.ok) { console.log(`PDF OCR failed: ${aiResp.status}`); return null; }
+    const data = await aiResp.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch (err) {
+    console.error("extractPdfText error:", err);
+    return null;
+  }
+}
+
+/**
+ * Deterministic parser for Flags Analysis PDF text.
+ * Matches flag rows and extracts Session Elapsed times.
+ * No AI interpretation — pure regex.
+ */
+function parseFlagsAnalysisPdfText(text: string): StrategyFlagEvent[] {
+  const events: StrategyFlagEvent[] = [];
+  const lines = text.split("\n");
+  for (const line of lines) {
+    // Match flag name followed by clock time and session elapsed
+    // Table format: FLAG_NAME | clock_time | session_elapsed | flag_time | acum_flag_time | lap
+    const m = line.match(
+      /(GREEN FLAG|FULL COURSE YELLOW|FULL COURSE CAUTION|RED FLAG|CHEQUERED FLAG)\s*\|?\s*([\d:.]+)\s*\|?\s*([\d:.]+|-)\s*\|?/i
+    );
+    if (!m) continue;
+    const flagName = m[1].toUpperCase();
+    const sessionElapsed = m[3].trim();
+    if (flagName === "CHEQUERED FLAG") continue;
+    if (sessionElapsed === "-") {
+      // First GREEN FLAG at race start
+      events.push({ elapsedSec: 0, state: "GREEN" });
+      continue;
+    }
+    const state: StrategyFlagState =
+      flagName.includes("RED") ? "RED" :
+      flagName.includes("YELLOW") || flagName.includes("CAUTION") ? "FCY" : "GREEN";
+    const elapsedSec = parseElapsedToSeconds(sessionElapsed);
+    if (isFinite(elapsedSec) && elapsedSec >= 0) {
+      events.push({ elapsedSec, state });
+    }
+  }
+  events.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  console.log(`parseFlagsAnalysisPdfText: parsed ${events.length} flag events from PDF text`);
+  return events;
+}
+
 function strategyFlagAtElapsed(events: StrategyFlagEvent[], elapsedSec: number): StrategyFlagState {
   let state: StrategyFlagState = "GREEN";
   for (const e of events) {
@@ -944,6 +1028,13 @@ serve(async (req) => {
       allFlagsJsonLinks.push(match[1]);
     }
 
+    // Collect Flags Analysis PDF links as fallback for when JSON is unavailable
+    const flagsPdfRegex = /href="([^"]+25_FlagsAnalysis[^"]*\.PDF)"/gi;
+    const allFlagsPdfLinks: string[] = [];
+    while ((match = flagsPdfRegex.exec(html)) !== null) {
+      allFlagsPdfLinks.push(match[1]);
+    }
+
     // Also collect Time Card CSV links for endurance driver detection
     const timeCardRegex = /href="([^"]+23_Time(?:%20|[_%\s])*Cards?[^"]*\.CSV)"/gi;
     const allTimeCardLinks: string[] = [];
@@ -964,7 +1055,7 @@ serve(async (req) => {
       allWeatherCsvLinks.push(match[1]);
     }
 
-    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links, ${allFlagsJsonLinks.length} Flags Analysis JSON links in HTML`);
+    console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links, ${allFlagsJsonLinks.length} Flags Analysis JSON links, ${allFlagsPdfLinks.length} Flags Analysis PDF links in HTML`);
 
     const baseUrl = "https://imsa.results.alkamelcloud.com/";
     const season = event.v2_seasons as any;
@@ -1280,6 +1371,21 @@ serve(async (req) => {
     }
     console.log(`Flags JSON mapped: ${flagsByKey.size} sessions`, Array.from(flagsByKey.keys()));
 
+    // ── Flags Analysis PDF mapping (fallback when JSON unavailable) ───────
+    const flagsPdfByKey = new Map<string, string>();
+    for (const fl of allFlagsPdfLinks) {
+      if (matchesSeriesFolder(fl)) {
+        const decoded = decodeURIComponent(fl);
+        const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+        if (tsMatch) {
+          const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+          const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+          flagsPdfByKey.set(key, fl);
+        }
+      }
+    }
+    if (flagsPdfByKey.size > 0) console.log(`Flags PDF mapped: ${flagsPdfByKey.size} sessions (fallback)`, Array.from(flagsPdfByKey.keys()));
+
     // Estimate local hour from UTC timestamp string
     // Daytona is UTC-5, but we'll derive offset from the session_date vs UTC time
     function estimateLocalHour(utcTimeStr: string, utcOffset: number): number {
@@ -1494,6 +1600,21 @@ serve(async (req) => {
           if (hourUrl) return hourUrl;
         }
         return flagsByKey.get(tsMatch[1]) || null;
+      }
+      return null;
+    };
+
+    // Fallback: get PDF URL for flags when JSON is unavailable
+    const flagsPdfUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
+      const decoded = decodeURIComponent(jsonUrl);
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        if (hourNumber) {
+          const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+          const hourUrl = flagsPdfByKey.get(hourKey);
+          if (hourUrl) return hourUrl;
+        }
+        return flagsPdfByKey.get(tsMatch[1]) || null;
       }
       return null;
     };
@@ -1765,9 +1886,33 @@ serve(async (req) => {
         // Process weather for this hour session (use hour-specific weather)
         const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
         if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
-        // Process Race Control for this hour
+        // Process Race Control for this hour (JSON first, PDF fallback)
         const hourFlagsUrl = flagsUrlForSession(f.url, f.hour);
-        if (hourFlagsUrl) await processRaceControl(childSessionId, hourFlagsUrl);
+        if (hourFlagsUrl) {
+          await processRaceControl(childSessionId, hourFlagsUrl);
+        } else {
+          // PDF fallback for race control flags on hourly sessions
+          const hourPdfUrl = flagsPdfUrlForSession(f.url, f.hour);
+          if (hourPdfUrl) {
+            const fullPdfUrl = (() => { try { return new URL(hourPdfUrl, baseUrl).href; } catch { return null; } })();
+            if (fullPdfUrl) {
+              console.log(`No JSON flags for hour ${f.hour}, trying PDF fallback`);
+              const pdfText = await extractPdfText(fullPdfUrl);
+              if (pdfText) {
+                const pdfFlagEvents = parseFlagsAnalysisPdfText(pdfText);
+                if (pdfFlagEvents.length > 0) {
+                  const maxEl = Math.max(...pdfFlagEvents.map(e => e.elapsedSec), 3600);
+                  const segments = deriveFlagSegments(pdfFlagEvents, maxEl);
+                  await adminClient.from("v2_flag_segments").delete().eq("session_id", childSessionId);
+                  if (segments.length > 0) {
+                    await insertRowsInChunks(adminClient, "v2_flag_segments", segments.map(s => ({ ...s, session_id: childSessionId })));
+                  }
+                  console.log(`PDF flags fallback for hour ${f.hour}: ${segments.length} segments`);
+                }
+              }
+            }
+          }
+        }
       }
 
       // 5. Strategy derivation from Time Card telemetry (deterministic)
@@ -1788,6 +1933,27 @@ serve(async (req) => {
               if (flagsResp.ok) {
                 const flagsData = await flagsResp.json();
                 strategyFlagEvents = parseStrategyFlagEvents(flagsData);
+              }
+            }
+          }
+
+          // PDF fallback: if no JSON flags found, try the PDF version
+          if (strategyFlagEvents.length === 0) {
+            const pdfFlagsUrl = (() => {
+              const lastHourSession = sortedHours[sortedHours.length - 1];
+              if (lastHourSession) return flagsPdfUrlForSession(lastHourSession.url, lastHourSession.hour);
+              const overallRace = fetchedResults.find(fr => fr.kind === "overall");
+              return overallRace ? flagsPdfUrlForSession(overallRace.url) : null;
+            })();
+            if (pdfFlagsUrl) {
+              const fullPdfUrl = (() => { try { return new URL(pdfFlagsUrl, baseUrl).href; } catch { return null; } })();
+              if (fullPdfUrl) {
+                console.log("No JSON flags found, trying PDF fallback:", fullPdfUrl);
+                const pdfText = await extractPdfText(fullPdfUrl);
+                if (pdfText) {
+                  strategyFlagEvents = parseFlagsAnalysisPdfText(pdfText);
+                  console.log(`PDF flags fallback: got ${strategyFlagEvents.length} flag events`);
+                }
               }
             }
           }
@@ -1869,9 +2035,31 @@ serve(async (req) => {
         // Process weather for this session
         const weatherUrl = weatherUrlForSession(f.url);
         if (weatherUrl) await processImWeather(sessionId, weatherUrl);
-        // Process Race Control
+        // Process Race Control (JSON first, PDF fallback)
         const flagsUrl = flagsUrlForSession(f.url);
-        if (flagsUrl) await processRaceControl(sessionId, flagsUrl);
+        if (flagsUrl) {
+          await processRaceControl(sessionId, flagsUrl);
+        } else {
+          const pdfUrl = flagsPdfUrlForSession(f.url);
+          if (pdfUrl) {
+            const fullPdfUrl = (() => { try { return new URL(pdfUrl, baseUrl).href; } catch { return null; } })();
+            if (fullPdfUrl) {
+              console.log("No JSON flags, trying PDF fallback for non-endurance session");
+              const pdfText = await extractPdfText(fullPdfUrl);
+              if (pdfText) {
+                const pdfFlagEvents = parseFlagsAnalysisPdfText(pdfText);
+                if (pdfFlagEvents.length > 0) {
+                  const maxEl = Math.max(...pdfFlagEvents.map(e => e.elapsedSec), 3600);
+                  const segments = deriveFlagSegments(pdfFlagEvents, maxEl);
+                  await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+                  if (segments.length > 0) {
+                    await insertRowsInChunks(adminClient, "v2_flag_segments", segments.map(s => ({ ...s, session_id: sessionId })));
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
 
