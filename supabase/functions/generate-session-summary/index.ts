@@ -167,7 +167,7 @@ IMPORTANT: Only reference ${seriesName}. Keep it concise, factual, and engaging.
       const resp = await callAI({
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
-        max_tokens: 600,
+        max_tokens: 1200,
       });
 
       const aiData = await resp.json();
@@ -202,7 +202,7 @@ IMPORTANT: Only reference ${seriesName}. Keep concise, factual, engaging. Use ma
     const overallResp = await callAI({
       messages: [{ role: "user", content: overallPrompt }],
       temperature: 0.7,
-      max_tokens: 600,
+      max_tokens: 1200,
     });
 
     const overallData = await overallResp.json();
