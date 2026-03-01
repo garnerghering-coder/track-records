@@ -182,7 +182,7 @@ export default function EventPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="cursor-target gap-1.5 text-xs"
+                    className="gap-1.5 text-xs"
                     onClick={() => setSummaryOpen(true)}
                   >
                     <FileText className="h-3.5 w-3.5" />
@@ -193,7 +193,7 @@ export default function EventPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="cursor-target gap-1.5 text-xs"
+                    className="gap-1.5 text-xs"
                     onClick={() => setHighlightsOpen(true)}
                   >
                     <Play className="h-3.5 w-3.5" />
