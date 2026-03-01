@@ -115,13 +115,13 @@ const Index = () => {
             </form>
 
             <div className="mt-6 flex items-center justify-center gap-3 text-sm text-muted-foreground">
-              <Link to="/search?tab=drivers" className="hover:text-foreground transition-colors">Drivers</Link>
+              <Link to="/search?tab=drivers" className="cursor-target hover:text-foreground transition-colors">Drivers</Link>
               <span>·</span>
-              <Link to="/teams" className="hover:text-foreground transition-colors">Teams</Link>
+              <Link to="/teams" className="cursor-target hover:text-foreground transition-colors">Teams</Link>
               <span>·</span>
-              <Link to="/results" className="hover:text-foreground transition-colors">Results</Link>
+              <Link to="/results" className="cursor-target hover:text-foreground transition-colors">Results</Link>
               <span>·</span>
-              <Link to="/calendar" className="hover:text-foreground transition-colors">Calendar</Link>
+              <Link to="/calendar" className="cursor-target hover:text-foreground transition-colors">Calendar</Link>
             </div>
           </motion.div>
         </div>
@@ -138,12 +138,12 @@ const Index = () => {
             { label: "Circuits", value: stats.circuits, to: "/search?tab=circuits" },
             { label: "Cars", value: stats.cars, to: "/cars" }].
             map((stat) =>
-            <Link key={stat.label} to={stat.to}>
+            <Link key={stat.label} to={stat.to} className="cursor-target">
                 <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                className="text-center group cursor-pointer">
+                className="text-center group">
 
                   <div className="font-accent text-4xl font-bold text-primary group-hover:scale-110 transition-transform">
                     {stat.value.toLocaleString()}
@@ -166,7 +166,7 @@ const Index = () => {
               <h2 className="font-display text-2xl font-semibold text-foreground">
                 Recently Added
               </h2>
-              <Link to="/results" className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+              <Link to="/results" className="cursor-target text-sm text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
                 View all <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
@@ -175,7 +175,7 @@ const Index = () => {
             <Link
               key={ev.id}
               to={`/events/${ev.id}`}
-              className="group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all">
+              className="cursor-target group rounded-lg border border-border bg-card p-5 hover:border-primary/40 transition-all">
 
                   <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
                     {ev.name}
