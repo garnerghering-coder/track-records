@@ -1007,15 +1007,38 @@ export default function ManageSessionResults() {
         </div>
       )}
 
-      {/* Highlights URL */}
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground whitespace-nowrap">Highlights URL:</span>
-        <Input
-          value={highlightsUrl}
-          onChange={e => setHighlightsUrl(e.target.value)}
-          placeholder="https://youtube.com/watch?v=..."
-          className="h-7 text-xs max-w-md"
-        />
+      {/* Highlights URL & Summary Generation */}
+      <div className="flex items-center gap-4 text-xs flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground whitespace-nowrap">Highlights URL:</span>
+          <Input
+            value={highlightsUrl}
+            onChange={e => setHighlightsUrl(e.target.value)}
+            placeholder="https://youtube.com/watch?v=..."
+            className="h-7 text-xs max-w-md"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs gap-1.5"
+          onClick={async () => {
+            toast.info("Generating summaries…");
+            try {
+              const { data, error: fnErr } = await supabase.functions.invoke("generate-session-summary", {
+                body: { event_id: eventId, force: true },
+              });
+              if (fnErr) throw fnErr;
+              if (data?.error) throw new Error(data.error);
+              toast.success(`Generated ${data?.summaries?.length || 0} summaries`);
+            } catch (e: any) {
+              toast.error(e.message || "Failed to generate summaries");
+            }
+          }}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          Generate Summary
+        </Button>
       </div>
 
       <div className="overflow-x-auto border border-border rounded-lg">
