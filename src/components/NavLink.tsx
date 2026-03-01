@@ -15,7 +15,7 @@ const NavLink = forwardRef<HTMLAnchorElement, NavLinkCompatProps>(
         ref={ref}
         to={to}
         className={({ isActive, isPending }) =>
-          cn(className, isActive && activeClassName, isPending && pendingClassName)
+          cn("cursor-target", className, isActive && activeClassName, isPending && pendingClassName)
         }
         {...props}
       />

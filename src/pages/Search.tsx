@@ -224,7 +224,7 @@ const SearchPage = () => {
       <Header />
       <section className="pt-24 pb-10 bg-card border-b border-border">
         <div className="container">
-          <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
+          <Link to="/" className="cursor-target inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
             <ArrowLeft className="h-4 w-4" /> Back to Home
           </Link>
           <h1 className="font-display text-3xl font-bold text-foreground">Search</h1>
@@ -255,7 +255,7 @@ const SearchPage = () => {
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground mb-4">{allDrivers.length} drivers</p>
             {allDrivers.map(r => (
-              <Link key={`${r.type}-${r.id}`} to={r.url} className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
+              <Link key={`${r.type}-${r.id}`} to={r.url} className="cursor-target flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
                 <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -279,7 +279,7 @@ const SearchPage = () => {
         ) : (
           <div className="space-y-2">
             {results.map(r => (
-              <Link key={`${r.type}-${r.id}`} to={r.url} className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
+              <Link key={`${r.type}-${r.id}`} to={r.url} className="cursor-target flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
                 <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
