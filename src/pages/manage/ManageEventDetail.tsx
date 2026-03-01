@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import AutocompleteField from "@/components/manage/AutocompleteField";
-import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical, Pencil, CloudSun, Loader2, Download } from "lucide-react";
+import { Plus, ArrowLeft, ClipboardList, Globe, GlobeLock, Trash2, GripVertical, Pencil, CloudSun, Loader2, Download, FileText, Play } from "lucide-react";
 import ImportDataDialog from "@/components/manage/ImportDataDialog";
 import { Progress } from "@/components/ui/progress";
 
@@ -35,6 +35,10 @@ export default function ManageEventDetail() {
   const [editingSession, setEditingSession] = useState<any>(null);
   const [sessionForm, setSessionForm] = useState({ name: "", session_type: "practice" as string, date: "", start_time: "", end_time: "", layout_id: "", qualifying_session_id: "" });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [highlightsSessionId, setHighlightsSessionId] = useState("");
+  const [highlightsUrl, setHighlightsUrl] = useState("");
+  const [savingHighlights, setSavingHighlights] = useState(false);
 
   // Unified import dialog state
   const [importOpen, setImportOpen] = useState(false);
@@ -562,6 +566,90 @@ export default function ManageEventDetail() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Summary & Highlights */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Summary & Highlights</h2>
+        <div className="flex flex-wrap items-end gap-4">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={generatingSummary || sessions.length === 0}
+            onClick={async () => {
+              setGeneratingSummary(true);
+              try {
+                const { data, error: fnErr } = await supabase.functions.invoke("generate-session-summary", {
+                  body: { event_id: id, force: true },
+                });
+                if (fnErr) throw fnErr;
+                if (data?.error) throw new Error(data.error);
+                toast.success(`Generated ${data?.summaries?.length || 0} summaries`);
+              } catch (e: any) {
+                toast.error(e.message || "Failed to generate summaries");
+              } finally {
+                setGeneratingSummary(false);
+              }
+            }}
+          >
+            {generatingSummary ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            {generatingSummary ? "Generating…" : "Generate Summary"}
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Select value={highlightsSessionId} onValueChange={v => {
+              setHighlightsSessionId(v);
+              const s = sessions.find((s: any) => s.id === v);
+              setHighlightsUrl((s as any)?.highlights_url || "");
+            }}>
+              <SelectTrigger className="h-8 text-xs w-48">
+                <SelectValue placeholder="Select session…" />
+              </SelectTrigger>
+              <SelectContent>
+                {sessions.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    <span className="flex items-center gap-1.5">
+                      {s.name}
+                      {(s as any).highlights_url && <Play className="h-3 w-3 text-primary" />}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {highlightsSessionId && (
+              <>
+                <Input
+                  value={highlightsUrl}
+                  onChange={e => setHighlightsUrl(e.target.value)}
+                  placeholder="YouTube highlights URL…"
+                  className="h-8 text-xs w-72"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  disabled={savingHighlights}
+                  onClick={async () => {
+                    setSavingHighlights(true);
+                    try {
+                      const { error } = await supabase.from("v2_sessions").update({ highlights_url: highlightsUrl || null } as any).eq("id", highlightsSessionId);
+                      if (error) throw error;
+                      qc.invalidateQueries({ queryKey: ["v2_sessions", id] });
+                      toast.success("Highlights URL saved");
+                    } catch (e: any) {
+                      toast.error(e.message || "Failed to save");
+                    } finally {
+                      setSavingHighlights(false);
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
