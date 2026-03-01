@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,58 @@ import WelcomeLightbox from "@/components/WelcomeLightbox";
 import SEOHead from "@/components/SEOHead";
 
 import { formatDateRange } from "@/lib/date-utils";
+
+const useCountUp = (end: number, duration = 1500) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const counted = useRef(false);
+
+  useEffect(() => {
+    if (!end || counted.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !counted.current) {
+          counted.current = true;
+          const start = performance.now();
+          const step = (now: number) => {
+            const progress = Math.min((now - start) / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setCount(Math.floor(eased * end));
+            if (progress < 1) requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [end, duration]);
+
+  return { count, ref };
+};
+
+const CountUpStat = ({ value, label, to }: { value: number; label: string; to: string }) => {
+  const { count, ref } = useCountUp(value);
+  return (
+    <Link to={to} className="cursor-target">
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="text-center group"
+      >
+        <div className="font-accent text-4xl font-bold text-primary group-hover:scale-110 transition-transform">
+          {count.toLocaleString()}
+        </div>
+        <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
+          {label}
+        </div>
+      </motion.div>
+    </Link>
+  );
+};
 
 const Index = () => {
   const navigate = useNavigate();
@@ -139,28 +191,14 @@ const Index = () => {
         <div className="container">
           <div className="grid grid-cols-2 gap-6 md:grid-cols-5">
             {[
-            { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
-            { label: "Teams", value: stats.teams, to: "/teams" },
-            { label: "Race Events", value: stats.events, to: "/results" },
-            { label: "Circuits", value: stats.circuits, to: "/search?tab=circuits" },
-            { label: "Cars", value: stats.cars, to: "/cars" }].
-            map((stat) =>
-            <Link key={stat.label} to={stat.to} className="cursor-target">
-                <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                className="text-center group">
-
-                  <div className="font-accent text-4xl font-bold text-primary group-hover:scale-110 transition-transform">
-                    {stat.value.toLocaleString()}
-                  </div>
-                  <div className="mt-1 text-sm font-medium text-muted-foreground uppercase tracking-wider group-hover:text-foreground transition-colors">
-                    {stat.label}
-                  </div>
-                </motion.div>
-              </Link>
-            )}
+              { label: "Drivers", value: stats.drivers, to: "/search?tab=drivers" },
+              { label: "Teams", value: stats.teams, to: "/teams" },
+              { label: "Race Events", value: stats.events, to: "/results" },
+              { label: "Circuits", value: stats.circuits, to: "/search?tab=circuits" },
+              { label: "Cars", value: stats.cars, to: "/cars" },
+            ].map((stat) => (
+              <CountUpStat key={stat.label} value={stat.value} label={stat.label} to={stat.to} />
+            ))}
           </div>
         </div>
       </section>
