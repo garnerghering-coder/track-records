@@ -9,7 +9,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WelcomeLightbox from "@/components/WelcomeLightbox";
 import SEOHead from "@/components/SEOHead";
-import heroImage from "@/assets/hero-racing.jpg";
+
 import { formatDateRange } from "@/lib/date-utils";
 
 const Index = () => {
@@ -72,7 +72,14 @@ const Index = () => {
       {/* Hero */}
       <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0">
-          <img src={heroImage} alt="Racing on track" className="h-full w-full object-cover" />
+          <video
+            src="/videos/hero-racing.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-cover pointer-events-none"
+          />
           <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/70 to-background" />
         </div>
 
