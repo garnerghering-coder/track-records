@@ -2108,6 +2108,51 @@ export type Database = {
           },
         ]
       }
+      v2_session_summaries: {
+        Row: {
+          created_at: string
+          event_id: string
+          generated_at: string
+          id: string
+          session_id: string | null
+          summary_markdown: string
+          tab_key: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          generated_at?: string
+          id?: string
+          session_id?: string | null
+          summary_markdown?: string
+          tab_key: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          generated_at?: string
+          id?: string
+          session_id?: string | null
+          summary_markdown?: string
+          tab_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "v2_session_summaries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "v2_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "v2_session_summaries_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "v2_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v2_session_weather: {
         Row: {
           air_temp_max: number | null
@@ -2183,6 +2228,7 @@ export type Database = {
           date: string | null
           end_time: string | null
           event_id: string
+          highlights_url: string | null
           id: string
           layout_id: string | null
           name: string
@@ -2201,6 +2247,7 @@ export type Database = {
           date?: string | null
           end_time?: string | null
           event_id: string
+          highlights_url?: string | null
           id?: string
           layout_id?: string | null
           name: string
@@ -2219,6 +2266,7 @@ export type Database = {
           date?: string | null
           end_time?: string | null
           event_id?: string
+          highlights_url?: string | null
           id?: string
           layout_id?: string | null
           name?: string

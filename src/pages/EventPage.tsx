@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileDown, TriangleIcon } from "lucide-react";
+import { FileDown, TriangleIcon, FileText, Play } from "lucide-react";
 import { exportEventPdf, type SessionExportData } from "@/lib/pdf-export";
 import PdfExportDialog from "@/components/PdfExportDialog";
 import FlagImage from "@/components/FlagImage";
@@ -23,11 +23,15 @@ import { computeTrackMetrics } from "@/lib/track-calculations";
 import SessionBottomTabs from "@/components/SessionBottomTabs";
 import EventHeroDashboard from "@/components/EventHeroDashboard";
 import EnduranceTimeScrubber from "@/components/EnduranceTimeScrubber";
+import SessionSummaryLightbox from "@/components/SessionSummaryLightbox";
+import HighlightsLightbox from "@/components/HighlightsLightbox";
 
 export default function EventPage() {
   const { slug } = useParams();
   const [activeTab, setActiveTab] = useState<string>("");
   const [activeSubTab, setActiveSubTab] = useState<string>("race-results");
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [highlightsOpen, setHighlightsOpen] = useState(false);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["public_event", slug],
@@ -159,17 +163,45 @@ export default function EventPage() {
         {/* Event Header */}
         <div className="border-b border-border">
           <div className="container py-8 space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {seriesName && <span>{seriesName}</span>}
-              {year && <span>• {year}</span>}
-              {event.round_number && <span>• Round {event.round_number}</span>}
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {seriesName && <span>{seriesName}</span>}
+                  {year && <span>• {year}</span>}
+                  {event.round_number && <span>• Round {event.round_number}</span>}
+                </div>
+                <h1 className="text-3xl md:text-4xl font-bold">{event.name}</h1>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  {event.v2_circuits?.name && <span>📍 {event.v2_circuits.name}{event.v2_circuits.country ? `, ${event.v2_circuits.country}` : ""}</span>}
+                  {event.start_date && <span>📅 {event.start_date}{event.end_date && event.end_date !== event.start_date ? ` – ${event.end_date}` : ""}</span>}
+                </div>
+                {event.description && <p className="text-sm text-muted-foreground max-w-2xl mt-2">{event.description}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0 pt-1">
+                {sessions.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="cursor-target gap-1.5 text-xs"
+                    onClick={() => setSummaryOpen(true)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Session Summary
+                  </Button>
+                )}
+                {allSessions.some((s: any) => (s as any).highlights_url) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="cursor-target gap-1.5 text-xs"
+                    onClick={() => setHighlightsOpen(true)}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                    Race Highlights
+                  </Button>
+                )}
+              </div>
             </div>
-            <h1 className="text-3xl md:text-4xl font-bold">{event.name}</h1>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              {event.v2_circuits?.name && <span>📍 {event.v2_circuits.name}{event.v2_circuits.country ? `, ${event.v2_circuits.country}` : ""}</span>}
-              {event.start_date && <span>📅 {event.start_date}{event.end_date && event.end_date !== event.start_date ? ` – ${event.end_date}` : ""}</span>}
-            </div>
-            {event.description && <p className="text-sm text-muted-foreground max-w-2xl mt-2">{event.description}</p>}
           </div>
         </div>
 
@@ -227,6 +259,22 @@ export default function EventPage() {
             </Tabs>
           )}
         </div>
+
+        {/* Lightboxes */}
+        <SessionSummaryLightbox
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          eventId={slug!}
+          sessions={sessions}
+        />
+        <HighlightsLightbox
+          open={highlightsOpen}
+          onClose={() => setHighlightsOpen(false)}
+          sessions={allSessions
+            .filter((s: any) => (s as any).highlights_url)
+            .map((s: any) => ({ name: s.name, highlights_url: (s as any).highlights_url }))
+          }
+        />
       </main>
       <Footer />
     </div>
