@@ -87,7 +87,7 @@ const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="flex items-center">
+        <Link to="/" className="cursor-target flex items-center">
           <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
         </Link>
 
@@ -96,7 +96,7 @@ const Header = () => {
           <div className="relative">
             <button
               onClick={() => {setSearchOpen(!searchOpen);setSearchQuery("");setSearchResults([]);}}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+              className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
 
               Search
             </button>
@@ -149,13 +149,13 @@ const Header = () => {
           </div>
 
           {navLinks.map((link) =>
-          <Link key={link.to} to={link.to} className={`text-sm font-medium transition-colors hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
+          <Link key={link.to} to={link.to} className={`cursor-target text-sm font-medium transition-colors hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
               {link.label}
             </Link>
           )}
           {isAdmin &&
           <>
-            <Link to="/manage" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <Link to="/manage" className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
               Manage
             </Link>
             
