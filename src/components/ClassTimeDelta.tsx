@@ -532,6 +532,9 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     setDragEndPx({ x: relX, y: relY });
   }, []);
 
+  const lastMoveTime = useRef(0);
+  const rafId = useRef<number | null>(null);
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const container = containerRef.current;
     if (!container) return;
@@ -543,59 +546,67 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       return;
     }
 
-    // Tooltip
+    // Throttle tooltip to ~30fps
+    const now = performance.now();
+    if (now - lastMoveTime.current < 33) return;
+    lastMoveTime.current = now;
+
+    if (rafId.current) cancelAnimationFrame(rafId.current);
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    const chartW = container.clientWidth - MARGIN.left - MARGIN.right;
-    const height = compact ? 260 : 400;
-    const chartH = height - MARGIN.top - MARGIN.bottom;
 
-    if (relX < MARGIN.left || relX > MARGIN.left + chartW || relY < MARGIN.top || relY > MARGIN.top + chartH) {
-      setTooltip(null);
-      return;
-    }
+    rafId.current = requestAnimationFrame(() => {
+      const chartW = container.clientWidth - MARGIN.left - MARGIN.right;
+      const height = compact ? 260 : 400;
+      const chartH = height - MARGIN.top - MARGIN.bottom;
 
-    const hoverElapsed = viewRange[0] + ((relX - MARGIN.left) / chartW) * viewDuration;
-    const yScale = (d: number) => MARGIN.top + ((d - visMinDelta) / deltaRange) * chartH;
-
-    let bestCar: string | null = null;
-    let bestDist = Infinity;
-    let bestDelta = 0;
-    let bestElapsed = 0;
-
-    for (const [cn, series] of deltaSeries) {
-      let lo = 0, hi = series.length - 1;
-      while (lo < hi - 1) {
-        const mid = (lo + hi) >> 1;
-        if (series[mid].elapsed <= hoverElapsed) lo = mid; else hi = mid;
+      if (relX < MARGIN.left || relX > MARGIN.left + chartW || relY < MARGIN.top || relY > MARGIN.top + chartH) {
+        setTooltip(null);
+        return;
       }
-      for (const idx of [lo, hi]) {
-        if (idx < 0 || idx >= series.length) continue;
-        const pt = series[idx];
-        const px = MARGIN.left + ((pt.elapsed - viewRange[0]) / viewDuration) * chartW;
-        const py = yScale(Math.min(Math.max(pt.delta, visMinDelta), visMaxDelta));
-        const dist = Math.sqrt((relX - px) ** 2 + (relY - py) ** 2);
-        if (dist < bestDist && dist < 30) {
-          bestDist = dist;
-          bestCar = cn;
-          bestDelta = pt.delta;
-          bestElapsed = pt.elapsed;
+
+      const hoverElapsed = viewRange[0] + ((relX - MARGIN.left) / chartW) * viewDuration;
+      const yScale = (d: number) => MARGIN.top + ((d - visMinDelta) / deltaRange) * chartH;
+
+      let bestCar: string | null = null;
+      let bestDist = Infinity;
+      let bestDelta = 0;
+      let bestElapsed = 0;
+
+      for (const [cn, series] of deltaSeries) {
+        let lo = 0, hi = series.length - 1;
+        while (lo < hi - 1) {
+          const mid = (lo + hi) >> 1;
+          if (series[mid].elapsed <= hoverElapsed) lo = mid; else hi = mid;
+        }
+        for (const idx of [lo, hi]) {
+          if (idx < 0 || idx >= series.length) continue;
+          const pt = series[idx];
+          const px = MARGIN.left + ((pt.elapsed - viewRange[0]) / viewDuration) * chartW;
+          const py = yScale(Math.min(Math.max(pt.delta, visMinDelta), visMaxDelta));
+          const dist = Math.sqrt((relX - px) ** 2 + (relY - py) ** 2);
+          if (dist < bestDist && dist < 30) {
+            bestDist = dist;
+            bestCar = cn;
+            bestDelta = pt.delta;
+            bestElapsed = pt.elapsed;
+          }
         }
       }
-    }
 
-    if (bestCar) {
-      const meta = carMetaMap.get(bestCar);
-      const lines = [
-        `#${bestCar} ${meta?.teamName || ""}`,
-        `Class: ${meta?.className || "?"} | P${meta?.position || "?"} | PIC ${meta?.classPosition || "?"}`,
-        `${deltaMode === "leader" ? "Gap to Leader" : "Interval"}: ${bestDelta.toFixed(3)}s`,
-        `Elapsed: ${formatElapsed(bestElapsed)}`,
-      ];
-      setTooltip({ x: relX, y: relY, lines });
-    } else {
-      setTooltip(null);
-    }
+      if (bestCar) {
+        const meta = carMetaMap.get(bestCar);
+        const lines = [
+          `#${bestCar} ${meta?.teamName || ""}`,
+          `Class: ${meta?.className || "?"} | P${meta?.position || "?"} | PIC ${meta?.classPosition || "?"}`,
+          `${deltaMode === "leader" ? "Gap to Leader" : "Interval"}: ${bestDelta.toFixed(3)}s`,
+          `Elapsed: ${formatElapsed(bestElapsed)}`,
+        ];
+        setTooltip({ x: relX, y: relY, lines });
+      } else {
+        setTooltip(null);
+      }
+    });
   }, [isDragging, deltaSeries, carMetaMap, viewRange, viewDuration, compact, deltaMode, MARGIN, visMinDelta, visMaxDelta, deltaRange]);
 
   const handleMouseUp = useCallback(() => {

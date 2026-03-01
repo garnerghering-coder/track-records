@@ -73,7 +73,7 @@ const Index = () => {
       <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0">
           <img
-            src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png"
+            src="/images/hero-fallback.jpg"
             alt=""
             className="h-full w-full object-cover pointer-events-none"
           />

@@ -793,6 +793,9 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     return viewRange[0] + ((x - LABEL_WIDTH) / chartWidth) * viewDuration;
   }, [viewRange, viewDuration]);
 
+  const lastStrategyMoveTime = useRef(0);
+  const strategyRafId = useRef<number | null>(null);
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const { x, y } = getMousePos(e);
     const container = containerRef.current;
@@ -804,6 +807,17 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       setDragEnd(x);
       return;
     }
+
+    // Throttle tooltip to ~30fps
+    const now = performance.now();
+    if (now - lastStrategyMoveTime.current < 33) return;
+    lastStrategyMoveTime.current = now;
+
+    if (strategyRafId.current) cancelAnimationFrame(strategyRafId.current);
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+
+    strategyRafId.current = requestAnimationFrame(() => {
 
     // Find hovered element
     let rowY = TOP_MARGIN;
@@ -875,7 +889,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
               ? `Avg lap (green): ${formatLapTime(avgLapTime)}`
               : "",
           ].filter(Boolean);
-          setTooltip({ x: e.clientX, y: e.clientY, content: lines });
+          setTooltip({ x: clientX, y: clientY, content: lines });
           return true;
         }
       }
@@ -892,7 +906,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       if (seg) {
         const duration = Number(seg.end_elapsed) - Number(seg.start_elapsed);
         setTooltip({
-          x: e.clientX, y: e.clientY,
+          x: clientX, y: clientY,
           content: [
             `${seg.flag_state}`,
             `Start: ${formatElapsed(Number(seg.start_elapsed))}`,
@@ -905,6 +919,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     }
 
     if (!found) setTooltip(null);
+    }); // end requestAnimationFrame
   }, [getMousePos, x2elapsed, isDragging, dragStart, allClasses, effectiveClasses, carsByClass, expandedClasses, pitStops, stints, flagSegments, viewDuration, compareMode, compareCars, visibleCars, effectiveRowHeight]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
