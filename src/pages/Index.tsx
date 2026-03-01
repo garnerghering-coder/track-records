@@ -72,13 +72,20 @@ const Index = () => {
       {/* Hero */}
       <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
         <div className="absolute inset-0">
+          <img
+            src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png"
+            alt=""
+            className="h-full w-full object-cover pointer-events-none"
+          />
           <video
             src="/videos/hero-racing.mp4"
             autoPlay
             loop
             muted
             playsInline
-            className="h-full w-full object-cover pointer-events-none"
+            className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+            onLoadedData={(e) => { (e.target as HTMLVideoElement).style.opacity = '1'; }}
+            style={{ opacity: 0, transition: 'opacity 0.5s ease-in' }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-background/90 via-background/70 to-background" />
         </div>

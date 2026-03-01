@@ -31,7 +31,7 @@ const SeriesPage = () => {
       <Header />
       <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
         <div className="container">
-          <Link to="/" className="inline-flex items-center gap-1 text-sm mb-4" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
+          <Link to="/" className="cursor-target inline-flex items-center gap-1 text-sm mb-4" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
             <ArrowLeft className="h-4 w-4" /> Back to Home
           </Link>
           <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>Series & Championships</h1>
@@ -54,7 +54,7 @@ const SeriesPage = () => {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {seriesList.map(s => (
-              <Link key={s.id} to={`/series/${s.id}`} className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
+              <Link key={s.id} to={`/series/${s.id}`} className="cursor-target group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
                 <div className="flex items-start gap-4">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                     <Trophy className="h-6 w-6 text-primary" />
