@@ -47,7 +47,7 @@ const EventCard = ({ event, podium = [], showSeries = false }: EventCardProps) =
   return (
     <Link
       to={`/events/${event.id}`}
-      className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+      className="cursor-target group rounded-lg border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
     >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 shrink-0">
