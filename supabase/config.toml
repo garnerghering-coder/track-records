@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.repair-parser]
 verify_jwt = false
+
+[functions.generate-session-summary]
+verify_jwt = false

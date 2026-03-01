@@ -138,6 +138,7 @@ export default function ManageSessionResults() {
   const [jsonText, setJsonText] = useState("");
   const [jsonApplying, setJsonApplying] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
+  const [highlightsUrl, setHighlightsUrl] = useState("");
 
   // Drag state for rows
   const [dragRowIdx, setDragRowIdx] = useState<number | null>(null);
@@ -787,8 +788,8 @@ export default function ManageSessionResults() {
         if (flagErr) throw flagErr;
       }
 
-      // Persist column order and optionally publish
-      const sessionUpdate: any = { column_order: columnOrder };
+      // Persist column order, highlights URL, and optionally publish
+      const sessionUpdate: any = { column_order: columnOrder, highlights_url: highlightsUrl || null };
       if (publish) {
         sessionUpdate.status = "published";
       }
@@ -810,6 +811,11 @@ export default function ManageSessionResults() {
       setSaving(false);
     }
   }, [session, sessionId, rows, pitStops, incidents, annotations, flagSegments, customColumns, columnOrder, qc]);
+
+  // Load highlights URL from session
+  useEffect(() => {
+    if (session) setHighlightsUrl((session as any).highlights_url || "");
+  }, [session]);
 
   if (!session) return <div className="p-6 text-muted-foreground">Loading…</div>;
 
@@ -1000,6 +1006,17 @@ export default function ManageSessionResults() {
           ))}
         </div>
       )}
+
+      {/* Highlights URL */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground whitespace-nowrap">Highlights URL:</span>
+        <Input
+          value={highlightsUrl}
+          onChange={e => setHighlightsUrl(e.target.value)}
+          placeholder="https://youtube.com/watch?v=..."
+          className="h-7 text-xs max-w-md"
+        />
+      </div>
 
       <div className="overflow-x-auto border border-border rounded-lg">
         <table className="w-full text-xs">
