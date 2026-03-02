@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -19,6 +20,13 @@ import {
   getTickIntervalSeconds,
   type LapTimeRow,
 } from "@/lib/lap-position-calc";
+
+// ── Flag overlay colors ──────────────────────────────────────────────
+const FLAG_COLORS: Record<string, string> = {
+  GREEN: "rgba(34, 197, 94, 0.08)", YELLOW: "rgba(234, 179, 8, 0.12)",
+  FCY: "rgba(251, 146, 60, 0.12)", RED: "rgba(239, 68, 68, 0.12)",
+  SC: "rgba(251, 146, 60, 0.12)",
+};
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -157,7 +165,21 @@ export default function PositionProgressionChart({
 
   const useContinuous = lapTimeCount > 0 && !!parentSessionId;
 
-  // ── Continuous mode: fetch lap times ─────────────────────────
+  // ── Fetch flag segments for background overlay ──────────────
+  const { data: flagSegments = [] } = useQuery({
+    queryKey: ["progression_flags", parentSessionId],
+    queryFn: async () => {
+      if (!parentSessionId) return [];
+      const { data } = await supabase
+        .from("v2_flag_segments" as any)
+        .select("flag_state, start_elapsed, end_elapsed")
+        .eq("session_id", parentSessionId)
+        .order("start_elapsed");
+      return (data || []) as unknown as { flag_state: string; start_elapsed: number; end_elapsed: number }[];
+    },
+    enabled: !!parentSessionId,
+  });
+
   const { data: lapTimes = [] } = useQuery({
     queryKey: ["progression_laps", parentSessionId],
     queryFn: () => fetchAllLapTimes(supabase, parentSessionId!),
@@ -694,6 +716,19 @@ export default function PositionProgressionChart({
               {...(!compact && { label: { value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } } })}
             />
             <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
+            {/* Flag segment overlays */}
+            {isContinuousMode && flagSegments
+              .filter(f => f.flag_state !== "GREEN" && FLAG_COLORS[f.flag_state])
+              .map((f, i) => (
+                <ReferenceArea
+                  key={`flag-${i}`}
+                  x1={f.start_elapsed}
+                  x2={f.end_elapsed}
+                  fill={FLAG_COLORS[f.flag_state]}
+                  fillOpacity={1}
+                  ifOverflow="hidden"
+                />
+              ))}
             {!isContinuousMode && activeHourIndex && activeHourIndex > 0 && (
               <ReferenceLine
                 x={hourSessions[activeHourIndex - 1]?.name}

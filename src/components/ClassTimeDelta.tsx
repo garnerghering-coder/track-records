@@ -316,9 +316,9 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
     if (visibleDeltas.length === 0) return 5;
     visibleDeltas.sort((a, b) => a - b);
-    const p90Index = Math.floor(visibleDeltas.length * 0.9);
-    const p90 = visibleDeltas[Math.min(p90Index, visibleDeltas.length - 1)];
-    return Math.max(p90 * 1.2, 5);
+     const p95Index = Math.floor(visibleDeltas.length * 0.95);
+    const p95 = visibleDeltas[Math.min(p95Index, visibleDeltas.length - 1)];
+    return Math.max(p95 * 1.2, 5);
   }, [deltaSeries, viewRange]);
 
   const visMaxDelta = yZoomRange ? yZoomRange[1] : autoMaxDelta;
