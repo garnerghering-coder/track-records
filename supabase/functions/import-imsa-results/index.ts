@@ -2019,8 +2019,11 @@ serve(async (req) => {
       // The parent endurance_race session now stores one row per driver in the car,
       // so there's no need to overwrite them with the final hour's driver.
     } else {
-      // Standard flow - use all fetched results
-      // For non-endurance, we may have fetched under nonRaceLinks but they include all
+      // Standard (non-endurance) flow
+      // Collect Time Card CSV links matching this series for lap timing data
+      const seriesTimeCardLinks = allTimeCardLinks.filter(l => matchesSeriesFolder(l));
+      console.log(`Non-endurance: found ${seriesTimeCardLinks.length} Time Card CSV links for this series`);
+
       for (const f of fetchedResults) {
         const sessionData = f.data.session || {};
         const sessionName = sessionData.session_name || "Unknown Session";
@@ -2032,9 +2035,11 @@ serve(async (req) => {
         const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
         if (!sessionId) continue;
         await insertResults(sessionId, entries, sessionInfo.type, false);
+
         // Process weather for this session
         const weatherUrl = weatherUrlForSession(f.url);
         if (weatherUrl) await processImWeather(sessionId, weatherUrl);
+
         // Process Race Control (JSON first, PDF fallback)
         const flagsUrl = flagsUrlForSession(f.url);
         if (flagsUrl) {
@@ -2058,6 +2063,103 @@ serve(async (req) => {
                 }
               }
             }
+          }
+        }
+
+        // ── Lap timing data for non-endurance race sessions ──
+        const isRaceSession = sessionInfo.type === "race" || sessionInfo.type === "sprint_race";
+        if (isRaceSession && seriesTimeCardLinks.length > 0) {
+          // Find Time Card CSV in the same session folder as the results JSON
+          const resultsFolder = decodeURIComponent(f.url).replace(/[^/]*$/, "");
+          const matchingTC = seriesTimeCardLinks.find(tcLink => {
+            const tcDecoded = decodeURIComponent(tcLink);
+            const tcFolder = tcDecoded.replace(/[^/]*$/, "");
+            // Check if both files are in the same session folder or parent folder
+            return resultsFolder.includes(tcFolder) || tcFolder.includes(resultsFolder) ||
+              // Also try matching by session timestamp
+              (() => {
+                const resultTs = resultsFolder.match(/\/(\d{12})_[^/]+\//);
+                const tcTs = tcDecoded.match(/\/(\d{12})_[^/]+\//);
+                return resultTs && tcTs && resultTs[1] === tcTs[1];
+              })();
+          });
+
+          if (matchingTC) {
+            const tcUrl = (() => { try { return new URL(matchingTC, baseUrl).href; } catch { return null; } })();
+            if (tcUrl) {
+              console.log(`Fetching Time Card CSV for ${sessionInfo.name}:`, tcUrl);
+              try {
+                const tcResp = await fetchWithRetry(tcUrl);
+                if (tcResp.ok) {
+                  const csvText = await tcResp.text();
+                  const lapsByCar = parseTimeCardLaps(csvText);
+                  console.log(`Time Card parsed for ${sessionInfo.name}: ${lapsByCar.size} cars`);
+
+                  if (lapsByCar.size > 0) {
+                    // Insert lap times into v2_lap_times
+                    const lapTimeRows: any[] = [];
+                    for (const [carNumber, laps] of lapsByCar) {
+                      for (const lap of laps) {
+                        lapTimeRows.push({
+                          session_id: sessionId,
+                          car_number: carNumber,
+                          lap_number: lap.lapNumber ?? 0,
+                          elapsed: round3(lap.elapsedSec),
+                        });
+                      }
+                    }
+                    if (lapTimeRows.length > 0) {
+                      await adminClient.from("v2_lap_times").delete().eq("session_id", sessionId);
+                      await insertRowsInChunks(adminClient, "v2_lap_times", lapTimeRows);
+                      console.log(`Lap times saved for ${sessionInfo.name}: ${lapTimeRows.length} rows`);
+                    }
+
+                    // Derive flag segments from Flags Analysis for visualization overlays
+                    let strategyFlagEvents: StrategyFlagEvent[] = [];
+                    const sessionFlagsUrl = flagsUrlForSession(f.url);
+                    if (sessionFlagsUrl) {
+                      const fullFlagsUrl = (() => { try { return new URL(sessionFlagsUrl, baseUrl).href; } catch { return null; } })();
+                      if (fullFlagsUrl) {
+                        const flagsResp = await fetchWithRetry(fullFlagsUrl);
+                        if (flagsResp.ok) {
+                          const flagsData = await flagsResp.json();
+                          strategyFlagEvents = parseStrategyFlagEvents(flagsData);
+                        }
+                      }
+                    }
+                    // PDF fallback for flag segments
+                    if (strategyFlagEvents.length === 0) {
+                      const sessionPdfUrl = flagsPdfUrlForSession(f.url);
+                      if (sessionPdfUrl) {
+                        const fullPdfUrl = (() => { try { return new URL(sessionPdfUrl, baseUrl).href; } catch { return null; } })();
+                        if (fullPdfUrl) {
+                          console.log("Trying PDF fallback for flag segments:", fullPdfUrl);
+                          const pdfText = await extractPdfText(fullPdfUrl);
+                          if (pdfText) {
+                            strategyFlagEvents = parseFlagsAnalysisPdfText(pdfText);
+                          }
+                        }
+                      }
+                    }
+
+                    // Persist flag segments
+                    if (strategyFlagEvents.length > 0) {
+                      const maxElapsed = Math.max(...Array.from(lapsByCar.values()).flatMap(laps => laps.map(l => l.elapsedSec)), 0);
+                      const flagSegments = deriveFlagSegments(strategyFlagEvents, maxElapsed);
+                      await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+                      if (flagSegments.length > 0) {
+                        await insertRowsInChunks(adminClient, "v2_flag_segments", flagSegments.map(s => ({ ...s, session_id: sessionId })));
+                      }
+                      console.log(`Flag segments saved for ${sessionInfo.name}: ${flagSegments.length} segments`);
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error(`Failed to process Time Card for ${sessionInfo.name}:`, err);
+              }
+            }
+          } else {
+            console.log(`No matching Time Card CSV found for ${sessionInfo.name}`);
           }
         }
       }

@@ -179,8 +179,7 @@ export default function SessionBottomTabs({
     return items.length > 0;
   });
 
-  // Position Progression (only for endurance with hour sessions)
-  const hasProgression = hourSessions && hourSessions.length > 0;
+  // Position Progression (computed below after lapTimeCount query)
 
   // 4. Strategy Chart (check if stint data exists)
   const { data: stintCount = 0 } = useQuery({
@@ -205,6 +204,9 @@ export default function SessionBottomTabs({
       return count || 0;
     },
   });
+
+  // Position Progression (endurance with hour sessions OR any session with lap time data)
+  const hasProgression = (hourSessions && hourSessions.length > 0) || lapTimeCount > 0;
 
   // Build tabs in desired order: Time Delta, Strategy, Progression, Race Control, Fingerprint
   if (lapTimeCount > 0) tabs.push({ id: "time-delta", label: "Class Time Delta" });
@@ -288,11 +290,11 @@ export default function SessionBottomTabs({
         {resolvedTab === "progression" && hasProgression && (
           <div className="p-5">
             <PositionProgressionChart
-              hourSessions={hourSessions!}
+              hourSessions={hourSessions || []}
               teamNameMap={teamNameMap}
               activeHourId={activeHourId}
               isMulticlass={isMulticlass}
-              parentSessionId={parentSessionId}
+              parentSessionId={parentSessionId || session.id}
               seasonClasses={seasonClasses}
             />
           </div>
