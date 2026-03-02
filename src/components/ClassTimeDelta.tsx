@@ -304,17 +304,21 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
   const viewRange = zoomRange || timeRange;
   const viewDuration = viewRange[1] - viewRange[0] || 1;
 
-  // Visible max delta for Y-axis (auto-scale to visible data, or use yZoomRange)
+  // Visible max delta for Y-axis (auto-scale using 90th percentile to avoid outliers)
   const autoMaxDelta = useMemo(() => {
-    let max = 0;
+    const visibleDeltas: number[] = [];
     for (const [, series] of deltaSeries) {
       for (const pt of series) {
         if (pt.elapsed >= viewRange[0] && pt.elapsed <= viewRange[1]) {
-          if (pt.delta > max) max = pt.delta;
+          visibleDeltas.push(pt.delta);
         }
       }
     }
-    return Math.max(max * 1.1, 5);
+    if (visibleDeltas.length === 0) return 5;
+    visibleDeltas.sort((a, b) => a - b);
+    const p90Index = Math.floor(visibleDeltas.length * 0.9);
+    const p90 = visibleDeltas[Math.min(p90Index, visibleDeltas.length - 1)];
+    return Math.max(p90 * 1.2, 5);
   }, [deltaSeries, viewRange]);
 
   const visMaxDelta = yZoomRange ? yZoomRange[1] : autoMaxDelta;
@@ -347,21 +351,21 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
 
   // ── Color logic ───────────────────────────────────────────────
 
+  const isSingleClass = allClasses.length <= 1;
+
   const getCarColor = useCallback((cn: string, index: number, totalInGroup: number) => {
-    if (isAllView) {
-      // Color by class
-      const meta = carMetaMap.get(cn);
-      const cls = meta?.className || "";
-      const baseColor = classColors[cls] || classColors[cls.toUpperCase()] || DEFAULT_CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
-      // Shade within class for slight differentiation
-      const classMembers = Array.from(carMetaMap.entries()).filter(([, m]) => m.className === cls);
-      const idxInClass = classMembers.findIndex(([c]) => c === cn);
-      return shadeColor(baseColor, idxInClass, classMembers.length);
-    } else {
-      // Individual car colors
+    if (isSingleClass || !isAllView) {
+      // Single-class series or specific class view: individual car colors
       return INDIVIDUAL_COLORS[index % INDIVIDUAL_COLORS.length];
     }
-  }, [isAllView, carMetaMap, classColors]);
+    // Multi-class "All" view: color by class with shading
+    const meta = carMetaMap.get(cn);
+    const cls = meta?.className || "";
+    const baseColor = classColors[cls] || classColors[cls.toUpperCase()] || DEFAULT_CLASS_COLORS[cls.toUpperCase()] || "#6b7280";
+    const classMembers = Array.from(carMetaMap.entries()).filter(([, m]) => m.className === cls);
+    const idxInClass = classMembers.findIndex(([c]) => c === cn);
+    return shadeColor(baseColor, idxInClass, classMembers.length);
+  }, [isAllView, isSingleClass, carMetaMap, classColors]);
 
   // ── Canvas rendering ──────────────────────────────────────────
 
@@ -661,7 +665,8 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       {/* Controls */}
       {!compact && (
         <div className="flex flex-wrap items-center gap-2">
-          {/* Class filter with "All" */}
+          {/* Class filter with "All" — hide if single class */}
+          {allClasses.length > 1 && (
           <div className="flex gap-1">
             <button
               onClick={() => setSelectedClass(null)}
@@ -688,6 +693,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
               </button>
             ))}
           </div>
+          )}
 
           {/* Mode toggle */}
           <div className="flex border border-border rounded overflow-hidden ml-auto">

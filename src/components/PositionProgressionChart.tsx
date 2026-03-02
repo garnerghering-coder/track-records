@@ -440,28 +440,28 @@ export default function PositionProgressionChart({
   // ── Color logic ──────────────────────────────────────────────
   // All classes view: color by class. Single class view: individual car colors.
 
+  const isSingleClass = allClasses.length <= 1;
+
   const getCarColor = useCallback((carNumber: string, carsInView: string[]): string => {
-    if (!isClassFiltered) {
-      // All-classes view: color by class
-      const cls = isContinuousMode
-        ? continuousData?.carSeriesInfo.find(c => c.carNumber === carNumber)?.className
-        : carSeries.find(c => c.carNumber === carNumber)?.className;
-      const baseColor = classColors[cls || ""] || classColors[(cls || "").toUpperCase()] || DEFAULT_CLASS_COLORS[(cls || "").toUpperCase()] || "#6b7280";
-      // Shade within class for differentiation
-      const classMembers = carsInView.filter(cn => {
-        const cnCls = isContinuousMode
-          ? continuousData?.carSeriesInfo.find(c => c.carNumber === cn)?.className
-          : carSeries.find(c => c.carNumber === cn)?.className;
-        return (cnCls || "") === (cls || "");
-      });
-      const idx = classMembers.indexOf(carNumber);
-      return shadeColor(baseColor, Math.max(0, idx), classMembers.length);
-    } else {
-      // Class-filtered: individual colors
+    if (isSingleClass || isClassFiltered) {
+      // Single-class series or class-filtered: individual car colors
       const idx = carsInView.indexOf(carNumber);
       return INDIVIDUAL_COLORS[Math.max(0, idx) % INDIVIDUAL_COLORS.length];
     }
-  }, [isClassFiltered, isContinuousMode, continuousData, carSeries, classColors]);
+    // Multi-class "All" view: color by class with shading
+    const cls = isContinuousMode
+      ? continuousData?.carSeriesInfo.find(c => c.carNumber === carNumber)?.className
+      : carSeries.find(c => c.carNumber === carNumber)?.className;
+    const baseColor = classColors[cls || ""] || classColors[(cls || "").toUpperCase()] || DEFAULT_CLASS_COLORS[(cls || "").toUpperCase()] || "#6b7280";
+    const classMembers = carsInView.filter(cn => {
+      const cnCls = isContinuousMode
+        ? continuousData?.carSeriesInfo.find(c => c.carNumber === cn)?.className
+        : carSeries.find(c => c.carNumber === cn)?.className;
+      return (cnCls || "") === (cls || "");
+    });
+    const idx = classMembers.indexOf(carNumber);
+    return shadeColor(baseColor, Math.max(0, idx), classMembers.length);
+  }, [isClassFiltered, isSingleClass, isContinuousMode, continuousData, carSeries, classColors]);
 
   // Build chart data
   const { chartData, maxPosition } = useMemo(() => {
@@ -549,7 +549,7 @@ export default function PositionProgressionChart({
   if (!isContinuousMode && filteredSeries.length === 0 && carSeries.length === 0) return null;
   if (isContinuousMode && chartData.length === 0) return null;
 
-  const showClassFilter = allClasses.length > 1;
+  const showClassFilter = allClasses.length > 1 && !isSingleClass;
   const carsToRender = isContinuousMode ? filteredCarNumbers : filteredSeries.map(c => c.carNumber);
   const carInfoForLegend = isContinuousMode
     ? continuousData!.carSeriesInfo.filter(c => filteredCarNumbers.includes(c.carNumber))
