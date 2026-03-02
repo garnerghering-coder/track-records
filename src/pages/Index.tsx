@@ -7,7 +7,7 @@ import { Search, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import WelcomeLightbox from "@/components/WelcomeLightbox";
+
 import SEOHead from "@/components/SEOHead";
 
 import { formatDateRange } from "@/lib/date-utils";
@@ -119,7 +119,7 @@ const Index = () => {
         canonical="/" />
 
       <Header />
-      <WelcomeLightbox />
+      
 
       {/* Hero */}
       <section className="relative flex min-h-[85vh] items-center justify-center overflow-hidden pt-16">
