@@ -182,7 +182,7 @@ function MiniVisualization({
 }) {
   const hasHours = hourSessions.length > 0;
 
-  // Check for lap timing data for time delta chart
+  // Check for lap timing data for time delta / progression charts
   const { data: hasLapTimes = false } = useQuery({
     queryKey: ["hero_lap_times_check", raceSession?.id],
     queryFn: async () => {
@@ -195,17 +195,32 @@ function MiniVisualization({
     enabled: !!raceSession?.id,
   });
 
+  // Check for stint data (strategy tab)
+  const { data: hasStints = false } = useQuery({
+    queryKey: ["hero_stints_check", raceSession?.id],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("v2_stints" as any)
+        .select("id", { count: "exact", head: true })
+        .eq("session_id", raceSession.id);
+      return (count || 0) > 0;
+    },
+    enabled: !!raceSession?.id,
+  });
+
+  const hasProgression = hasHours || hasLapTimes;
+
   const helpText: Record<string, string> = {
     "time-delta": "Gap between cars over time — see who's closing in or pulling away",
     "strategy": "Pit stop strategy and stint timelines for each car",
-    "progression": "Position changes throughout the race, hour by hour",
+    "progression": "Position changes throughout the race",
   };
 
   const tabs = useMemo(() => [
     ...(hasLapTimes ? ["time-delta"] : []),
-    "strategy",
-    ...(hasHours ? ["progression"] : []),
-  ], [hasHours, hasLapTimes]);
+    ...(hasStints ? ["strategy"] : []),
+    ...(hasProgression ? ["progression"] : []),
+  ], [hasHours, hasLapTimes, hasStints, hasProgression]);
 
   const [activeVizTab, setActiveVizTab] = useState<string>("");
   const [userInteracted, setUserInteracted] = useState(false);
@@ -285,9 +300,9 @@ function MiniVisualization({
             <ClassTimeDelta sessionId={raceSession.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
           </div>
         )}
-        {resolvedVizTab === "progression" && hasHours && (
+        {resolvedVizTab === "progression" && hasProgression && (
           <div className="h-full">
-            <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} />
+            <PositionProgressionChart hourSessions={hourSessions} teamNameMap={teamNameMap} isMulticlass={isMulticlass} compact seasonClasses={seasonClasses} parentSessionId={raceSession.id} />
           </div>
         )}
       </div>
