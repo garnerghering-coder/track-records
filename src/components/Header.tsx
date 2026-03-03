@@ -79,7 +79,8 @@ const Header = () => {
   { to: "/search?tab=drivers", label: "Drivers", match: "/search" },
   { to: "/search?tab=circuits", label: "Circuits", match: "/circuit" },
   { to: "/results", label: "Results", match: "/results" },
-  { to: "/calendar", label: "Calendar", match: "/calendar" }];
+  { to: "/calendar", label: "Calendar", match: "/calendar" },
+  { to: "/articles", label: "Articles", match: "/articles" }];
 
   const isActive = (match: string) => location.pathname === match || location.pathname.startsWith(match + "/");
 
