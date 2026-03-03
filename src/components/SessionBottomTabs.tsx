@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { HelpCircle } from "lucide-react";
@@ -29,6 +30,7 @@ type RaceControlFilter = "flags" | "penalties" | "incidents";
 
 function RaceControlContent({ sections }: { sections: any[] }) {
   const [activeFilters, setActiveFilters] = useState<Set<RaceControlFilter>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Classify each item into categories based on color and description keywords
   const classifiedSections = useMemo(() => {
@@ -89,37 +91,54 @@ function RaceControlContent({ sections }: { sections: any[] }) {
 
   return (
     <div className="px-5 py-3 space-y-2">
-      {/* Filter chips */}
-      {availableFilters.size > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {(["flags", "penalties", "incidents"] as RaceControlFilter[])
-            .filter(f => availableFilters.has(f))
-            .map(f => {
-              const isActive = activeFilters.has(f);
-              return (
-                <button
-                  key={f}
-                  onClick={() => toggleFilter(f)}
-                  className={`
-                    inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all
-                    ${isActive
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:border-border"
-                    }
-                  `}
-                >
-                  {filterLabels[f].label}
-                </button>
-              );
-            })}
+      {/* Search + Filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative flex-shrink-0">
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search messages…"
+            className="h-7 w-40 rounded-md border border-border bg-background pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+          />
         </div>
-      )}
+        {availableFilters.size > 1 && (
+          <>
+            {(["flags", "penalties", "incidents"] as RaceControlFilter[])
+              .filter(f => availableFilters.has(f))
+              .map(f => {
+                const isActive = activeFilters.has(f);
+                return (
+                  <button
+                    key={f}
+                    onClick={() => toggleFilter(f)}
+                    className={`
+                      inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all
+                      ${isActive
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:border-border"
+                      }
+                    `}
+                  >
+                    {filterLabels[f].label}
+                  </button>
+                );
+              })}
+          </>
+        )}
+      </div>
 
       {/* Items — scrollable compact list */}
       <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
         {classifiedSections.map((section: any) => {
+          const lowerSearch = searchQuery.toLowerCase();
           const filteredItems = section._classifiedItems.filter(
-            (item: any) => showAll || activeFilters.has(item._category)
+            (item: any) => {
+              const matchFilter = showAll || activeFilters.has(item._category);
+              const matchSearch = !searchQuery || (item.description || "").toLowerCase().includes(lowerSearch);
+              return matchFilter && matchSearch;
+            }
           );
           if (filteredItems.length === 0) return null;
           return (

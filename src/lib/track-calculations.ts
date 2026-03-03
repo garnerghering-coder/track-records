@@ -70,7 +70,7 @@ function eiCategory(v: number): string {
   if (v <= 40) return "Undulating";
   if (v <= 65) return "Hilly";
   if (v <= 85) return "Highland";
-  return "Mountain";
+  return "Mountainous";
 }
 
 function csiCategory(v: number): string {
@@ -99,7 +99,7 @@ export function categoryColor(category: string): string {
     case "Undulating": return "text-yellow-400";
     case "Hilly": return "text-orange-400";
     case "Highland": return "text-amber-500";
-    case "Mountain": return "text-red-400";
+    case "Mountainous": return "text-red-400";
     case "Flowing": return "text-green-400";
     case "Rhythmic": return "text-yellow-400";
     case "High Braking Density": return "text-orange-400";
@@ -124,7 +124,7 @@ export function categoryBubbleClasses(category: string): string {
     case "Undulating": return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
     case "Hilly": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
     case "Highland": return "bg-amber-500/15 text-amber-500 border-amber-500/30";
-    case "Mountain": return "bg-red-400/15 text-red-400 border-red-400/30";
+    case "Mountainous": return "bg-red-400/15 text-red-400 border-red-400/30";
     case "Flowing": return "bg-green-400/15 text-green-400 border-green-400/30";
     case "Rhythmic": return "bg-yellow-400/15 text-yellow-400 border-yellow-400/30";
     case "High Braking Density": return "bg-orange-400/15 text-orange-400 border-orange-400/30";
@@ -144,7 +144,7 @@ export function categoryHexColor(category: string): string {
     case "High-Speed Technical": return "#2dd4bf";
     case "Balanced": case "Flat": case "Flowing": case "Efficient": return "#4ade80";
     case "Technical": case "Hilly": case "High Braking Density": case "Punishing": return "#fb923c";
-    case "Tight & Twisty": case "Mountain": case "Extreme Braking Density": case "Relentless": return "#f87171";
+    case "Tight & Twisty": case "Mountainous": case "Extreme Braking Density": case "Relentless": return "#f87171";
     case "Undulating": case "Rhythmic": case "Active": return "#facc15";
     case "Highland": return "#f59e0b";
     default: return "#8b8b9a";

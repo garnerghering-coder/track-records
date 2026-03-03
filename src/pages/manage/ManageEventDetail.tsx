@@ -285,7 +285,7 @@ export default function ManageEventDetail() {
       const { error } = await supabase.from("v2_events").update({
         name: eventForm.name,
         short_name: (eventForm.short_name || null) as any,
-        round_number: eventForm.round_number ? parseInt(eventForm.round_number) : null,
+        round_number: eventForm.round_number || null,
         start_date: eventForm.start_date || null,
         end_date: eventForm.end_date || null,
         description: eventForm.description || null,

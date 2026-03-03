@@ -36,24 +36,35 @@ const SearchPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get("tab");
   const [search, setSearch] = useState(searchParams.get("q") || "");
-  const [typeFilterVal, setTypeFilterVal] = useState(initialTab === "drivers" ? "driver" : "all");
+  const [typeFilterVal, setTypeFilterVal] = useState(
+    initialTab === "drivers" ? "driver" : initialTab === "circuits" ? "circuit" : "all"
+  );
   const [results, setResults] = useState<ResultItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [allDrivers, setAllDrivers] = useState<ResultItem[]>([]);
-  const [driversLoading, setDriversLoading] = useState(false);
+  const [preloadedItems, setPreloadedItems] = useState<ResultItem[]>([]);
+  const [preloadedLoading, setPreloadedLoading] = useState(false);
 
-  // Load all drivers when tab=drivers with no query
+  // Load all drivers or circuits when tab is set with no query
   useEffect(() => {
-    if (initialTab === "drivers" && !search.trim()) {
-      setDriversLoading(true);
+    if ((initialTab === "drivers" || initialTab === "circuits") && !search.trim()) {
+      setPreloadedLoading(true);
       (async () => {
-        const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality")
-          .order("full_name").limit(500);
-        setAllDrivers((data || []).map((d: any) => ({
-          type: "driver" as const, id: d.id, label: d.full_name,
-          url: `/driver/${d.id}`, nationality: d.nationality,
-        })));
-        setDriversLoading(false);
+        if (initialTab === "drivers") {
+          const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality")
+            .order("full_name").limit(500);
+          setPreloadedItems((data || []).map((d: any) => ({
+            type: "driver" as const, id: d.id, label: d.full_name,
+            url: `/driver/${d.id}`, nationality: d.nationality,
+          })));
+        } else {
+          const { data } = await supabase.from("v2_circuits").select("id, name, country, location")
+            .order("name").limit(500);
+          setPreloadedItems((data || []).map((c: any) => ({
+            type: "circuit" as const, id: c.id, label: c.name,
+            url: `/circuit/${c.id}`, subtitle: [c.location, c.country].filter(Boolean).join(", "),
+          })));
+        }
+        setPreloadedLoading(false);
       })();
     }
   }, [initialTab]);
@@ -251,10 +262,10 @@ const SearchPage = () => {
           </Select>
         </div>
 
-        {!search.trim() && typeFilterVal === "driver" && allDrivers.length > 0 ? (
+        {!search.trim() && (typeFilterVal === "driver" || typeFilterVal === "circuit") && preloadedItems.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground mb-4">{allDrivers.length} drivers</p>
-            {allDrivers.map(r => (
+            <p className="text-sm text-muted-foreground mb-4">{preloadedItems.length} {typeFilterVal === "driver" ? "drivers" : "circuits"}</p>
+            {preloadedItems.map(r => (
               <Link key={`${r.type}-${r.id}`} to={r.url} className="cursor-target flex items-center gap-4 rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-all">
                 <Badge variant="secondary" className="text-xs uppercase shrink-0 w-16 justify-center">{r.type}</Badge>
                 <div className="min-w-0 flex-1">
@@ -262,12 +273,13 @@ const SearchPage = () => {
                     {r.nationality && <FlagImage nationality={r.nationality} size={14} />}
                     <span className="font-display text-sm font-semibold text-card-foreground truncate">{r.label}</span>
                   </div>
+                  {r.subtitle && <p className="text-xs text-muted-foreground mt-0.5">{r.subtitle}</p>}
                 </div>
               </Link>
             ))}
           </div>
-        ) : !search.trim() && driversLoading ? (
-          <p className="text-center text-muted-foreground py-12">Loading drivers…</p>
+        ) : !search.trim() && preloadedLoading ? (
+          <p className="text-center text-muted-foreground py-12">Loading…</p>
         ) : !search.trim() ? (
           <p className="text-center text-muted-foreground py-12">Type something to search.</p>
         ) : loading ? (

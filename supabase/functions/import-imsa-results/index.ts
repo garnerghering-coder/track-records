@@ -749,7 +749,12 @@ async function bulkResolveCars(
       resolved.set(key, id);
       summary.cars_matched = (summary.cars_matched || 0) + 1;
     } else {
-      toCreate.push({ model_name: info.vehicle, ...(info.manufacturer ? { manufacturer: info.manufacturer } : {}) });
+      // Strip manufacturer prefix from model_name to avoid duplication like "Mazda Mazda MX-5"
+      let modelName = info.vehicle;
+      if (info.manufacturer && modelName.toLowerCase().startsWith(info.manufacturer.toLowerCase())) {
+        modelName = modelName.slice(info.manufacturer.length).trim();
+      }
+      toCreate.push({ model_name: modelName, ...(info.manufacturer ? { manufacturer: info.manufacturer } : {}) });
       toCreateKeys.push(key);
     }
   }

@@ -109,9 +109,9 @@ function WinnerCard({ entry, showGap, isWinner }: { entry: WinnerEntry; showGap?
   const teamLabel = [entry.car_number ? `#${entry.car_number}` : null, entry.teamName].filter(Boolean).join(" ");
 
   return (
-    <div className={`flex items-center gap-3 ${isWinner ? "py-2" : "py-1.5"}`}>
+    <div className={`flex items-center gap-4 ${isWinner ? "py-2" : "py-1.5"}`}>
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <div className="flex flex-col gap-0.5 shrink-0">
             {entry.drivers.map((d, i) => (
               <span key={i} className={`${textSize} font-medium text-foreground whitespace-nowrap flex items-center gap-1`}>
@@ -561,7 +561,7 @@ export default function EventHeroDashboard({
                             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Demand</p>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.tdiCategory}</p><p className="text-[10px] text-muted-foreground">Track Demand Index — overall physical challenge</p></TooltipContent>
+                        <TooltipContent side="bottom" className="max-w-[240px]"><p className="text-xs font-medium">{trackMetrics.tdiCategory}</p><p className="text-[10px] text-muted-foreground">Overall difficulty (0–100). Higher = more demanding on car and driver.</p></TooltipContent>
                       </Tooltip>
                     )}
                     {trackMetrics.tcs100 != null && trackMetrics.tcsCategory && (
@@ -572,7 +572,7 @@ export default function EventHeroDashboard({
                             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Character</p>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.tcsCategory}</p><p className="text-[10px] text-muted-foreground">Track Character Score — power vs technical balance</p></TooltipContent>
+                        <TooltipContent side="bottom" className="max-w-[240px]"><p className="text-xs font-medium">{trackMetrics.tcsCategory}</p><p className="text-[10px] text-muted-foreground">Layout style (0–100). Low = tight corners. High = long straights.</p></TooltipContent>
                       </Tooltip>
                     )}
                     {trackMetrics.ei != null && trackMetrics.eiCategory && (
@@ -583,7 +583,7 @@ export default function EventHeroDashboard({
                             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Elevation</p>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.eiCategory}</p><p className="text-[10px] text-muted-foreground">Elevation Index — total altitude variation</p></TooltipContent>
+                        <TooltipContent side="bottom" className="max-w-[240px]"><p className="text-xs font-medium">{trackMetrics.eiCategory}</p><p className="text-[10px] text-muted-foreground">Altitude change (0–100). Higher = hillier terrain with more climbs and descents.</p></TooltipContent>
                       </Tooltip>
                     )}
                     {trackMetrics.csi != null && trackMetrics.csiCategory && (
@@ -594,7 +594,7 @@ export default function EventHeroDashboard({
                             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Braking</p>
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom"><p className="text-xs font-medium">{trackMetrics.csiCategory}</p><p className="text-[10px] text-muted-foreground">Corner Severity Index — heavy braking demand</p></TooltipContent>
+                        <TooltipContent side="bottom" className="max-w-[240px]"><p className="text-xs font-medium">{trackMetrics.csiCategory}</p><p className="text-[10px] text-muted-foreground">Braking intensity (0–100). What % of corners need heavy braking.</p></TooltipContent>
                       </Tooltip>
                     )}
                   </div>
