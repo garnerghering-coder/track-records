@@ -24,6 +24,8 @@ import Calendar from "./pages/Calendar";
 import Cars from "./pages/Cars";
 import CarProfile from "./pages/CarProfile";
 import EventPage from "./pages/EventPage";
+import Articles from "./pages/Articles";
+import ArticleDetail from "./pages/ArticleDetail";
 import ManageLayout from "./pages/manage/ManageLayout";
 import ManageEvents from "./pages/manage/ManageEvents";
 import ManageEventDetail from "./pages/manage/ManageEventDetail";
@@ -36,6 +38,7 @@ import ManageSeries from "./pages/manage/ManageSeries";
 import ManageReports from "./pages/manage/ManageReports";
 import ManagePotentialIssues from "./pages/manage/ManagePotentialIssues";
 import ManageCarLiveries from "./pages/manage/ManageCarLiveries";
+import ManageArticles from "./pages/manage/ManageArticles";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -63,6 +66,8 @@ const App = () => (
           <Route path="/car/:id" element={<CarProfile />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/events/:slug" element={<EventPage />} />
+          <Route path="/articles" element={<Articles />} />
+          <Route path="/articles/:slug" element={<ArticleDetail />} />
           <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/manage" element={<ManageLayout />}>
@@ -78,6 +83,7 @@ const App = () => (
             <Route path="reports" element={<ManageReports />} />
             <Route path="issues" element={<ManagePotentialIssues />} />
             <Route path="liveries" element={<ManageCarLiveries />} />
+            <Route path="articles" element={<ManageArticles />} />
           </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
