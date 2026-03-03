@@ -76,13 +76,18 @@ const Header = () => {
 
   const navLinks = [
   { to: "/series", label: "Series", match: "/series" },
-  { to: "/search?tab=drivers", label: "Drivers", match: "/search" },
-  { to: "/search?tab=circuits", label: "Circuits", match: "/circuit" },
+  { to: "/search?tab=drivers", label: "Drivers", match: "/drivers-nav" },
+  { to: "/search?tab=circuits", label: "Circuits", match: "/circuits-nav" },
   { to: "/results", label: "Results", match: "/results" },
   { to: "/calendar", label: "Calendar", match: "/calendar" },
   { to: "/articles", label: "Articles", match: "/articles" }];
 
-  const isActive = (match: string) => location.pathname === match || location.pathname.startsWith(match + "/");
+  const isActive = (match: string) => {
+    // Special handling for driver/circuit nav links
+    if (match === "/drivers-nav") return location.pathname === "/search" && location.search.includes("tab=drivers");
+    if (match === "/circuits-nav") return location.pathname === "/search" && location.search.includes("tab=circuits");
+    return location.pathname === match || location.pathname.startsWith(match + "/");
+  };
 
 
   return (

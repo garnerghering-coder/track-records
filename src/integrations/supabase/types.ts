@@ -1437,7 +1437,7 @@ export type Database = {
           id: string
           layout_id: string | null
           name: string
-          round_number: number | null
+          round_number: string | null
           season_id: string
           short_name: string | null
           start_date: string | null
@@ -1452,7 +1452,7 @@ export type Database = {
           id?: string
           layout_id?: string | null
           name: string
-          round_number?: number | null
+          round_number?: string | null
           season_id: string
           short_name?: string | null
           start_date?: string | null
@@ -1467,7 +1467,7 @@ export type Database = {
           id?: string
           layout_id?: string | null
           name?: string
-          round_number?: number | null
+          round_number?: string | null
           season_id?: string
           short_name?: string | null
           start_date?: string | null

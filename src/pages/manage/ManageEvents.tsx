@@ -97,13 +97,13 @@ export default function ManageEvents() {
         layout_id: layoutId || null,
         name: form.name,
         short_name: (form.short_name || null) as any,
-        round_number: form.round_number ? parseInt(form.round_number) : null,
+        round_number: form.round_number || null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         description: form.description || null,
         status: form.status as any,
       };
-      const { error } = await supabase.from("v2_events").insert(payload);
+      const { error } = await supabase.from("v2_events").insert([payload]);
       if (error) throw error;
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["v2_events_list"] }); setOpen(false); toast.success("Event created"); },
@@ -116,7 +116,7 @@ export default function ManageEvents() {
       const { error } = await supabase.from("v2_events").update({
         name: editForm.name,
         short_name: (editForm.short_name || null) as any,
-        round_number: editForm.round_number ? parseInt(editForm.round_number) : null,
+        round_number: editForm.round_number || null,
         start_date: editForm.start_date || null,
         end_date: editForm.end_date || null,
         description: editForm.description || null,

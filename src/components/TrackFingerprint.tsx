@@ -15,7 +15,7 @@ const CATEGORY_EXPLANATIONS: Record<string, string> = {
   "Undulating": "Gentle rises and dips that subtly affect weight transfer and braking points.",
   "Hilly": "Significant climbs and descents that challenge braking zones and throttle application.",
   "Highland": "Large elevation swings that heavily influence car balance and power delivery.",
-  "Mountain": "Extreme vertical variation — elevation is a defining challenge of every lap.",
+  "Mountainous": "Extreme vertical variation — elevation is a defining challenge of every lap.",
   // CSI
   "Flowing": "Corners link together smoothly with light braking, rewarding momentum and rhythm.",
   "Rhythmic": "A moderate braking load with a mix of light and firm braking zones.",
@@ -29,10 +29,10 @@ const CATEGORY_EXPLANATIONS: Record<string, string> = {
 };
 
 const METRIC_DESCRIPTIONS: Record<string, string> = {
-  "Circuit Demand": "An overall difficulty rating combining circuit character, elevation, and braking severity.",
-  "Circuit Character": "Classifies the configuration from power-focused straights to tight technical sections based on corner density and straight ratio.",
-  "Corner Severity": "Measures the proportion of corners that require heavy braking effort.",
-  "Elevation": "Rates the total elevation change relative to track length.",
+  "Circuit Demand": "Overall difficulty score (0–100). Combines how technical, hilly, and brake-heavy a circuit is. Higher = more demanding on car and driver.",
+  "Circuit Character": "Layout style score (0–100). Low = tight, technical corners dominate. High = long straights and raw speed dominate.",
+  "Corner Severity": "Braking intensity score (0–100). Measures what percentage of corners need heavy braking. Higher = more punishing on brakes.",
+  "Elevation": "Altitude change score (0–100). Rates total climb and descent per lap relative to track length. Higher = hillier terrain.",
 };
 
 interface GaugeProps {
