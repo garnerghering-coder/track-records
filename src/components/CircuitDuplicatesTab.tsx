@@ -170,7 +170,7 @@ export default function CircuitDuplicatesTab({ onRefresh, onGroupCountChange }: 
           if (!primary[field] && secondary[field]) updates[field] = secondary[field];
         }
         if (Object.keys(updates).length > 0) {
-          await supabase.from("circuits").update(updates).eq("id", primaryId);
+          await supabase.from("circuits").update(updates as any).eq("id", primaryId);
         }
 
         // Delete secondary

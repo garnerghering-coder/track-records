@@ -179,7 +179,7 @@ export default function DuplicatesTab({ drivers, onRefresh, onGroupCountChange }
           }
         }
         if (Object.keys(updates).length > 0) {
-          await supabase.from("driver_profiles").update(updates).eq("id", primaryId);
+          await supabase.from("driver_profiles").update(updates as any).eq("id", primaryId);
         }
 
         // Delete secondary
