@@ -1,49 +1,47 @@
 import { Link } from "react-router-dom";
-import logoFull from "@/assets/logo-full.png";
+import { openSearch } from "@/components/Header";
 
-const Footer = () => {
-  return (
-    <footer className="border-t border-border bg-card py-12">
-      <div className="container">
-        <div className="grid gap-8 md:grid-cols-4">
-          <div>
-            <div className="flex items-center mb-3">
-              <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/c4e44093-bdee-41b1-bde6-0e0d54bf8054.png" />
-            </div>
-            <p className="text-sm text-muted-foreground font-light">
-              The searchable motorsport database.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Discover</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/search" className="cursor-target hover:text-foreground transition-colors">Search</Link></li>
-              <li><Link to="/results" className="cursor-target hover:text-foreground transition-colors">Race Results</Link></li>
-              <li><Link to="/calendar" className="cursor-target hover:text-foreground transition-colors">Calendar</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Browse</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/search?q=" className="cursor-target hover:text-foreground transition-colors">Drivers</Link></li>
-              <li><Link to="/teams" className="cursor-target hover:text-foreground transition-colors">Teams</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Platform</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              
-              <li><Link to="/auth" className="cursor-target hover:text-foreground transition-colors">Sign Up</Link></li>
-              <li><Link to="/privacy" className="cursor-target hover:text-foreground transition-colors">Privacy Policy</Link></li>
-            </ul>
-          </div>
+const LINKS = [
+  { to: "/results", label: "Races" },
+  { to: "/series", label: "Championships" },
+  { to: "/drivers", label: "Drivers" },
+  { to: "/teams", label: "Teams" },
+  { to: "/circuits", label: "Circuits" },
+  { to: "/cars", label: "Cars" },
+  { to: "/calendar", label: "Calendar" },
+  { to: "/compare", label: "Compare" },
+  { to: "/articles", label: "Articles" },
+  { to: "/privacy", label: "Privacy" },
+];
+
+const Footer = () => (
+  <footer className="mt-28 border-t">
+    <div className="mx-auto max-w-[1320px] px-4 pb-10 pt-14 sm:px-6 lg:px-10">
+      <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr]">
+        <div>
+          <p className="display max-w-xl text-4xl leading-[1.05] sm:text-5xl">
+            The record of sportscar racing, <em className="text-ink-2">lap by lap.</em>
+          </p>
+          <button onClick={openSearch} className="mt-6 inline-flex h-11 items-center gap-3 rounded-full border px-5 text-sm hover:bg-ink/[0.05]">
+            Search the record <kbd className="rounded-md border bg-sheet px-1.5 font-mono text-[10px] text-ink-3">/</kbd>
+          </button>
         </div>
-        <div className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground font-light">
-          © {new Date().getFullYear()} Track Records. All rights reserved.
-        </div>
+        <nav className="grid grid-cols-2 gap-x-8 gap-y-2.5 self-end text-[15px] sm:grid-cols-3">
+          {LINKS.map((l) => (
+            <Link key={l.to} to={l.to} className="link-u w-fit text-ink-2 hover:text-ink">
+              {l.label}
+            </Link>
+          ))}
+        </nav>
       </div>
-    </footer>);
-
-};
+      <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t pt-6 sm:flex-row sm:items-center">
+        <img alt="Track Records" className="logo-adapt h-5 w-auto" src="/brand/logo.png" />
+        <p className="text-xs text-ink-3">
+          Results from official timing and scoring. © {new Date().getFullYear()} Track Records.
+        </p>
+      </div>
+    </div>
+  </footer>
+);
 
 export default Footer;

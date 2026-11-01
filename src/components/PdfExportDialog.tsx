@@ -6,9 +6,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { FileDown } from "lucide-react";
+import { ChevronRight, FileDown } from "lucide-react";
 
 interface PdfExportDialogProps {
   open: boolean;
@@ -50,10 +49,13 @@ export default function PdfExportDialog({
 
   return (
     <Dialog open={open} onOpenChange={exporting ? undefined : onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="min-h-0 resize-none rounded border bg-card shadow-none sm:rounded"
+        style={{ maxWidth: "min(28rem, calc(100vw - 2rem))", maxHeight: "90vh" }}
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileDown className="h-5 w-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 font-display text-lg font-bold uppercase tracking-wide">
+            <FileDown className="h-4 w-4 text-primary" />
             Export PDF
           </DialogTitle>
           <DialogDescription>
@@ -63,26 +65,33 @@ export default function PdfExportDialog({
 
         {exporting ? (
           <div className="space-y-3 py-4">
-            <p className="text-sm text-muted-foreground">Generating PDF…</p>
-            <Progress value={progress} className="h-2" />
-            <p className="text-xs text-muted-foreground text-right">{Math.round(progress)}%</p>
+            <div className="flex items-center justify-between">
+              <p className="label-caps">Generating PDF…</p>
+              <p className="num text-xs text-foreground">{Math.round(progress)}%</p>
+            </div>
+            <Progress value={progress} className="h-1 rounded-none" />
           </div>
         ) : (
-          <div className="flex flex-col gap-3 py-2">
-            <Button variant="outline" className="justify-start h-auto py-3 px-4" onClick={() => handleExport("single")}>
-              <div className="text-left">
-                <p className="font-medium text-sm">This session only</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{sessionName}</p>
-              </div>
-            </Button>
-            {hasMultipleSessions && (
-              <Button variant="outline" className="justify-start h-auto py-3 px-4" onClick={() => handleExport("all")}>
-                <div className="text-left">
-                  <p className="font-medium text-sm">All sessions from this event</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Each session on a new page</p>
-                </div>
-              </Button>
-            )}
+          <div className="grid gap-px overflow-hidden rounded-sm border bg-border">
+            {[
+              { mode: "single" as const, title: "This session only", sub: sessionName, show: true },
+              { mode: "all" as const, title: "All sessions from this event", sub: "Each session on a new page", show: hasMultipleSessions },
+            ]
+              .filter((o) => o.show)
+              .map((o) => (
+                <button
+                  key={o.mode}
+                  type="button"
+                  onClick={() => handleExport(o.mode)}
+                  className="group flex items-center justify-between gap-3 bg-card px-4 py-3 text-left transition-colors hover:bg-accent"
+                >
+                  <div className="min-w-0">
+                    <p className="font-display text-sm font-bold uppercase tracking-wide text-foreground">{o.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{o.sub}</p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                </button>
+              ))}
           </div>
         )}
       </DialogContent>

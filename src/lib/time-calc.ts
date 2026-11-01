@@ -8,7 +8,7 @@
  */
 export function parseTime(str: string): number | null {
   if (!str || typeof str !== "string") return null;
-  let s = str.trim().replace(/^\+/, "");
+  const s = str.trim().replace(/^\+/, "");
   if (!s) return null;
 
   // M:SS.mmm or MM:SS.mmm

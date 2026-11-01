@@ -1,129 +1,130 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { articles, ARTICLE_CATEGORIES } from "@/lib/articles-data";
-import { formatDateRange } from "@/lib/date-utils";
+import { articles, ARTICLE_CATEGORIES, type Article } from "@/lib/articles-data";
+import { Eyebrow, Note, Page, Tabs, dateRange } from "@/site/ui";
+import { readingMinutes } from "@/site/archive";
 
 export default function Articles() {
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-
-  const filtered = useMemo(() => {
-    return articles.filter((a) => {
-      const matchesCategory = !activeCategory || a.category === activeCategory;
-      const matchesSearch =
-        !search.trim() ||
-        a.title.toLowerCase().includes(search.toLowerCase()) ||
-        a.excerpt.toLowerCase().includes(search.toLowerCase()) ||
-        a.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-      return matchesCategory && matchesSearch;
-    });
-  }, [search, activeCategory]);
+  const [params, setParams] = useSearchParams();
+  const cat = params.get("category") || "all";
+  const sorted = useMemo(() => [...articles].sort((a, b) => b.date.localeCompare(a.date)), []);
+  const cats = ARTICLE_CATEGORIES.filter((c) => sorted.some((a) => a.category === c));
+  const list = cat === "all" ? sorted : sorted.filter((a) => a.category === cat);
+  const [lead, ...rest] = list;
 
   return (
-    <>
-      <SEOHead
-        title="Articles"
-        description="In-depth motorsport analysis, race breakdowns, driver profiles, and pre-race predictions from Track Records."
-        canonical="/articles"
-      />
+    <div className="min-h-screen">
+      <SEOHead title="Articles" description="Race breakdowns, previews and analysis, written from the data on the record." canonical="/articles" />
       <Header />
-      <main className="min-h-screen bg-background pt-14">
-        <div className="container py-10">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-foreground mb-1">
-            Articles
-          </h1>
-          <p className="text-sm text-muted-foreground mb-6">
-            Analysis, breakdowns, and insights from the world of motorsport.
-          </p>
 
-          {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-8">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search articles…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9 text-sm"
-              />
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setActiveCategory(null)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  !activeCategory
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-secondary-foreground hover:bg-accent"
-                }`}
-              >
-                All
-              </button>
-              {ARTICLE_CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    activeCategory === cat
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground hover:bg-accent"
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+      <Page className="pt-8 sm:pt-14">
+        <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr] lg:items-end">
+          <div>
+            <Eyebrow>Articles</Eyebrow>
+            <h1 className="display mt-4 text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
+              Notes from <em>the paddock.</em>
+            </h1>
           </div>
-
-          {/* Grid */}
-          {filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-16">
-              No articles found.
-            </p>
-          ) : (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((article) => (
-                <Link
-                  key={article.slug}
-                  to={`/articles/${article.slug}`}
-                  className="group rounded-lg border border-border bg-card overflow-hidden hover:border-primary/40 transition-colors"
-                >
-                  <div className="aspect-[16/9] overflow-hidden bg-secondary">
-                    <img
-                      src={article.heroImage}
-                      alt={article.title}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge variant="secondary" className="text-[10px] font-medium">
-                        {article.category}
-                      </Badge>
-                      <span className="text-[10px] text-muted-foreground">
-                        {formatDateRange(article.date)}
-                      </span>
-                    </div>
-                    <h2 className="font-display text-base font-semibold text-foreground leading-tight mb-1.5 group-hover:text-primary transition-colors">
-                      {article.title}
-                    </h2>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
-                      {article.excerpt}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+          <p className="max-w-md text-lg leading-relaxed text-ink-2 lg:justify-self-end">Breakdowns, previews and analysis, written from the numbers on the record.</p>
         </div>
-      </main>
+        {cats.length > 1 && (
+          <div className="mt-10">
+            <Tabs
+              value={cat}
+              onChange={(v) => setParams(v === "all" ? {} : { category: v }, { replace: true })}
+              items={[{ value: "all", label: "Everything" }, ...cats.map((c) => ({ value: c, label: c }))]}
+            />
+          </div>
+        )}
+      </Page>
+
+      <Page className="mt-12 sm:mt-16">
+        {!lead ? (
+          <Note title="Nothing in this section yet">New pieces are published after race weekends.</Note>
+        ) : (
+          <>
+            <Lead a={lead} />
+            {rest.length > 0 && (
+              <ol className="mt-16 border-t">
+                {rest.map((a, i) => (
+                  <li key={a.slug}>
+                    <ArticleRow a={a} n={i + 2} />
+                  </li>
+                ))}
+              </ol>
+            )}
+          </>
+        )}
+      </Page>
+
       <Footer />
-    </>
+    </div>
   );
 }
+
+function Lead({ a }: { a: Article }) {
+  return (
+    <Link to={`/articles/${a.slug}`} className="group grid overflow-hidden rounded-[28px] border bg-sheet lg:grid-cols-[1.4fr_1fr]">
+      <div className="flex flex-col p-7 sm:p-12">
+        <Eyebrow>
+          <span className="rounded-full bg-hl px-2 py-0.5 text-hl-ink">Latest</span>
+          <span>{a.category}</span>
+          <span>·</span>
+          <span>{dateRange(a.date)}</span>
+        </Eyebrow>
+        <h2 className="display mt-6 text-[2.6rem] leading-[0.98] sm:text-[4rem]">{a.title}</h2>
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2">{a.excerpt}</p>
+        <div className="mt-auto flex flex-wrap items-center gap-x-6 gap-y-3 pt-10 text-sm">
+          <span className="inline-flex items-center gap-2 font-medium">
+            Read the piece <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </span>
+          <span className="text-ink-3">
+            {a.author} · <span className="num">{readingMinutes(a.body)}</span> min read
+          </span>
+        </div>
+      </div>
+      <div className="relative hidden min-h-[22rem] border-l bg-paper/50 p-12 lg:flex lg:flex-col lg:justify-between">
+        <span className="font-accent text-[11rem] leading-[0.8] text-ink/[0.07]">01</span>
+        <ul className="relative space-y-2">
+          {headings(a.body)
+            .slice(0, 5)
+            .map((h, i) => (
+              <li key={h} className="flex gap-3 text-[15px] text-ink-2">
+                <span className="num w-5 shrink-0 text-[11px] leading-6 text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+                <span className="display text-[1.35rem] leading-tight text-ink">{h}</span>
+              </li>
+            ))}
+        </ul>
+      </div>
+    </Link>
+  );
+}
+
+function ArticleRow({ a, n }: { a: Article; n: number }) {
+  return (
+    <Link to={`/articles/${a.slug}`} className="group grid gap-4 border-b py-8 sm:grid-cols-[5rem_minmax(0,1fr)_12rem] sm:gap-8 sm:py-10">
+      <span className="font-accent text-4xl leading-none text-ink-3">{String(n).padStart(2, "0")}</span>
+      <div className="min-w-0">
+        <Eyebrow>
+          <span>{a.category}</span>
+          <span>·</span>
+          <span>{dateRange(a.date)}</span>
+        </Eyebrow>
+        <h3 className="display mt-3 text-[2rem] leading-[1.02] transition-transform duration-300 group-hover:translate-x-1 sm:text-[2.6rem]">{a.title}</h3>
+        <p className="mt-3 max-w-2xl text-[15.5px] leading-relaxed text-ink-2">{a.excerpt}</p>
+      </div>
+      <div className="flex items-start justify-between gap-4 text-sm text-ink-3 sm:flex-col sm:items-end">
+        <span>
+          <span className="num">{readingMinutes(a.body)}</span> min read
+        </span>
+        <ArrowUpRight className="h-5 w-5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" />
+      </div>
+    </Link>
+  );
+}
+
+const headings = (body: string) => body.split("\n").filter((l) => l.startsWith("## ")).map((l) => l.slice(3).trim());

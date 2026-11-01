@@ -1,230 +1,186 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Search, X, Menu, LogOut, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { ArrowUpRight, Moon, Search, Sun, X } from "lucide-react";
+import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
+import CommandPalette from "@/components/tr/CommandPalette";
 import { supabase } from "@/integrations/supabase/client";
-import logoFull from "@/assets/logo-full.png";
 
-const Header = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [session, setSession] = useState<any>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+const PRIMARY = [
+  { to: "/results", label: "Races", match: (p: string) => p === "/results" || p.startsWith("/events/") },
+  { to: "/series", label: "Championships", match: (p: string) => p.startsWith("/series") },
+  { to: "/drivers", label: "Drivers", match: (p: string) => p.startsWith("/driver") || p === "/compare" },
+  { to: "/circuits", label: "Circuits", match: (p: string) => p.startsWith("/circuit") },
+];
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) checkAdmin(session.user.id);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) checkAdmin(session.user.id);else setIsAdmin(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+const INDEX = [
+  { to: "/results", label: "Races", table: "v2_events", blurb: "Every race, replayable" },
+  { to: "/series", label: "Championships", table: "v2_series", blurb: "Points races, season by season" },
+  { to: "/drivers", label: "Drivers", table: "v2_drivers", blurb: "Career records" },
+  { to: "/teams", label: "Teams", table: "v2_teams", blurb: "Entries, wins, line-ups" },
+  { to: "/circuits", label: "Circuits", table: "v2_circuits", blurb: "Character, winners, records" },
+  { to: "/cars", label: "Cars", table: "v2_cars", blurb: "Machines and their results" },
+];
 
-  const checkAdmin = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
-    setIsAdmin(!!data && data.length > 0);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/");
-  };
-
-  useEffect(() => {
-    if (!searchQuery.trim()) {setSearchResults([]);return;}
-    const timer = setTimeout(async () => {
-      const lower = `%${searchQuery}%`;
-      const [drivers, teams, events, series, circuits] = await Promise.all([
-      supabase.from("v2_drivers").select("id, full_name, nationality").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
-      supabase.from("v2_teams").select("id, full_name, nationality, short_name").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
-      supabase.from("v2_events").select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").or(`name.ilike.${lower}`).eq("status", "published" as any).limit(5),
-      supabase.from("v2_series").select("id, name, short_name").or(`name.ilike.${lower},short_name.ilike.${lower}`).limit(4),
-      supabase.from("v2_circuits").select("id, name, country, location").or(`name.ilike.${lower},country.ilike.${lower},location.ilike.${lower}`).limit(4)]
-      );
-      const results: any[] = [];
-      (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}` }));
-      (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}` }));
-      (events.data || []).forEach((e: any) => {
-        const seriesName = e.v2_seasons?.v2_series?.name || "";
-        const circuitName = e.v2_circuits?.name || "";
-        const subtitle = [seriesName, circuitName].filter(Boolean).join(" · ");
-        results.push({ type: "event", id: e.id, label: e.name, url: `/events/${e.id}`, subtitle });
-      });
-      (series.data || []).forEach((s: any) => results.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}` }));
-      (circuits.data || []).forEach((c: any) => results.push({ type: "circuit", id: c.id, label: c.country ? `${c.name}, ${c.country}` : c.name, url: `/circuit/${c.id}` }));
-      setSearchResults(results);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchOpen(false);
-      setSearchQuery("");
-    }
-  };
-
-  const navLinks = [
-  { to: "/series", label: "Series", match: "/series" },
-  { to: "/search?tab=drivers", label: "Drivers", match: "/drivers-nav" },
-  { to: "/search?tab=circuits", label: "Circuits", match: "/circuits-nav" },
-  { to: "/results", label: "Results", match: "/results" },
-  { to: "/calendar", label: "Calendar", match: "/calendar" },
-  { to: "/articles", label: "Articles", match: "/articles" }];
-
-  const isActive = (match: string) => {
-    // Special handling for driver/circuit nav links
-    if (match === "/drivers-nav") return location.pathname === "/search" && location.search.includes("tab=drivers");
-    if (match === "/circuits-nav") return location.pathname === "/search" && location.search.includes("tab=circuits");
-    return location.pathname === match || location.pathname.startsWith(match + "/");
-  };
-
-
+export function ThemeToggle({ className }: { className?: string }) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const dark = resolvedTheme === "dark";
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="cursor-target flex items-center">
-          <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
-        </Link>
+    <button
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={dark ? "Switch to day mode" : "Switch to night mode"}
+      title={dark ? "Day" : "Night"}
+      className={cn("flex h-9 w-9 items-center justify-center rounded-full text-ink-2 transition-colors hover:bg-ink/[0.07] hover:text-ink", className)}
+    >
+      {dark ? <Sun className="h-[17px] w-[17px]" /> : <Moon className="h-[17px] w-[17px]" />}
+    </button>
+  );
+}
 
-        <nav className="hidden items-center gap-6 md:flex">
-          {/* Search toggle */}
-          <div className="relative">
-            <button
-              onClick={() => {setSearchOpen(!searchOpen);setSearchQuery("");setSearchResults([]);}}
-              className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+export const openSearch = () => window.dispatchEvent(new CustomEvent("tr:search"));
 
-              Search
-            </button>
-            {searchOpen &&
-            <div className="absolute right-0 top-full mt-2 w-96 rounded-lg border border-border bg-card shadow-xl p-2 z-50">
-                <form onSubmit={handleSearchSubmit} className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                  autoFocus
-                  placeholder="Search everything…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-8 h-9 text-sm" />
-
-                  <button type="button" onClick={() => {setSearchOpen(false);setSearchQuery("");setSearchResults([]);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </form>
-                {searchResults.length > 0 &&
-              <div className="mt-2 max-h-72 overflow-y-auto space-y-0.5">
-                    {searchResults.map((r) =>
-                <Link
-                  key={`${r.type}-${r.id}`}
-                  to={r.url}
-                  onClick={() => {setSearchOpen(false);setSearchQuery("");}}
-                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors">
-
-                        <span className="text-[10px] uppercase font-medium text-muted-foreground w-12 shrink-0">{r.type}</span>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-card-foreground truncate block">{r.label}</span>
-                          {r.subtitle && <span className="text-[10px] text-muted-foreground truncate block">{r.subtitle}</span>}
-                        </div>
-                      </Link>
-                )}
-                    {searchQuery.trim() &&
-                <button
-                  onClick={() => {navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);setSearchOpen(false);setSearchQuery("");}}
-                  className="w-full text-left rounded px-2 py-1.5 text-sm text-primary hover:bg-accent transition-colors">
-
-                        View all results for "{searchQuery}"
-                      </button>
-                }
-                  </div>
-              }
-                {searchQuery.trim() && searchResults.length === 0 &&
-              <p className="text-xs text-muted-foreground p-2 text-center">No results found.</p>
-              }
-              </div>
-            }
-          </div>
-
-          {navLinks.map((link) =>
-          <Link key={link.to} to={link.to} className={`cursor-target text-sm font-medium transition-colors hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
-              {link.label}
-            </Link>
-          )}
-          {isAdmin &&
-          <>
-            <Link to="/manage" className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              Manage
-            </Link>
-            
-
-
-          </>
-          }
-          {session ?
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
-              Log Out
-            </Button> :
-
-          <div className="flex items-center gap-2">
-              <Link to="/auth"><Button variant="ghost" size="sm">Log In</Button></Link>
-              <Link to="/auth?signup=true"><Button size="sm">Sign Up</Button></Link>
-            </div>
-          }
-        </nav>
-
-        {/* Mobile */}
-        <div className="flex items-center gap-2 md:hidden">
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-foreground">
-            <Menu className="h-5 w-5" />
+function IndexOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!open || Object.keys(counts).length) return;
+    Promise.all(INDEX.map((i) => supabase.from(i.table as never).select("id", { count: "exact", head: true }))).then((rs) =>
+      setCounts(Object.fromEntries(INDEX.map((i, k) => [i.table, rs[k].count ?? 0]))),
+    );
+  }, [open, counts]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [open, onClose]);
+  return (
+    <div
+      className={cn("fixed inset-0 z-[60] bg-paper/95 backdrop-blur-xl transition-all duration-300", open ? "visible opacity-100" : "invisible opacity-0")}
+      aria-hidden={!open}
+      role="dialog"
+      aria-label="Index"
+    >
+      <div className="mx-auto flex h-full max-w-[1320px] flex-col px-4 py-5 sm:px-6 lg:px-10">
+        <div className="flex items-center justify-between">
+          <span className="eyebrow">Index</span>
+          <button onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full border hover:bg-ink/[0.06]" aria-label="Close index">
+            <X className="h-5 w-5" />
           </button>
         </div>
-      </div>
-
-      {/* Mobile menu */}
-      {mobileMenuOpen &&
-      <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
-          {navLinks.map((link) =>
-        <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className={`block py-2 text-sm font-medium hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
-              {link.label}
+        <nav className="mt-6 grid flex-1 content-center gap-x-10 sm:grid-cols-2">
+          {INDEX.map((i, k) => (
+            <Link
+              key={i.to}
+              to={i.to}
+              onClick={onClose}
+              className={cn("group flex items-baseline justify-between gap-4 border-b py-4 transition-all duration-500 sm:py-6", open ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0")}
+              style={{ transitionDelay: open ? `${60 + k * 40}ms` : "0ms" }}
+            >
+              <span className="display text-5xl transition-transform duration-300 group-hover:translate-x-2 sm:text-7xl">{i.label}</span>
+              <span className="text-right">
+                <span className="num block text-sm text-ink">{counts[i.table] != null ? counts[i.table].toLocaleString() : ""}</span>
+                <span className="hidden text-xs text-ink-3 sm:block">{i.blurb}</span>
+              </span>
             </Link>
-        )}
-          {session &&
-        <Link to="/contribute" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Contribute
+          ))}
+        </nav>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-6 text-sm text-ink-2">
+          {[
+            { to: "/calendar", label: "Calendar" },
+            { to: "/compare", label: "Compare drivers" },
+            { to: "/articles", label: "Articles" },
+            { to: "/privacy", label: "Privacy" },
+          ].map((l) => (
+            <Link key={l.to} to={l.to} onClick={onClose} className="link-u hover:text-ink">
+              {l.label}
             </Link>
-        }
-          {isAdmin &&
-        <>
-          <Link to="/manage" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Manage
-            </Link>
-          <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Admin
-            </Link>
-        </>
-        }
-          {session ?
-        <button onClick={() => {handleLogout();setMobileMenuOpen(false);}} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Log Out
-            </button> :
-
-        <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-primary">
-              Sign Up / Log In
-            </Link>
-        }
+          ))}
         </div>
-      }
-    </header>);
+      </div>
+    </div>
+  );
+}
 
+const Header = () => {
+  const { pathname } = useLocation();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [indexOpen, setIndexOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    const onOpen = () => setPaletteOpen(true);
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("tr:search", onOpen);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("tr:search", onOpen);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+  useEffect(() => setIndexOpen(false), [pathname]);
+
+  return (
+    <>
+      <header className={cn("sticky top-0 z-50 transition-all duration-300", scrolled ? "py-2" : "py-3 sm:py-4")}>
+        <div className="mx-auto max-w-[1320px] px-3 sm:px-6 lg:px-10">
+          <div
+            className={cn(
+              "flex h-14 items-center gap-2 rounded-full border pl-4 pr-2 transition-all duration-300 sm:pl-5",
+              scrolled ? "border-rule bg-sheet/85 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.18)] backdrop-blur-xl" : "border-transparent bg-transparent",
+            )}
+          >
+            <Link to="/" className="mr-2 flex shrink-0 items-center" aria-label="Track Records home">
+              <img alt="Track Records" className="logo-adapt h-[22px] w-auto" src="/brand/logo.png" />
+            </Link>
+            <nav className="hidden items-center md:flex">
+              {PRIMARY.map((l) => {
+                const active = l.match(pathname);
+                return (
+                  <Link key={l.to} to={l.to} className={cn("relative rounded-full px-3.5 py-2 text-[14px] transition-colors", active ? "text-ink" : "text-ink-2 hover:text-ink")}>
+                    {l.label}
+                    {active && <span className="absolute inset-x-3.5 -bottom-0.5 h-[3px] rounded-full bg-hl" />}
+                  </Link>
+                );
+              })}
+            </nav>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => setPaletteOpen(true)}
+                className="group flex h-10 items-center gap-2.5 rounded-full bg-ink/[0.05] px-3.5 text-sm text-ink-2 transition-colors hover:bg-ink/[0.09] hover:text-ink sm:w-64"
+                aria-label="Search the record"
+              >
+                <Search className="h-4 w-4" />
+                <span className="hidden flex-1 text-left sm:inline">Search the record</span>
+                <kbd className="hidden rounded-md border bg-sheet px-1.5 py-0.5 font-mono text-[10px] text-ink-3 sm:inline">⌘K</kbd>
+              </button>
+              <ThemeToggle />
+              <button onClick={() => setIndexOpen(true)} className="flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-medium text-paper transition-transform hover:scale-[1.03]">
+                Index
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <IndexOverlay open={indexOpen} onClose={() => setIndexOpen(false)} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </>
+  );
 };
 
 export default Header;

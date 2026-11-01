@@ -23,50 +23,49 @@ export default function HighlightsLightbox({ open, onClose, sessions }: Highligh
   const videoId = extractYoutubeId(active.highlights_url);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-full max-w-4xl mx-4 rounded-xl border border-border bg-card shadow-2xl flex flex-col"
-        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Race highlights"
+        className="relative flex w-full max-w-4xl flex-col overflow-hidden rounded border bg-card"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+        <div className="flex items-center justify-between border-b px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
-            <Play className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-lg font-bold text-card-foreground">Race Highlights</h2>
+            <Play className="h-4 w-4 text-primary" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wide text-card-foreground">Race highlights</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="cursor-target text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground transition-colors hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Session tabs if multiple */}
         {sessions.length > 1 && (
-          <div className="px-6 flex gap-0 border-b border-border overflow-x-auto">
+          <div className="flex overflow-x-auto border-b bg-background/40">
             {sessions.map((s, idx) => (
               <button
                 key={idx}
                 onClick={() => setActiveIdx(idx)}
-                className={`cursor-target px-4 py-2 text-xs font-semibold whitespace-nowrap border border-b-0 rounded-t-lg transition-colors -mb-px ${
-                  activeIdx === idx
-                    ? "bg-card border-border text-foreground z-10"
-                    : "bg-muted/50 border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+                className={`relative h-10 shrink-0 whitespace-nowrap px-4 font-display text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
+                  activeIdx === idx ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {s.name}
+                <span className={`absolute inset-x-0 top-0 h-0.5 ${activeIdx === idx ? "bg-signal" : "bg-transparent"}`} />
               </button>
             ))}
           </div>
         )}
 
         {/* Video */}
-        <div className="p-4">
+        <div className="bg-black">
           {videoId ? (
             <div className="relative w-full" style={{ paddingBottom: "56.25%" }}>
               <iframe
-                className="absolute inset-0 w-full h-full rounded-lg"
+                className="absolute inset-0 h-full w-full"
                 src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -74,9 +73,9 @@ export default function HighlightsLightbox({ open, onClose, sessions }: Highligh
               />
             </div>
           ) : (
-            <div className="text-center py-16 text-muted-foreground text-sm">
+            <div className="bg-card py-16 text-center text-sm text-muted-foreground">
               <p>Invalid video URL</p>
-              <a href={active.highlights_url} target="_blank" rel="noopener" className="text-primary hover:underline text-xs mt-2 block">
+              <a href={active.highlights_url} target="_blank" rel="noopener" className="mt-2 block text-xs text-primary hover:underline">
                 Open in new tab →
               </a>
             </div>

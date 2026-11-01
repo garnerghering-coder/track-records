@@ -1,0 +1,2572 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Al Kamel / IMSA results importer — runtime-independent core.
+ *
+ * No Deno, Node or browser-only APIs: everything the importer needs from the
+ * outside world comes in through `client` (any supabase-js compatible client,
+ * e.g. createClient(...) in the edge function, or the repo's LocalDB store in
+ * scripts/import-event.mjs) and `deps` (fetch, logging, optional AI key).
+ *
+ *   const summary = await importEvent({ url, event_id, mode }, client, { fetch, log });
+ *
+ * Errors the caller should report as a client error (bad URL, unknown event,
+ * no results for the series) are thrown as ImportError with an HTTP status
+ * and a JSON body; anything else is an unexpected failure.
+ *
+ * The edge function wrapper is ./index.ts; the Node CLI is scripts/import-event.mjs.
+ */
+import {
+  extractSeriesFolderName,
+  isResultsJsonLink,
+  parseAlKamelSessionDate,
+  resolveAlKamelBaseUrl,
+  resultsLinkRank,
+  seriesFolderMatches,
+} from "./alkamel.ts";
+import {
+  assignClassPositions,
+  chooseOfficialSession,
+  computedPointsFor,
+  getPointsRules,
+  mergeOfficialPoints,
+  normaliseName,
+  parseOfficialPointsFile,
+  type PointsEventHint,
+  pickPointsFiles,
+  type PointsRules,
+} from "../_shared/imsa-points.ts";
+import { resolvePointsScheme } from "./series-points.ts";
+
+export type Log = (...args: unknown[]) => void;
+
+export interface ImportRequest {
+  /** Al Kamel event page, e.g. https://imsa.results.alkamelcloud.com/?season=25_2025&evvent=07_Long%20Beach%20Street%20Circuit */
+  url: string;
+  /** v2_events.id to fill. */
+  event_id: string;
+  /** "preview" counts what would be imported without writing anything. */
+  mode?: string;
+}
+
+export interface ImportDeps {
+  /** fetch implementation (defaults to globalThis.fetch). */
+  fetch?: typeof fetch;
+  log?: Log;
+  logError?: Log;
+  /**
+   * Lovable AI gateway key, only used to OCR a Flags Analysis PDF when no
+   * Flags JSON exists. Without it that step is skipped (flags then come from
+   * the time cards' FLAG_AT_FL column when available).
+   */
+  aiKey?: string | null;
+  /** Status of the sessions created (default "draft"; the CLI publishes). */
+  sessionStatus?: "draft" | "published";
+}
+
+/** An error to report to the caller as-is (HTTP status + JSON body). */
+export class ImportError extends Error {
+  status: number;
+  body: Record<string, unknown>;
+  constructor(status: number, body: Record<string, unknown>) {
+    super(String(body.error ?? "Import failed"));
+    this.status = status;
+    this.body = body;
+  }
+}
+
+interface Ctx {
+  fetch: typeof fetch;
+  log: Log;
+  logError: Log;
+  aiKey: string | null;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+async function fetchWithRetry(ctx: Ctx, url: string, retries = 3, delayMs = 2000): Promise<Response> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const resp = await ctx.fetch(url);
+      return resp;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, delayMs * attempt));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error("Unreachable");
+}
+
+/** Map 3-letter IOC/ISO country codes to 2-letter ISO codes */
+const country3to2: Record<string, string> = {
+  AFG:"AF",ALB:"AL",ALG:"DZ",AND:"AD",ANG:"AO",ANT:"AG",ARG:"AR",ARM:"AM",ARU:"AW",
+  ASA:"AS",AUS:"AU",AUT:"AT",AZE:"AZ",BAH:"BS",BAN:"BD",BAR:"BB",BDI:"BI",BEL:"BE",
+  BEN:"BJ",BER:"BM",BHU:"BT",BIH:"BA",BIZ:"BZ",BLR:"BY",BOL:"BO",BOT:"BW",BRA:"BR",
+  BRN:"BH",BRU:"BN",BUL:"BG",BUR:"BF",CAF:"CF",CAM:"KH",CAN:"CA",CAY:"KY",CGO:"CG",
+  CHA:"TD",CHI:"CL",CHN:"CN",CIV:"CI",CMR:"CM",COD:"CD",COK:"CK",COL:"CO",COM:"KM",
+  CPV:"CV",CRC:"CR",CRO:"HR",CUB:"CU",CYP:"CY",CZE:"CZ",DEN:"DK",DJI:"DJ",DMA:"DM",
+  DOM:"DO",ECU:"EC",EGY:"EG",ERI:"ER",ESA:"SV",ESP:"ES",EST:"EE",ETH:"ET",FIJ:"FJ",
+  FIN:"FI",FRA:"FR",FSM:"FM",GAB:"GA",GAM:"GM",GBR:"GB",GEO:"GE",GER:"DE",GHA:"GH",
+  GRE:"GR",GRN:"GD",GUA:"GT",GUI:"GN",GUM:"GU",GUY:"GY",HAI:"HT",HKG:"HK",HON:"HN",
+  HUN:"HU",INA:"ID",IND:"IN",IRI:"IR",IRL:"IE",IRQ:"IQ",ISL:"IS",ISR:"IL",ISV:"VI",
+  ITA:"IT",IVB:"VG",JAM:"JA",JOR:"JO",JPN:"JP",KAZ:"KZ",KEN:"KE",KGZ:"KG",KIR:"KI",
+  KOR:"KR",KOS:"XK",KSA:"SA",KUW:"KW",LAO:"LA",LAT:"LV",LBA:"LY",LBN:"LB",LBR:"LR",
+  LCA:"LC",LES:"LS",LIE:"LI",LTU:"LT",LUX:"LU",MAD:"MG",MAR:"MA",MAS:"MY",MAW:"MW",
+  MDA:"MD",MDV:"MV",MEX:"MX",MGL:"MN",MKD:"MK",MLI:"ML",MLT:"MT",MNE:"ME",MON:"MC",
+  MOZ:"MZ",MRI:"MU",MTN:"MR",MYA:"MM",NAM:"NA",NCA:"NI",NED:"NL",NEP:"NP",NGR:"NG",
+  NIG:"NE",NOR:"NO",NRU:"NR",NZL:"NZ",OMA:"OM",PAK:"PK",PAN:"PA",PAR:"PY",PER:"PE",
+  PHI:"PH",PLE:"PS",PLW:"PW",PNG:"PG",POL:"PL",POR:"PT",PRK:"KP",PUR:"PR",QAT:"QA",
+  ROU:"RO",RSA:"ZA",RUS:"RU",RWA:"RW",SAM:"WS",SEN:"SN",SEY:"SC",SGP:"SG",SKN:"KN",
+  SLE:"SL",SLO:"SI",SMR:"SM",SOL:"SB",SOM:"SO",SRB:"RS",SRI:"LK",STP:"ST",SUD:"SD",
+  SUI:"CH",SUR:"SR",SVK:"SK",SWE:"SE",SWZ:"SZ",SYR:"SY",TAN:"TZ",TGA:"TO",THA:"TH",
+  TJK:"TJ",TKM:"TM",TLS:"TL",TOG:"TG",TPE:"TW",TTO:"TT",TUN:"TN",TUR:"TR",TUV:"TV",
+  UAE:"AE",UGA:"UG",UKR:"UA",URU:"UY",USA:"US",UZB:"UZ",VAN:"VU",VEN:"VE",VIE:"VN",
+  VIN:"VC",YEM:"YE",ZAM:"ZM",ZIM:"ZW",
+};
+
+/** Removes the "(R)" rookie / "(V)" visiting-driver markers some series (MX-5 Cup) append to driver names. */
+function stripRookieMark(name: string): string {
+  return name.replace(/\s*\([RV]\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Team name key that ignores case, accents, spacing, punctuation and "w/" vs "with":
+ *  "TeamTGM" = "Team TGM", "Bryan Herta Autosport w Curb Agajanian" = "… with Curb Agajanian". */
+function teamKey(name: string): string {
+  return normaliseName(name).replace(/\bw\b/g, "with").replace(/\s+/g, "");
+}
+
+/** An entry's drivers without entry-list placeholders ("TBD TBD"), which are not people. */
+function realDrivers(entry: any): any[] {
+  return (entry?.drivers || []).filter((d: any) => !/^(tb[ad]\s*)+$/i.test(alKamelDriverName(d)));
+}
+
+/** "Firstname Surname" of an Al Kamel driver entry, without a rookie marker. */
+function alKamelDriverName(d: any): string {
+  return stripRookieMark(`${d?.firstname || d?.first_name || ""} ${d?.surname || d?.last_name || ""}`);
+}
+
+/**
+ * Match an Al Kamel driver name to an existing driver: alias, then exact
+ * (case-insensitive), then normalised (accents, punctuation and a rookie
+ * marker ignored: "Mathias BECHE" = "Mathias Beche", "Matt Novak(R)" =
+ * "Matt Novak"), then same first and last name.
+ */
+function matchDriver(
+  fullName: string,
+  existingDrivers: Array<{ id: string; full_name: string }>,
+  aliasMap: Map<string, string>
+): string | null {
+  const normalized = fullName.toLowerCase().trim();
+  const aliasId = aliasMap.get(normalized);
+  if (aliasId) return aliasId;
+  for (const d of existingDrivers) {
+    if (d.full_name.toLowerCase() === normalized) return d.id;
+  }
+  const key = normaliseName(fullName);
+  if (key) {
+    for (const d of existingDrivers) {
+      if (normaliseName(d.full_name) === key) return d.id;
+    }
+  }
+  const parts = normalized.split(/\s+/);
+  if (parts.length >= 2) {
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    for (const d of existingDrivers) {
+      const dp = d.full_name.toLowerCase().split(/\s+/);
+      if (dp.length >= 2 && dp[0] === first && dp[dp.length - 1] === last) return d.id;
+    }
+  }
+  return null;
+}
+
+function matchTeam(
+  teamName: string,
+  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
+  seasonAliases: Array<{ team_id: string; display_name: string }>,
+  aliasMap: Map<string, string>,
+  carNumbers: Set<string> = new Set(),
+  carHistory: Map<string, Set<string>> = new Map(),
+): string | null {
+  const normalized = teamName.toLowerCase().trim();
+  const aliasId = aliasMap.get(normalized);
+  if (aliasId) return aliasId;
+  for (const t of existingTeams) {
+    if (t.full_name.toLowerCase() === normalized) return t.id;
+    if (t.short_name && t.short_name.toLowerCase() === normalized) return t.id;
+  }
+  const key = teamKey(teamName);
+  if (key) {
+    for (const t of existingTeams) {
+      if (teamKey(t.full_name) === key || (t.short_name && teamKey(t.short_name) === key)) return t.id;
+    }
+  }
+  for (const a of seasonAliases) {
+    if (a.display_name.toLowerCase() === normalized) return a.team_id;
+    if (a.display_name.toLowerCase().includes(normalized) || normalized.includes(a.display_name.toLowerCase())) return a.team_id;
+  }
+  // Partial matches: one name contains the other ("AF Corse" / "AF Corse USA"), also on the
+  // spacing-free key for long names ("VasserSullivan" / "Vasser Sullivan Racing"). Several teams
+  // can qualify ("Riley" is in "Myers Riley Motorsports" and "Kellymoss with Riley"), so rank them:
+  // a team that already ran one of this entry's car numbers first, then a name that starts with
+  // the other, then the shortest name.
+  const candidates: Array<{ id: string; ranCar: boolean; prefix: boolean; len: number }> = [];
+  for (const t of existingTeams) {
+    const full = t.full_name.toLowerCase().trim();
+    const k = teamKey(t.full_name);
+    const raw = full.includes(normalized) || normalized.includes(full);
+    const keyed = key.length >= 8 && k.length >= 8 && (k.includes(key) || key.includes(k));
+    if (!raw && !keyed) continue;
+    const ran = carHistory.get(t.id);
+    candidates.push({
+      id: t.id,
+      ranCar: !!ran && [...carNumbers].some((n) => ran.has(n)),
+      prefix: full.startsWith(normalized) || normalized.startsWith(full) || k.startsWith(key) || key.startsWith(k),
+      len: full.length,
+    });
+  }
+  candidates.sort((a, b) => Number(b.ranCar) - Number(a.ranCar) || Number(b.prefix) - Number(a.prefix) || a.len - b.len);
+  return candidates[0]?.id ?? null;
+}
+
+/**
+ * Match an Al Kamel vehicle ("Aston Martin Vantage GT3 Evo", manufacturer
+ * "Aston Martin") to an existing car (model_name "Vantage GT3 Evo").
+ * Exact matches on the model or "manufacturer model" come first. Partial
+ * matches (one name contains the other) only consider cars of the same
+ * manufacturer and prefer the longest model name, so a short model name such
+ * as "GT3" cannot capture every GT3 car regardless of make.
+ */
+function matchCar(
+  vehicleName: string,
+  existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }>,
+  manufacturer: string | null = null
+): string | null {
+  // Hyphens count as spaces: Al Kamel's 2024 feeds say "Mercedes AMG GT3", later ones "Mercedes-AMG GT3".
+  const norm = (x: string | null | undefined) => (x || "").toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = norm(vehicleName);
+  const make = norm(manufacturer);
+  const fullName = (c: { model_name: string; manufacturer: string | null }) => norm(`${c.manufacturer || ""} ${c.model_name}`);
+  for (const c of existingCars) {
+    if (norm(c.model_name) === normalized || fullName(c) === normalized) return c.id;
+  }
+  // Same name without spaces and punctuation: "Cadillac VSeries.R" = "Cadillac V-Series.R"
+  const compact = (x: string) => x.replace(/[^a-z0-9]/g, "");
+  for (const c of existingCars) {
+    if (compact(norm(c.model_name)) === compact(normalized) || compact(fullName(c)) === compact(normalized)) return c.id;
+  }
+  const model = make && normalized.startsWith(make + " ") ? normalized.slice(make.length + 1) : normalized;
+  const candidates = existingCars.filter((c) => !make || !norm(c.manufacturer) || norm(c.manufacturer) === make);
+  let best: { id: string; len: number } | null = null;
+  for (const c of candidates) {
+    const cn = norm(c.model_name);
+    if (!cn) continue;
+    if (cn.includes(model) || model.includes(cn) || fullName(c).includes(normalized) || normalized.includes(fullName(c))) {
+      if (!best || cn.length > best.len) best = { id: c.id, len: cn.length };
+    }
+  }
+  return best?.id ?? null;
+}
+
+function detectSessionType(sessionName: string, sessionType?: string): { type: string; name: string } {
+  const lower = (sessionType || sessionName).toLowerCase();
+  if (/qualifying/i.test(lower)) return { type: "qualifying", name: sessionName };
+  if (/free\s*practice|practice/i.test(lower)) return { type: "practice", name: sessionName };
+  if (/warm\s*up/i.test(lower)) return { type: "warmup", name: sessionName };
+  if (/race|hour/i.test(lower)) return { type: "race", name: sessionName };
+  if (/sprint/i.test(lower)) return { type: "sprint_race", name: sessionName };
+  return { type: "other", name: sessionName };
+}
+
+function parseStatus(status: string, notFinished: boolean, cause: string): string {
+  if (!notFinished && (status === "Classified" || status === "Not Classified" || !status)) return "finished";
+  if (notFinished) {
+    const c = (cause || "").toUpperCase();
+    if (c.includes("DNS")) return "dns";
+    if (c.includes("DSQ") || c.includes("DISQUALIF")) return "dsq";
+    return "dnf";
+  }
+  const s = status.toUpperCase().trim();
+  if (s === "DNF" || s === "MECHANICAL" || s === "ACCIDENT" || s === "RETIREMENT") return "dnf";
+  // Al Kamel marks a car that never took the start as "Not Started" (it scores 0 points)
+  if (s === "DNS" || s === "NOT STARTED" || s === "DID NOT START") return "dns";
+  if (s === "DSQ" || s === "DISQUALIFIED") return "dsq";
+  return "finished";
+}
+
+/** v2_sessions.date is a timestamptz: store a calendar date the way the database returns it. */
+function sessionDateValue(date: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T00:00:00+00:00` : date;
+}
+
+/** Local scheduled start "HH:MM" from an Al Kamel session folder ("…/202503151010_Race/…"), or null. */
+function folderStartTime(url: string | null | undefined): string | null {
+  if (!url) return null;
+  let path = url;
+  try {
+    path = decodeURIComponent(url);
+  } catch {
+    /* keep raw */
+  }
+  const m = path.match(/\/\d{8}(\d{2})(\d{2})_[^/]+\//);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return `${m[1]}:${m[2]}`;
+}
+
+function extractHourNumber(url: string): number | null {
+  const decoded = decodeURIComponent(url);
+  const m = decoded.match(/HOUR\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// ── Time Card parsing ────────────────────────────────────────────────
+
+function parseElapsedToSeconds(elapsed: string): number {
+  // Formats: "2:55.481" (m:ss.ms), "1:02:30.000" (h:mm:ss.ms)
+  const parts = elapsed.split(":");
+  if (parts.length === 3) {
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const s = parseFloat(parts[2]);
+    return h * 3600 + m * 60 + s;
+  } else if (parts.length === 2) {
+    const m = parseInt(parts[0], 10);
+    const s = parseFloat(parts[1]);
+    return m * 60 + s;
+  }
+  return parseFloat(elapsed) || 0;
+}
+
+/**
+ * Parse Time Card CSV to build a map of car_number -> hour_number -> driver_name.
+ * For each car and hour, we pick the driver who drove the last lap in that hour.
+ */
+function parseTimeCardCSV(csvText: string, log: Log = () => {}): Map<string, Map<number, string>> {
+  const lines = csvText.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return new Map();
+
+  // Header: NUMBER; DRIVER_NUMBER; LAP_NUMBER; ... ELAPSED; ... DRIVER_NAME; ...
+  const header = lines[0].split(";").map(h => h.trim().replace(/\\/g, ""));
+  const numIdx = header.indexOf("NUMBER");
+  const driverNameIdx = header.indexOf("DRIVER_NAME");
+  const elapsedIdx = header.indexOf("ELAPSED");
+
+  if (numIdx === -1 || driverNameIdx === -1 || elapsedIdx === -1) {
+    log("Time Card CSV: could not find required columns", header);
+    return new Map();
+  }
+
+  // Collect: for each car + hour, track the latest (highest elapsed) lap's driver
+  const carHourDriver = new Map<string, Map<number, { elapsed: number; driver: string }>>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";").map(c => c.trim());
+    const carNumber = cols[numIdx];
+    const driverName = cols[driverNameIdx];
+    const elapsedStr = cols[elapsedIdx];
+    if (!carNumber || !driverName || !elapsedStr) continue;
+
+    const elapsedSec = parseElapsedToSeconds(elapsedStr);
+    // Use ceil so a lap completed at exactly the hour boundary (e.g. 3600s) stays in that hour
+    const hourNum = elapsedSec <= 0 ? 1 : Math.ceil(elapsedSec / 3600);
+
+    if (!carHourDriver.has(carNumber)) carHourDriver.set(carNumber, new Map());
+    const hourMap = carHourDriver.get(carNumber)!;
+    const existing = hourMap.get(hourNum);
+    if (!existing || elapsedSec > existing.elapsed) {
+      hourMap.set(hourNum, { elapsed: elapsedSec, driver: driverName });
+    }
+  }
+
+  // Simplify to car_number -> hour_number -> driver_name
+  const result = new Map<string, Map<number, string>>();
+  for (const [car, hourMap] of carHourDriver) {
+    const simplified = new Map<number, string>();
+    for (const [hour, info] of hourMap) {
+      simplified.set(hour, info.driver);
+    }
+    result.set(car, simplified);
+  }
+
+  // Cap overflow hours: laps beyond the race duration (e.g. after 24:00:00 in a 24h race)
+  // get assigned to hour 25+. Merge those into the actual max hour so the finishing driver is correct.
+  for (const [car, hourMap] of result) {
+    const maxHour = Math.max(...Array.from(hourMap.keys()));
+    // Check if there are standard hour boundaries (1-24 typical) with overflow
+    // If we have e.g. hours 1..24 and also 25, merge 25 into 24
+    const hours = Array.from(hourMap.keys()).sort((a, b) => a - b);
+    if (hours.length > 1) {
+      // Find contiguous block from 1..N, anything beyond N gets merged into N
+      let expectedMax = 1;
+      for (const h of hours) {
+        if (h === expectedMax) expectedMax++;
+      }
+      expectedMax--; // the last contiguous hour
+      // Merge any hours > expectedMax into expectedMax (use the one with highest elapsed = latest entry)
+      for (const h of hours) {
+        if (h > expectedMax && expectedMax >= 1) {
+          // The overflow hour's driver replaces the max hour's driver (they drove LATER)
+          hourMap.set(expectedMax, hourMap.get(h)!);
+          hourMap.delete(h);
+        }
+      }
+    }
+  }
+
+  log(`Time Card parsed: ${result.size} cars, sample:`,
+    Array.from(result.entries()).slice(0, 2).map(([car, hours]) =>
+      `Car ${car}: ${Array.from(hours.entries()).slice(0, 3).map(([h, d]) => `H${h}=${d}`).join(", ")}`
+    )
+  );
+  return result;
+}
+
+// ── Strategy derivation (Time Card + Flags) ───────────────────────────
+
+type TimeCardLapRow = {
+  carNumber: string;
+  driverName: string;
+  elapsedSec: number;
+  lapNumber: number | null;
+  /** PIT_TIME column: set on the lap that contains a pit stop (time spent in the pit lane). */
+  pitTime?: string | null;
+};
+
+type StrategyFlagState = "GREEN" | "YELLOW" | "FCY" | "RED";
+type StrategyFlagEvent = { elapsedSec: number; state: StrategyFlagState };
+
+function parseTimeCardLaps(csvText: string, log: Log = () => {}): Map<string, TimeCardLapRow[]> {
+  const lines = csvText.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return new Map();
+
+  const header = lines[0].split(";").map(h => h.trim().replace(/\\/g, "").toUpperCase());
+  const numIdx = header.indexOf("NUMBER");
+  const driverNameIdx = header.indexOf("DRIVER_NAME");
+  const elapsedIdx = header.indexOf("ELAPSED");
+  const lapIdx = header.indexOf("LAP_NUMBER");
+  const pitTimeIdx = header.indexOf("PIT_TIME");
+
+  if (numIdx === -1 || driverNameIdx === -1 || elapsedIdx === -1) {
+    log("Time Card laps: missing required columns", header);
+    return new Map();
+  }
+
+  const lapsByCar = new Map<string, TimeCardLapRow[]>();
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";").map(c => c.trim());
+    const carNumber = cols[numIdx];
+    const driverName = cols[driverNameIdx];
+    const elapsedRaw = cols[elapsedIdx];
+    if (!carNumber || !driverName || !elapsedRaw) continue;
+
+    const elapsedSec = parseElapsedToSeconds(elapsedRaw);
+    if (!isFinite(elapsedSec) || elapsedSec <= 0) continue;
+
+    const parsedLap = lapIdx >= 0 ? parseInt(cols[lapIdx] || "", 10) : NaN;
+    const lapNumber = Number.isFinite(parsedLap) ? parsedLap : null;
+
+    const pitTime = pitTimeIdx >= 0 ? (cols[pitTimeIdx] || "").trim() || null : null;
+
+    if (!lapsByCar.has(carNumber)) lapsByCar.set(carNumber, []);
+    lapsByCar.get(carNumber)!.push({ carNumber, driverName, elapsedSec, lapNumber, pitTime });
+  }
+
+  for (const [, rows] of lapsByCar) {
+    rows.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  }
+
+  log(`Time Card lap telemetry parsed: ${lapsByCar.size} cars`);
+  return lapsByCar;
+}
+
+/**
+ * Flag periods from the time cards' FLAG_AT_FL column (the flag shown when
+ * each car crossed the line). Used when the event publishes no Flags Analysis
+ * JSON: transitions are placed at the first crossing under the new flag, so
+ * they lag the real flag change by at most one lap. The chequered flag (FF)
+ * keeps the previous state.
+ */
+function parseTimeCardFlagEvents(csvText: string): StrategyFlagEvent[] {
+  const lines = csvText.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  const header = lines[0].split(";").map(h => h.trim().replace(/\\/g, "").toUpperCase());
+  const elapsedIdx = header.indexOf("ELAPSED");
+  const flagIdx = header.indexOf("FLAG_AT_FL");
+  if (elapsedIdx === -1 || flagIdx === -1) return [];
+
+  const crossings: StrategyFlagEvent[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";").map(c => c.trim());
+    const f = (cols[flagIdx] || "").toUpperCase();
+    const state: StrategyFlagState | null =
+      f === "GF" ? "GREEN" : f === "FCY" || f === "SC" ? "FCY" : f === "RF" || f === "RED" ? "RED" : f === "YF" ? "YELLOW" : null;
+    if (!state || !cols[elapsedIdx]) continue;
+    const elapsedSec = parseElapsedToSeconds(cols[elapsedIdx]);
+    if (!isFinite(elapsedSec) || elapsedSec <= 0) continue;
+    crossings.push({ elapsedSec, state });
+  }
+  crossings.sort((a, b) => a.elapsedSec - b.elapsedSec);
+
+  const events: StrategyFlagEvent[] = [];
+  for (const c of crossings) {
+    if (events.length === 0) events.push({ elapsedSec: c.state === "GREEN" ? 0 : c.elapsedSec, state: c.state });
+    else if (events[events.length - 1].state !== c.state) events.push(c);
+  }
+  return events;
+}
+
+function detectStrategyFlagState(recType: string, flag: string, message: string): StrategyFlagState | null {
+  const rt = (recType || "").toUpperCase();
+  const f = (flag || "").toUpperCase();
+  const m = (message || "").toUpperCase();
+
+  if (rt === "RF" || f.includes("RED") || m.includes("RED FLAG")) return "RED";
+  if (rt === "FCY" || rt === "SC" || f.includes("FULL COURSE CAUTION") || f.includes("SAFETY CAR") || m.includes("FULL COURSE CAUTION") || m.includes("SAFETY CAR")) return "FCY";
+  if (rt === "YF" || f.includes("YELLOW") || f.includes("CAUTION") || m.includes("YELLOW")) return "YELLOW";
+  if (rt === "GF" || f.includes("GREEN") || m.includes("GREEN FLAG")) return "GREEN";
+
+  return null;
+}
+
+function parseStrategyFlagEvents(flagsData: any): StrategyFlagEvent[] {
+  const events: StrategyFlagEvent[] = [];
+  const flags = flagsData?.flags || [];
+
+  for (const item of flags) {
+    const state = detectStrategyFlagState(item.rec_type || "", item.flag || "", item.message || "");
+    if (!state) continue;
+
+    const elapsedRaw = String(item.elapsed || "").trim();
+    if (!elapsedRaw || elapsedRaw === "-") continue;
+    const elapsedSec = parseElapsedToSeconds(elapsedRaw);
+    if (!isFinite(elapsedSec) || elapsedSec < 0) continue;
+
+    events.push({ elapsedSec, state });
+  }
+
+  events.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  return events;
+}
+
+// ── PDF Flags Analysis fallback ──────────────────────────────────────
+
+/**
+ * Extract text from a PDF using Gemini Flash Lite as pure OCR (no interpretation).
+ */
+async function extractPdfText(ctx: Ctx, pdfUrl: string): Promise<string | null> {
+  // Optional AI step: skipped cleanly (without downloading the PDF) when no key is configured.
+  const LOVABLE_KEY = ctx.aiKey;
+  if (!LOVABLE_KEY) { ctx.log("No LOVABLE_API_KEY: skipping Flags Analysis PDF OCR"); return null; }
+  try {
+    const resp = await fetchWithRetry(ctx, pdfUrl);
+    if (!resp.ok) { ctx.log(`PDF fetch failed: ${resp.status} for ${pdfUrl}`); return null; }
+    const buf = await resp.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    // Convert to base64 in chunks to avoid stack overflow on large PDFs
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+    }
+    const base64 = btoa(binary);
+
+
+    const aiResp = await ctx.fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: "Return the exact text content of this document. Preserve the table structure with | as column separator. No interpretation, just the raw text." },
+            { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+          ],
+        }],
+      }),
+    });
+    if (!aiResp.ok) { ctx.log(`PDF OCR failed: ${aiResp.status}`); return null; }
+    const data = await aiResp.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch (err) {
+    ctx.logError("extractPdfText error:", err);
+    return null;
+  }
+}
+
+/**
+ * Deterministic parser for Flags Analysis PDF text.
+ * Matches flag rows and extracts Session Elapsed times.
+ * No AI interpretation — pure regex.
+ */
+function parseFlagsAnalysisPdfText(text: string, log: Log = () => {}): StrategyFlagEvent[] {
+  const events: StrategyFlagEvent[] = [];
+  const lines = text.split("\n");
+  for (const line of lines) {
+    // Match flag name followed by clock time and session elapsed
+    // Table format: FLAG_NAME | clock_time | session_elapsed | flag_time | acum_flag_time | lap
+    const m = line.match(
+      /(GREEN FLAG|FULL COURSE YELLOW|FULL COURSE CAUTION|RED FLAG|CHEQUERED FLAG)\s*\|?\s*([\d:.]+)\s*\|?\s*([\d:.]+|-)\s*\|?/i
+    );
+    if (!m) continue;
+    const flagName = m[1].toUpperCase();
+    const sessionElapsed = m[3].trim();
+    if (flagName === "CHEQUERED FLAG") continue;
+    if (sessionElapsed === "-") {
+      // First GREEN FLAG at race start
+      events.push({ elapsedSec: 0, state: "GREEN" });
+      continue;
+    }
+    const state: StrategyFlagState =
+      flagName.includes("RED") ? "RED" :
+      flagName.includes("YELLOW") || flagName.includes("CAUTION") ? "FCY" : "GREEN";
+    const elapsedSec = parseElapsedToSeconds(sessionElapsed);
+    if (isFinite(elapsedSec) && elapsedSec >= 0) {
+      events.push({ elapsedSec, state });
+    }
+  }
+  events.sort((a, b) => a.elapsedSec - b.elapsedSec);
+  log(`parseFlagsAnalysisPdfText: parsed ${events.length} flag events from PDF text`);
+  return events;
+}
+
+function strategyFlagAtElapsed(events: StrategyFlagEvent[], elapsedSec: number): StrategyFlagState {
+  let state: StrategyFlagState = "GREEN";
+  for (const e of events) {
+    if (e.elapsedSec <= elapsedSec) state = e.state;
+    else break;
+  }
+  return state;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function round3(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
+
+function formatDurationFromSeconds(seconds: number | null): string | null {
+  if (seconds == null || !isFinite(seconds) || seconds <= 0) return null;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds - mins * 60;
+  return `${mins}:${secs.toFixed(3).padStart(6, "0")}`;
+}
+
+function deriveFlagSegments(flagEvents: StrategyFlagEvent[], maxElapsed: number): Array<{ flag_state: string; start_elapsed: number; end_elapsed: number }> {
+  if (flagEvents.length === 0) return [{ flag_state: "GREEN", start_elapsed: 0, end_elapsed: round3(maxElapsed) }];
+  const segments: Array<{ flag_state: string; start_elapsed: number; end_elapsed: number }> = [];
+  for (let i = 0; i < flagEvents.length; i++) {
+    const endElapsed = i + 1 < flagEvents.length ? flagEvents[i + 1].elapsedSec : maxElapsed;
+    if (endElapsed > flagEvents[i].elapsedSec) {
+      segments.push({ flag_state: flagEvents[i].state, start_elapsed: round3(flagEvents[i].elapsedSec), end_elapsed: round3(endElapsed) });
+    }
+  }
+  // Ensure coverage from 0
+  if (segments.length === 0 || segments[0].start_elapsed > 0) {
+    segments.unshift({ flag_state: "GREEN", start_elapsed: 0, end_elapsed: segments.length > 0 ? segments[0].start_elapsed : round3(maxElapsed) });
+  }
+  return segments;
+}
+
+function deriveStrategyRowsFromTimeCard(
+  lapsByCar: Map<string, TimeCardLapRow[]>,
+  driverMap: Map<string, string>,
+  flagEvents: StrategyFlagEvent[]
+): { stints: any[]; pitStops: any[] } {
+  const stints: any[] = [];
+  const pitStops: any[] = [];
+
+  const normalizeName = (name: string) => stripRookieMark(name).toLowerCase();
+
+  for (const [carNumber, laps] of lapsByCar) {
+    if (laps.length < 2) continue;
+
+    const deltas: number[] = [];
+    for (let i = 1; i < laps.length; i++) {
+      const d = laps[i].elapsedSec - laps[i - 1].elapsedSec;
+      if (d > 15 && d < 500) deltas.push(d);
+    }
+
+    const medianLap = median(deltas.length > 0 ? deltas : [90]);
+    const basePitThreshold = Math.max(35, Math.min(160, medianLap * 1.35));
+    // Time cards with a PIT_TIME column mark every stop on the lap the car leaves the pits:
+    // use those markers alone (the lap-gap rule would also flag the slow in-lap, counting
+    // the stop twice, and misses stops under caution).
+    const explicitPits = laps.some((l) => !!l.pitTime);
+
+    let currentStartElapsed = laps[0].elapsedSec;
+    let currentStartLap = laps[0].lapNumber;
+    let currentDriverName = laps[0].driverName;
+
+    const closeStint = (endRow: TimeCardLapRow) => {
+      if (endRow.elapsedSec <= currentStartElapsed) return;
+      stints.push({
+        car_number: carNumber,
+        driver_id: driverMap.get(normalizeName(currentDriverName)) || null,
+        start_elapsed: round3(currentStartElapsed),
+        end_elapsed: round3(endRow.elapsedSec),
+        start_lap: currentStartLap,
+        end_lap: endRow.lapNumber,
+      });
+    };
+
+    for (let i = 1; i < laps.length; i++) {
+      const prev = laps[i - 1];
+      const curr = laps[i];
+      const delta = curr.elapsedSec - prev.elapsedSec;
+      if (delta <= 0) continue;
+
+      const currentFlag = strategyFlagAtElapsed(flagEvents, prev.elapsedSec);
+      const isCaution = currentFlag !== "GREEN";
+      // Under caution/SC, lap times can be 3-5x normal — use a very high threshold
+      // to avoid splitting every slow caution lap into its own stint
+      const cautionThreshold = Math.max(basePitThreshold * 3, medianLap * 4);
+      const threshold = isCaution ? cautionThreshold : basePitThreshold;
+
+      const driverChanged = normalizeName(curr.driverName) !== normalizeName(currentDriverName);
+      const hasPitGap = explicitPits
+        ? !!curr.pitTime
+        : delta >= threshold && delta >= (isCaution ? medianLap * 3 : medianLap + 20);
+
+      if (hasPitGap) {
+        closeStint(prev);
+
+        const pitDuration = curr.elapsedSec - prev.elapsedSec;
+        pitStops.push({
+          car_number: carNumber,
+          driver_id: driverMap.get(normalizeName(curr.driverName)) || driverMap.get(normalizeName(currentDriverName)) || null,
+          pit_in_elapsed: round3(prev.elapsedSec),
+          pit_out_elapsed: round3(curr.elapsedSec),
+          lap_number: prev.lapNumber ?? curr.lapNumber ?? null,
+          stop_duration: formatDurationFromSeconds(pitDuration),
+          // PIT_TIME is the time spent in the pit lane; otherwise the slow lap's duration
+          total_pit_time: formatDurationFromSeconds(curr.pitTime ? parseElapsedToSeconds(curr.pitTime) : pitDuration),
+          flag_status: currentFlag === "GREEN" ? "Green" : currentFlag,
+        });
+
+        currentStartElapsed = curr.elapsedSec;
+        currentStartLap = curr.lapNumber;
+        currentDriverName = curr.driverName;
+      } else if (driverChanged) {
+        closeStint(prev);
+        currentStartElapsed = curr.elapsedSec;
+        currentStartLap = curr.lapNumber;
+        currentDriverName = curr.driverName;
+      }
+    }
+
+    closeStint(laps[laps.length - 1]);
+  }
+
+  return { stints, pitStops };
+}
+
+function bucketStrategyRowsForHour(
+  stints: any[],
+  pitStops: any[],
+  hourNumber: number
+): { stints: any[]; pitStops: any[] } {
+  const start = (hourNumber - 1) * 3600;
+  const end = start + 3600;
+
+  const scopedStints = stints
+    .map((s: any) => {
+      const stintStart = Number(s.start_elapsed ?? 0);
+      const stintEnd = Number(s.end_elapsed ?? 0);
+      if (!isFinite(stintStart) || !isFinite(stintEnd)) return null;
+      if (stintEnd <= start || stintStart >= end) return null;
+
+      const clippedStart = Math.max(stintStart, start);
+      const clippedEnd = Math.min(stintEnd, end);
+      if (clippedEnd <= clippedStart) return null;
+
+      return {
+        ...s,
+        start_elapsed: round3(clippedStart),
+        end_elapsed: round3(clippedEnd),
+      };
+    })
+    .filter(Boolean) as any[];
+
+  const scopedPits = pitStops.filter((p: any) => {
+    const pitIn = Number(p.pit_in_elapsed ?? NaN);
+    return isFinite(pitIn) && pitIn >= start && pitIn < end;
+  });
+
+  return { stints: scopedStints, pitStops: scopedPits };
+}
+
+async function insertRowsInChunks(adminClient: any, table: string, rows: any[], chunkSize = 500) {
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const { error } = await adminClient.from(table as any).insert(chunk as any);
+    if (error) throw new Error(`Failed to insert into ${table}: ${error.message}`);
+  }
+}
+
+async function replaceStrategyRowsForSession(
+  adminClient: any,
+  sessionId: string,
+  stints: any[],
+  pitStops: any[],
+  log: Log = () => {}
+) {
+  await Promise.all([
+    adminClient.from("v2_stints").delete().eq("session_id", sessionId),
+    adminClient.from("v2_pit_stops").delete().eq("session_id", sessionId),
+  ]);
+
+  const stintRows = stints.map((s: any) => ({ ...s, session_id: sessionId }));
+  const pitRows = pitStops.map((p: any) => ({ ...p, session_id: sessionId }));
+
+  await Promise.all([
+    stintRows.length > 0 ? insertRowsInChunks(adminClient, "v2_stints", stintRows) : Promise.resolve(),
+    pitRows.length > 0 ? insertRowsInChunks(adminClient, "v2_pit_stops", pitRows) : Promise.resolve(),
+  ]);
+
+  log(`Strategy rows saved for ${sessionId}: ${stintRows.length} stints, ${pitRows.length} pits`);
+}
+
+// ── Bulk entity resolution ───────────────────────────────────────────
+// Pre-scan all JSON data to collect unique drivers/teams/cars, then resolve/create them all at once
+
+interface DriverInfo { name: string; country3: string | null; }
+interface TeamInfo { name: string; carNumbers: Set<string>; }
+interface CarInfo { vehicle: string; manufacturer: string | null; }
+
+function collectUniqueEntities(allSessionData: Array<{ entries: any[] }>) {
+  const drivers = new Map<string, DriverInfo>(); // keyed by lowercase name
+  const teams = new Map<string, TeamInfo>();
+  const cars = new Map<string, CarInfo>();
+
+  for (const { entries } of allSessionData) {
+    for (const entry of entries) {
+      const entryDrivers = realDrivers(entry);
+      for (const d of entryDrivers) {
+        const name = alKamelDriverName(d);
+        if (name) {
+          const key = name.toLowerCase();
+          if (!drivers.has(key)) {
+            drivers.set(key, { name, country3: d.country || d.nationality || null });
+          }
+        }
+      }
+      const teamName = entry.team;
+      if (teamName) {
+        const key = teamName.toLowerCase().trim();
+        if (!teams.has(key)) teams.set(key, { name: teamName.trim(), carNumbers: new Set() });
+        if (entry.number != null && entry.number !== "") teams.get(key)!.carNumbers.add(String(entry.number));
+      }
+      const vehicle = entry.vehicle || entry.car;
+      if (vehicle) {
+        const key = vehicle.toLowerCase().trim();
+        if (!cars.has(key)) cars.set(key, { vehicle: vehicle.trim(), manufacturer: (entry.manufacturer || "").trim() || null });
+      }
+    }
+  }
+  return { drivers, teams, cars };
+}
+
+async function bulkResolveDrivers(
+  adminClient: any,
+  uniqueDrivers: Map<string, DriverInfo>,
+  existingDrivers: Array<{ id: string; full_name: string }>,
+  aliasMap: Map<string, string>,
+  summary: any
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>(); // lowercase name -> id
+  const toCreate: Array<{ full_name: string; nationality?: string }> = [];
+  const sameAsPending = new Map<string, string>(); // normalised name -> key of the driver to create
+  const aliasOf = new Map<string, string>(); // key -> key of the identical driver being created
+  const nationalityUpdates: PromiseLike<unknown>[] = [];
+  const toCreateKeys: string[] = [];
+
+  for (const [key, info] of uniqueDrivers) {
+    const id = matchDriver(info.name, existingDrivers, aliasMap);
+    if (id) {
+      resolved.set(key, id);
+      summary.drivers_matched++;
+      // Update nationality if missing
+      const iso2 = info.country3 ? (country3to2[info.country3.toUpperCase()] || null) : null;
+      if (iso2) {
+        // Fill a missing nationality (awaited below, so every write lands before the caller saves)
+        nationalityUpdates.push(adminClient.from("v2_drivers").update({ nationality: iso2 }).eq("id", id).is("nationality", null));
+      }
+    } else {
+      const iso2 = info.country3 ? (country3to2[info.country3.toUpperCase()] || null) : null;
+      // Two spellings of one new driver in the same import ("Jeremy" / "Jérémy Siffert"): create once
+      const norm = normaliseName(info.name);
+      const pending = sameAsPending.get(norm);
+      if (pending) {
+        aliasOf.set(key, pending);
+        continue;
+      }
+      sameAsPending.set(norm, key);
+      toCreate.push({ full_name: info.name, ...(iso2 ? { nationality: iso2 } : {}) });
+      toCreateKeys.push(key);
+    }
+  }
+  await Promise.all(nationalityUpdates);
+
+  // Batch create missing drivers (in chunks of 50)
+  for (let i = 0; i < toCreate.length; i += 50) {
+    const chunk = toCreate.slice(i, i + 50);
+    const keys = toCreateKeys.slice(i, i + 50);
+    const { data: newDrivers } = await adminClient.from("v2_drivers").insert(chunk).select("id, full_name");
+    if (newDrivers) {
+      for (let j = 0; j < newDrivers.length; j++) {
+        resolved.set(keys[j], newDrivers[j].id);
+        existingDrivers.push({ id: newDrivers[j].id, full_name: newDrivers[j].full_name });
+        summary.drivers_created++;
+      }
+    }
+  }
+  for (const [key, target] of aliasOf) {
+    const id = resolved.get(target);
+    if (id) resolved.set(key, id);
+  }
+  return resolved;
+}
+
+async function bulkResolveTeams(
+  adminClient: any,
+  uniqueTeams: Map<string, TeamInfo>,
+  existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
+  seasonAliases: Array<{ team_id: string; display_name: string }>,
+  aliasMap: Map<string, string>,
+  summary: any,
+  carHistory: Map<string, Set<string>> = new Map(),
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  const toCreate: Array<{ full_name: string }> = [];
+  const toCreateKeys: string[] = [];
+  const sameAsPending = new Map<string, string>(); // teamKey -> key of the team to create
+  const aliasOf = new Map<string, string>();
+
+  for (const [key, info] of uniqueTeams) {
+    const id = matchTeam(info.name, existingTeams, seasonAliases, aliasMap, info.carNumbers, carHistory);
+    if (id) {
+      resolved.set(key, id);
+      summary.teams_matched++;
+    } else {
+      // Two spellings of one new team in the same import ("PINAXIS - ZONE 4" / "PINAXIS \u0096 ZONE 4")
+      const k = teamKey(info.name);
+      const pending = k ? sameAsPending.get(k) : undefined;
+      if (pending) {
+        aliasOf.set(key, pending);
+        continue;
+      }
+      if (k) sameAsPending.set(k, key);
+      toCreate.push({ full_name: info.name });
+      toCreateKeys.push(key);
+    }
+  }
+
+  for (let i = 0; i < toCreate.length; i += 50) {
+    const chunk = toCreate.slice(i, i + 50);
+    const keys = toCreateKeys.slice(i, i + 50);
+    const { data: newTeams } = await adminClient.from("v2_teams").insert(chunk).select("id, full_name");
+    if (newTeams) {
+      for (let j = 0; j < newTeams.length; j++) {
+        resolved.set(keys[j], newTeams[j].id);
+        existingTeams.push({ id: newTeams[j].id, full_name: newTeams[j].full_name, short_name: null });
+        summary.teams_created++;
+      }
+    }
+  }
+  for (const [key, target] of aliasOf) {
+    const id = resolved.get(target);
+    if (id) resolved.set(key, id);
+  }
+  return resolved;
+}
+
+async function bulkResolveCars(
+  adminClient: any,
+  uniqueCars: Map<string, CarInfo>,
+  existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }>,
+  summary: any,
+  aliasMap: Map<string, string> = new Map(),
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>();
+  const toCreate: Array<{ model_name: string; manufacturer?: string }> = [];
+  const toCreateKeys: string[] = [];
+
+  for (const [key, info] of uniqueCars) {
+    const aliasId = aliasMap.get(info.vehicle.toLowerCase().replace(/\s+/g, " ").trim());
+    const id = (aliasId && existingCars.some((c) => c.id === aliasId) ? aliasId : null) ?? matchCar(info.vehicle, existingCars, info.manufacturer);
+    if (id) {
+      resolved.set(key, id);
+      summary.cars_matched = (summary.cars_matched || 0) + 1;
+    } else {
+      // Strip manufacturer prefix from model_name to avoid duplication like "Mazda Mazda MX-5"
+      let modelName = info.vehicle;
+      if (info.manufacturer && modelName.toLowerCase().startsWith(info.manufacturer.toLowerCase())) {
+        modelName = modelName.slice(info.manufacturer.length).trim();
+      }
+      toCreate.push({ model_name: modelName, ...(info.manufacturer ? { manufacturer: info.manufacturer } : {}) });
+      toCreateKeys.push(key);
+    }
+  }
+
+  for (let i = 0; i < toCreate.length; i += 50) {
+    const chunk = toCreate.slice(i, i + 50);
+    const keys = toCreateKeys.slice(i, i + 50);
+    const { data: newCars } = await adminClient.from("v2_cars").insert(chunk).select("id, model_name, manufacturer");
+    if (newCars) {
+      for (let j = 0; j < newCars.length; j++) {
+        resolved.set(keys[j], newCars[j].id);
+        existingCars.push({ id: newCars[j].id, model_name: newCars[j].model_name, manufacturer: newCars[j].manufacturer });
+        summary.cars_created = (summary.cars_created || 0) + 1;
+      }
+    }
+  }
+  return resolved;
+}
+
+/** Car numbers each team has raced in this series (team_id -> numbers), to break ties between partial team-name matches. */
+async function loadCarHistory(adminClient: any, seriesId: string | null | undefined): Promise<Map<string, Set<string>>> {
+  const history = new Map<string, Set<string>>();
+  if (!seriesId) return history;
+  try {
+    const { data: seasons } = await adminClient.from("v2_seasons").select("id").eq("series_id", seriesId);
+    const seasonIds = (seasons || []).map((s: any) => s.id);
+    if (!seasonIds.length) return history;
+    const { data: events } = await adminClient.from("v2_events").select("id").in("season_id", seasonIds);
+    const eventIds = (events || []).map((e: any) => e.id);
+    if (!eventIds.length) return history;
+    const { data: sessions } = await adminClient.from("v2_sessions").select("id").in("event_id", eventIds).is("parent_session_id", null);
+    const sessionIds = (sessions || []).map((s: any) => s.id);
+    for (let i = 0; i < sessionIds.length; i += 200) {
+      const { data: rows } = await adminClient.from("v2_race_results").select("team_id, car_number").in("session_id", sessionIds.slice(i, i + 200));
+      for (const r of rows || []) {
+        if (!r.team_id || r.car_number == null) continue;
+        if (!history.has(r.team_id)) history.set(r.team_id, new Set());
+        history.get(r.team_id)!.add(String(r.car_number));
+      }
+    }
+  } catch {
+    /* no history: fall back to name ranking */
+  }
+  return history;
+}
+
+// ── IMSA Points calculation ──────────────────────────────────────────
+// Scale, eligibility and scheme rules live in the pure, dependency-free
+// module ../_shared/imsa-points.ts (also imported by the web app's tests and
+// by Node scripts).
+
+/** IMSA's official points for the event being imported, per session kind. */
+type OfficialPointsCandidates = ReturnType<typeof mergeOfficialPoints>;
+
+/**
+ * Fetch IMSA's own per-car (and per-driver) points for this event from the
+ * POINTS DATA folder on the results page, when published. They include
+ * qualifying penalties and points deductions that cannot be derived from
+ * the results files. Returns null when nothing usable is found.
+ */
+async function fetchOfficialPoints(
+  ctx: Ctx,
+  links: string[],
+  belongsToSeries: (url: string) => boolean,
+  baseUrl: string,
+  rules: PointsRules,
+  hint?: PointsEventHint,
+): Promise<OfficialPointsCandidates | null> {
+  if (!rules.officialPoints) return null;
+  const files = pickPointsFiles(links.filter(belongsToSeries));
+  if (files.length === 0) return null;
+  const parsed = await Promise.all(
+    files.map(async (f) => {
+      try {
+        const res = await fetchWithRetry(ctx, new URL(f, baseUrl).href);
+        if (!res.ok) return null;
+        const text = (await res.text()).replace(/^\uFEFF/, "");
+        return parseOfficialPointsFile(JSON.parse(text), decodeURIComponent(f).split("/").pop() || "", hint);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const merged = mergeOfficialPoints(parsed);
+  return merged.race.length || merged.qualifying.length ? merged : null;
+}
+
+/**
+ * Points per entry (index-aligned with `entries`) for a scoring session, or
+ * null for every entry when the session/series does not score. Official
+ * points win over computed ones when a matching official session exists.
+ */
+function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: PointsRules, official: OfficialPointsCandidates | null, slot?: number | null): (number | null)[] {
+  const placements = assignClassPositions(entries);
+  const computed = placements.map((p) => computedPointsFor(p, kind, rules));
+  let candidates = official?.[kind] || [];
+  // Several races in a weekend ("Race 1", "Race 2"): the official sessions come in weekend order,
+  // so "Race N" takes the N-th. Without computed points to compare (MX-5 Cup) they would tie.
+  if (slot != null && candidates.length > 1) candidates = candidates[slot] ? [candidates[slot]] : [];
+  const carCands = candidates.filter((c) => c.keyType === "car");
+  const driverCands = candidates.filter((c) => c.keyType === "driver");
+  const byCar = carCands.map((c) => c.points);
+  const byDriver = driverCands.map((c) => c.points);
+  if (byCar.length > 0) {
+    const keys = placements.map((p) => p.carNumber || "");
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byCar, carCands.map((c) => c.byName));
+    if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
+  } else if (byDriver.length > 0) {
+    // Single-driver series (MX-5 Cup): official points are keyed by driver name
+    const keys = entries.map((e) => {
+      const d = (e.drivers || [])[0] || {};
+      return normaliseName(`${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`);
+    });
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byDriver, driverCands.map((c) => c.byName));
+    if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
+  }
+  return computed;
+}
+
+// ── Build result rows for batch insert ───────────────────────────────
+
+function buildResultRows(
+  sessionId: string,
+  entries: any[],
+  sessionType: string,
+  driverMap: Map<string, string>,
+  teamMap: Map<string, string>,
+  carMap: Map<string, string>,
+  isOverallEndurance: boolean,
+  summary: any,
+  hourNumber?: number,
+  timeCardMap?: Map<string, Map<number, string>>,
+  pointsRules?: PointsRules,
+  officialPoints?: OfficialPointsCandidates | null,
+  sessionName?: string,
+): { raceRows: any[]; qualifyingRows: any[]; practiceRows: any[] } {
+  const raceRows: any[] = [];
+  const qualifyingRows: any[] = [];
+  const practiceRows: any[] = [];
+  const isRace = sessionType === "race" || sessionType === "sprint_race" || sessionType === "endurance_race";
+
+  // Class positions are assigned over the whole classification (before any
+  // entry is skipped), in position order; non-starters take no position.
+  const placements = assignClassPositions(entries);
+  // Points only for the final classification of a race (never an hourly
+  // snapshot) and for qualifying; null where the series does not score.
+  const rules = pointsRules ?? getPointsRules("none");
+  const pointsKind: "race" | "qualifying" | null = isRace && !hourNumber ? "race" : sessionType === "qualifying" ? "qualifying" : null;
+  const nth = (sessionName || "").match(/\b(\d+)\s*$/);
+  const slot = nth ? Number(nth[1]) - 1 : null;
+  const sessionPoints = pointsKind ? sessionPointsFor(entries, pointsKind, rules, officialPoints ?? null, slot) : entries.map(() => null);
+
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+    const entry = entries[entryIndex];
+    const drivers = realDrivers(entry);
+    if (drivers.length === 0) continue;
+
+
+
+    let selectedDriver = drivers[0];
+
+    // For hour sub-sessions with Time Card data, use the Time Card to determine the active driver
+    if (hourNumber && timeCardMap && drivers.length > 1) {
+      const carNum = String(entry.number || "");
+      const carTimeCard = timeCardMap.get(carNum);
+      if (carTimeCard) {
+        const activeDriverName = carTimeCard.get(hourNumber);
+        if (activeDriverName) {
+          const activeLower = stripRookieMark(activeDriverName).toLowerCase();
+          const matched = drivers.find((d: any) => {
+            const dn = alKamelDriverName(d).toLowerCase();
+            if (dn === activeLower) return true;
+            // CSV may have "LASTNAME Firstname" or partial matches
+            const surname = (d.surname || d.last_name || "").toLowerCase();
+            const firstname = (d.firstname || d.first_name || "").toLowerCase();
+            if (activeLower.startsWith(surname) && activeLower.includes(firstname)) return true;
+            if (activeLower.includes(surname) && activeLower.includes(firstname)) return true;
+            return false;
+          });
+          if (matched) selectedDriver = matched;
+        }
+      }
+    } else if (hourNumber && !timeCardMap && drivers.length > 1) {
+      // For endurance hour sub-sessions WITHOUT Time Card data, use drivers[0]
+      // which is the current/active driver listed first in the hour results JSON
+      // Do nothing - selectedDriver is already drivers[0]
+    } else if (!isOverallEndurance && !hourNumber && drivers.length > 1) {
+      // For non-endurance sessions (practice/qualifying), use fastest lap driver
+      const fastestLapNum = entry.fastest_lap_driver_number || entry.fastest_driver_number;
+      if (fastestLapNum) {
+        const matched = drivers.find((d: any) => String(d.number) === String(fastestLapNum));
+        if (matched) selectedDriver = matched;
+      }
+    }
+
+    const driverName = alKamelDriverName(selectedDriver);
+    if (!driverName) continue;
+
+    const driverId = driverMap.get(driverName.toLowerCase()) || null;
+    const teamName = entry.team;
+    const teamId = teamName ? (teamMap.get(teamName.toLowerCase().trim()) || null) : null;
+    const vehicleName = entry.vehicle || entry.car;
+    const carId = vehicleName ? (carMap.get(vehicleName.toLowerCase().trim()) || null) : null;
+
+    const raceClass = entry.class || entry.category || null;
+    const pic = placements[entryIndex].classPosition;
+
+    const position = typeof entry.position === "number" ? entry.position : null;
+    const carNumber = entry.number || null;
+    const laps = entry.laps ? parseInt(entry.laps, 10) : null;
+    const gapToLeader = entry.gap_first && entry.gap_first !== "-" ? entry.gap_first : null;
+    const pitStops = entry.pit_stops ? parseInt(entry.pit_stops, 10) : null;
+    const bestLap = entry.time || null;
+    const totalTime = entry.total_time || null;
+    const status = parseStatus(entry.status || "", entry.not_finished || false, entry.not_finished_cause || "");
+
+    const extraData: Record<string, any> = {};
+    if (raceClass) extraData["Class"] = raceClass;
+    if (raceClass && pic != null) extraData["PIC"] = pic;
+
+    // Championship points (see ../_shared/imsa-points.ts)
+    const racePoints = pointsKind === "race" ? sessionPoints[entryIndex] : null;
+    const qualifyingPoints = pointsKind === "qualifying" ? sessionPoints[entryIndex] : null;
+
+    // For the final classification of any race (endurance or sprint) with
+    // multiple drivers per car, insert one row per driver sharing the same
+    // car_number, position, etc. Every driver of the car scores its points;
+    // a single row would leave co-drivers without the result.
+    if (isRace && !hourNumber && drivers.length > 1) {
+      for (const d of drivers) {
+        const dn = alKamelDriverName(d);
+        if (!dn) continue;
+        const did = driverMap.get(dn.toLowerCase()) || null;
+        raceRows.push({
+          session_id: sessionId,
+          driver_id: did,
+          team_id: teamId,
+          car_id: carId,
+          car_number: carNumber ? String(carNumber) : null,
+          position,
+          points: racePoints,
+          status: status as any,
+          laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
+          gap_to_leader: gapToLeader ? String(gapToLeader) : null,
+          pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
+          fastest_lap_time: bestLap ? String(bestLap) : null,
+          total_time: totalTime ? String(totalTime) : null,
+          extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+        });
+        summary.total_entries++;
+      }
+    } else if (isRace) {
+      raceRows.push({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        points: racePoints,
+        status: status as any,
+        laps_completed: typeof laps === "number" && !isNaN(laps) ? laps : null,
+        gap_to_leader: gapToLeader ? String(gapToLeader) : null,
+        pit_stops: typeof pitStops === "number" && !isNaN(pitStops) ? pitStops : null,
+        fastest_lap_time: bestLap ? String(bestLap) : null,
+        total_time: totalTime ? String(totalTime) : null,
+        extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+      });
+      summary.total_entries++;
+    } else if (sessionType === "qualifying") {
+      qualifyingRows.push({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        points: qualifyingPoints,
+        best_time: bestLap ? String(bestLap) : null,
+        gap_to_pole: gapToLeader ? String(gapToLeader) : null,
+        laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
+        extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+      });
+    } else {
+      practiceRows.push({
+        session_id: sessionId,
+        driver_id: driverId,
+        team_id: teamId,
+        car_id: carId,
+        car_number: carNumber ? String(carNumber) : null,
+        position,
+        best_lap_time: bestLap ? String(bestLap) : null,
+        gap_to_p1: gapToLeader ? String(gapToLeader) : null,
+        laps_run: typeof laps === "number" && !isNaN(laps) ? laps : null,
+        extra_data: Object.keys(extraData).length > 0 ? extraData : {},
+      });
+      summary.total_entries++;
+    }
+  }
+  return { raceRows, qualifyingRows, practiceRows };
+}
+
+/** Pure helpers, exported for unit tests (src/test/imsa-import-core.test.ts). */
+export const _internals = { matchDriver, matchCar, alKamelDriverName, parseTimeCardLaps, parseTimeCardFlagEvents, deriveStrategyRowsFromTimeCard };
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+export async function importEvent(request: ImportRequest, client: any, deps: ImportDeps = {}): Promise<Record<string, any>> {
+  const ctx: Ctx = {
+    fetch: deps.fetch ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args)),
+    log: deps.log ?? ((...a: unknown[]) => console.log(...a)),
+    logError: deps.logError ?? ((...a: unknown[]) => console.error(...a)),
+    aiKey: deps.aiKey ?? null,
+  };
+  const { log, logError } = ctx;
+  const sessionStatus = deps.sessionStatus ?? "draft";
+  const adminClient = client;
+
+  const { url, event_id, mode } = request || ({} as ImportRequest);
+  const isPreview = mode === "preview";
+
+  if (!url || !event_id) {
+    throw new ImportError(400, { error: "Both url and event_id are required" });
+  }
+
+  // Verify event exists
+  const { data: event, error: eventErr } = await adminClient
+    .from("v2_events")
+    .select("id, name, season_id, circuit_id, round_number, v2_seasons(year, series_id, v2_series(name, v2_series_aliases(alias)))")
+    .eq("id", event_id)
+    .single();
+  if (eventErr || !event) {
+    throw new ImportError(404, { error: "Event not found" });
+  }
+
+  // Any Al Kamel results site (imsa.results.alkamelcloud.com, *.alkamelsystems.com, ...).
+  // Relative Results/... links are resolved against the host of the pasted URL.
+  const baseUrl = resolveAlKamelBaseUrl(url);
+  if (!baseUrl) {
+    throw new ImportError(400, { error: "URL must be an Al Kamel results page (e.g. https://imsa.results.alkamelcloud.com/?season=26_2026&evvent=...)" });
+  }
+
+  // ── Step 1: Fetch the Al Kamel results page HTML ──
+  log("Fetching Al Kamel page:", url);
+  const pageResponse = await fetchWithRetry(ctx, url);
+  if (!pageResponse.ok) {
+    throw new ImportError(500, { error: `Failed to fetch IMSA page: ${pageResponse.status}` });
+  }
+  const html = await pageResponse.text();
+
+  const hrefRegex = /href="([^"]+\.JSON)"/gi;
+  const allJsonLinks: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = hrefRegex.exec(html)) !== null) {
+    allJsonLinks.push(match[1]);
+  }
+
+  // Collect Flags Analysis & RC Messages JSON links (pattern: 25_FlagsAnalysis*.JSON)
+  const flagsJsonRegex = /href="([^"]+25_FlagsAnalysis[^"]*\.JSON)"/gi;
+  const allFlagsJsonLinks: string[] = [];
+  while ((match = flagsJsonRegex.exec(html)) !== null) {
+    allFlagsJsonLinks.push(match[1]);
+  }
+
+  // Collect Flags Analysis PDF links as fallback for when JSON is unavailable
+  const flagsPdfRegex = /href="([^"]+25_FlagsAnalysis[^"]*\.PDF)"/gi;
+  const allFlagsPdfLinks: string[] = [];
+  while ((match = flagsPdfRegex.exec(html)) !== null) {
+    allFlagsPdfLinks.push(match[1]);
+  }
+
+  // Also collect Time Card CSV links for endurance driver detection
+  const timeCardRegex = /href="([^"]+23_Time(?:%20|[_%\s])*Cards?[^"]*\.CSV)"/gi;
+  const allTimeCardLinks: string[] = [];
+  while ((match = timeCardRegex.exec(html)) !== null) {
+    allTimeCardLinks.push(match[1]);
+  }
+
+  // Collect Weather JSON links (pattern: 26_Weather_*.JSON)
+  const weatherJsonRegex = /href="([^"]+26_Weather[^"]*\.JSON)"/gi;
+  const allWeatherJsonLinks: string[] = [];
+  while ((match = weatherJsonRegex.exec(html)) !== null) {
+    allWeatherJsonLinks.push(match[1]);
+  }
+  // Also collect Weather CSV links as fallback
+  const weatherCsvRegex = /href="([^"]+26_Weather[^"]*\.CSV)"/gi;
+  const allWeatherCsvLinks: string[] = [];
+  while ((match = weatherCsvRegex.exec(html)) !== null) {
+    allWeatherCsvLinks.push(match[1]);
+  }
+
+  log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links, ${allFlagsJsonLinks.length} Flags Analysis JSON links, ${allFlagsPdfLinks.length} Flags Analysis PDF links in HTML`);
+
+  const season = event.v2_seasons as any;
+  const seriesObj = season?.v2_series;
+  const seriesName: string = seriesObj?.name || "";
+  const seriesAliasesList: string[] = (seriesObj?.v2_series_aliases || []).map((a: any) => a.alias);
+  const allSeriesNames = [seriesName, ...seriesAliasesList].filter(Boolean).map(n => n.toLowerCase());
+
+  log("Series filter names:", allSeriesNames);
+
+  // Series folder names differ per series and year ("03_Whelen Mazda MX-5 Cup presented by
+  // Michelin", "05_Mustang Challenge North America", ...): match on normalised labels.
+  function matchesSeriesFolder(urlPath: string): boolean {
+    const folder = extractSeriesFolderName(urlPath);
+    if (!folder) return false;
+    return seriesFolderMatches(folder, allSeriesNames);
+  }
+
+  const seriesMatchedLinks = allJsonLinks
+    .filter(l => isResultsJsonLink(l))
+    .filter(l => matchesSeriesFolder(l));
+
+  // One results file per session folder: prefer 03_Results, then Official > Provisional > Unofficial.
+  const sessionGrouped = new Map<string, string>();
+  for (const l of seriesMatchedLinks) {
+    const key = l.replace(/0[234]_Results[^/]*$/i, "");
+    const existing = sessionGrouped.get(key);
+    if (!existing || resultsLinkRank(l) >= resultsLinkRank(existing)) {
+      sessionGrouped.set(key, l);
+    }
+  }
+
+  const resultsJsonLinks = Array.from(sessionGrouped.values())
+    .map(l => { try { return new URL(l, baseUrl).href; } catch { return null; } })
+    .filter(Boolean) as string[];
+
+  log(`Found ${resultsJsonLinks.length} series-filtered results JSON links`);
+
+  // Championship points rules for this series, plus IMSA's own per-car
+  // points for this event when its POINTS DATA files are published.
+  const pointsRules = getPointsRules(resolvePointsScheme(seriesName, seriesAliasesList));
+  // Which round this is, to find it in season-long points files: event name, Al Kamel event folder, circuit.
+  const { data: circuitRow } = event.circuit_id
+    ? await adminClient.from("v2_circuits").select("name").eq("id", event.circuit_id).maybeSingle()
+    : { data: null };
+  const eventFolder = (() => {
+    try {
+      return (new URL(url).searchParams.get("evvent") || "").replace(/^\d+_/, "");
+    } catch {
+      return "";
+    }
+  })();
+  const pointsHint: PointsEventHint = { round: Number(event.round_number) || null, names: [event.name, eventFolder, circuitRow?.name].filter(Boolean) };
+  const officialPoints = await fetchOfficialPoints(ctx, allJsonLinks, matchesSeriesFolder, baseUrl, pointsRules, pointsHint);
+  log(`Points scheme: ${pointsRules.scheme}; official points data: ${officialPoints ? `${officialPoints.race.length} race / ${officialPoints.qualifying.length} qualifying session(s)` : "none"}`);
+
+  if (resultsJsonLinks.length === 0) {
+    throw new ImportError(400, {
+        error: "No results JSON files found for this series on this page. Add the Al Kamel series folder name as a series alias, or check that the event publishes .JSON results (some only publish PDF/CSV).",
+        debug_json_links_found: allJsonLinks.length,
+        series_filter_names: allSeriesNames,
+        series_folders_on_page: Array.from(new Set(allJsonLinks.map(l => extractSeriesFolderName(l)).filter(Boolean))),
+    });
+  }
+
+  // ── Step 1.5: Detect endurance race pattern ──
+  const hourLinks = resultsJsonLinks.filter(l => extractHourNumber(l) !== null);
+  const overallRaceLinks = resultsJsonLinks.filter(l => {
+    const decoded = decodeURIComponent(l).toLowerCase();
+    return /\d+_race\//i.test(decoded) && !/hour\s*\d+/i.test(decoded);
+  });
+  const nonRaceLinks = resultsJsonLinks.filter(l => {
+    const decoded = decodeURIComponent(l).toLowerCase();
+    return !/\d+_race\//i.test(decoded) && extractHourNumber(l) === null;
+  });
+
+  const isEndurance = hourLinks.length > 0;
+  log(`Endurance detection: ${isEndurance} (${hourLinks.length} hour links, ${overallRaceLinks.length} overall race links, ${nonRaceLinks.length} non-race links)`);
+
+  // ── Step 2: FETCH ALL JSON DATA IN PARALLEL ──
+  log("Fetching all JSON files in parallel...");
+
+  type FetchedSession = {
+    url: string;
+    kind: "nonrace" | "overall" | "hour";
+    hour?: number;
+    data: any;
+  };
+
+  const fetchPromises: Promise<FetchedSession | null>[] = [];
+
+  for (const jsonUrl of nonRaceLinks) {
+    fetchPromises.push(
+      fetchWithRetry(ctx, jsonUrl).then(async r => r.ok ? { url: jsonUrl, kind: "nonrace" as const, data: await r.json() } : null).catch(() => null)
+    );
+  }
+  for (const jsonUrl of overallRaceLinks) {
+    fetchPromises.push(
+      fetchWithRetry(ctx, jsonUrl).then(async r => r.ok ? { url: jsonUrl, kind: "overall" as const, data: await r.json() } : null).catch(() => null)
+    );
+  }
+  for (const jsonUrl of hourLinks) {
+    const hour = extractHourNumber(jsonUrl)!;
+    fetchPromises.push(
+      fetchWithRetry(ctx, jsonUrl).then(async r => r.ok ? { url: jsonUrl, kind: "hour" as const, hour, data: await r.json() } : null).catch(() => null)
+    );
+  }
+  // For non-endurance, all links go to fetchPromises
+  if (!isEndurance) {
+    // Already handled above via nonRaceLinks covering everything
+    // But for non-endurance, all resultsJsonLinks are non-race
+    // We need to clear and re-add since the categorization might miss some
+  }
+
+  const fetchedResults = (await Promise.all(fetchPromises)).filter(Boolean) as FetchedSession[];
+  log(`Successfully fetched ${fetchedResults.length} JSON files`);
+
+  // ── Step 2.5: Load reference data (parallel with JSON fetch wasn't possible, but do it now) ──
+  const seasonId = event.season_id;
+  const [driversRes, teamsRes, carsRes, existingSessionsRes, aliasesRes, seasonCarsRes, driverAliasesRes, teamAliasesRes, carAliasesRes] = await Promise.all([
+    adminClient.from("v2_drivers").select("id, full_name"),
+    adminClient.from("v2_teams").select("id, full_name, short_name"),
+    adminClient.from("v2_cars").select("id, model_name, manufacturer"),
+    adminClient.from("v2_sessions").select("id, name").eq("event_id", event_id),
+    adminClient.from("v2_team_season_names").select("team_id, display_name").eq("season_id", seasonId),
+    adminClient.from("v2_team_season_cars").select("team_id, car_id").eq("season_id", seasonId),
+    adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "driver"),
+    adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "team"),
+    adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "car"),
+  ]);
+
+  const existingDrivers = driversRes.data || [];
+  const existingTeams = teamsRes.data || [];
+  const existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }> = (carsRes.data || []) as any;
+  const existingSessionNames = new Set((existingSessionsRes.data || []).map((s: any) => s.name));
+  const existingSessionIdByName = new Map<string, string>((existingSessionsRes.data || []).map((s: any) => [s.name, s.id]));
+  const seasonAliases: Array<{ team_id: string; display_name: string }> = (aliasesRes.data || []) as any;
+  const seasonCarMap = new Map<string, string>();
+  for (const sc of (seasonCarsRes.data || []) as any[]) seasonCarMap.set(sc.team_id, sc.car_id);
+
+  const driverAliasMap = new Map<string, string>();
+  for (const a of (driverAliasesRes.data || []) as any[]) driverAliasMap.set(a.alias.toLowerCase(), a.canonical);
+  const teamAliasMap = new Map<string, string>();
+  for (const a of (teamAliasesRes.data || []) as any[]) teamAliasMap.set(a.alias.toLowerCase(), a.canonical);
+  const carAliasMap = new Map<string, string>();
+  for (const a of (carAliasesRes.data || []) as any[]) carAliasMap.set(a.alias.toLowerCase().replace(/\s+/g, " ").trim(), a.canonical);
+
+  // ── Step 3: BULK resolve all entities ──
+  const allSessionEntries = fetchedResults.map(f => ({ entries: f.data.classification || [] }));
+  const { drivers: uniqueDrivers, teams: uniqueTeams, cars: uniqueCars } = collectUniqueEntities(allSessionEntries);
+
+  log(`Resolving ${uniqueDrivers.size} drivers, ${uniqueTeams.size} teams, ${uniqueCars.size} cars...`);
+
+  const summary: any = {
+    sessions_created: 0,
+    sessions_skipped: 0,
+    total_entries: 0,
+    drivers_matched: 0,
+    drivers_created: 0,
+    teams_matched: 0,
+    teams_created: 0,
+    cars_matched: 0,
+    cars_created: 0,
+    is_endurance: isEndurance,
+    errors: [] as string[],
+  };
+
+  if (isPreview) {
+    // Preview mode: just count
+    for (const f of fetchedResults) {
+      const entries = f.data.classification || [];
+      if (entries.length > 0) summary.sessions_created++;
+      summary.total_entries += entries.length;
+    }
+    summary.drivers_matched = uniqueDrivers.size;
+    summary.teams_matched = uniqueTeams.size;
+    summary.cars_matched = uniqueCars.size;
+    return { ...summary, success: true };
+  }
+
+  const [driverMap, teamMap, carMap] = await Promise.all([
+    bulkResolveDrivers(adminClient, uniqueDrivers, existingDrivers, driverAliasMap, summary),
+    bulkResolveTeams(adminClient, uniqueTeams, existingTeams, seasonAliases, teamAliasMap, summary, await loadCarHistory(adminClient, season?.series_id)),
+    bulkResolveCars(adminClient, uniqueCars, existingCars, summary, carAliasMap),
+  ]);
+
+  log(`Entity resolution complete. Creating sessions and inserting results...`);
+
+  // Link cars to season for teams
+  const carSeasonInserts: any[] = [];
+  for (const [teamKey, teamId] of teamMap) {
+    if (!seasonCarMap.has(teamId)) {
+      // Find a car used by this team from any entry
+      for (const f of fetchedResults) {
+        for (const entry of (f.data.classification || [])) {
+          if (entry.team && entry.team.toLowerCase().trim() === teamKey) {
+            const v = entry.vehicle || entry.car;
+            if (v) {
+              const cId = carMap.get(v.toLowerCase().trim());
+              if (cId) {
+                carSeasonInserts.push({ team_id: teamId, car_id: cId, season_id: seasonId });
+                seasonCarMap.set(teamId, cId);
+                break;
+              }
+            }
+          }
+        }
+        if (seasonCarMap.has(teamId)) break;
+      }
+    }
+  }
+  if (carSeasonInserts.length > 0) {
+    await adminClient.from("v2_team_season_cars").insert(carSeasonInserts);
+  }
+
+  // ── Step 4: Create sessions and batch insert results ──
+  const { data: allSessions } = await adminClient
+    .from("v2_sessions")
+    .select("sort_order")
+    .eq("event_id", event_id)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  let sortOrder = (allSessions?.[0]?.sort_order ?? -1) + 1;
+
+  const autoAssignLayout = async (sessionId: string) => {
+    if (event.circuit_id) {
+      const { data: layouts } = await adminClient
+        .from("v2_circuit_layouts")
+        .select("id")
+        .eq("circuit_id", event.circuit_id);
+      if (layouts && layouts.length === 1) {
+        await adminClient.from("v2_sessions").update({ layout_id: layouts[0].id } as any).eq("id", sessionId);
+      }
+    }
+  };
+
+  /** Parse session_date "22/01/2026 10:05" (or "22-01-2026 10:05") → { date: "2026-01-22", startTime }
+   * The time in session_date is unreliable (a 12-hour clock without AM/PM: "02:10" for 14:10),
+   * so the start time comes from the session folder name instead, which carries the local
+   * scheduled start on a 24-hour clock: ".../202503151010_Race/..." → "10:10".
+   */
+  const parseSessionDateTime = (sessionData: any, jsonUrl?: string): { date: string | null; startTime: string | null } => {
+    // Feeds use "22/01/2026 10:05" or "31-07-2026 03:45" depending on series/year.
+    return { date: parseAlKamelSessionDate(sessionData.session_date), startTime: folderStartTime(jsonUrl) };
+  };
+
+  const createSession = async (
+    name: string, sessionType: string, jsonUrl: string,
+    sessionDate: string | null, startTime: string | null, parentSessionId: string | null
+  ): Promise<string | null> => {
+    const { data: newSession, error: sessionErr } = await adminClient
+      .from("v2_sessions")
+      .insert({
+        event_id, name, session_type: sessionType as any, status: sessionStatus as any,
+        sort_order: sortOrder++, source_document_url: jsonUrl,
+        ...(sessionDate ? { date: sessionDateValue(sessionDate) } : {}),
+        ...(startTime ? { start_time: startTime } : {}),
+        ...(parentSessionId ? { parent_session_id: parentSessionId } : {}),
+      } as any)
+      .select("id")
+      .single();
+    if (sessionErr || !newSession) {
+      summary.errors.push(`Failed to create session ${name}: ${sessionErr?.message}`);
+      return null;
+    }
+    existingSessionNames.add(name);
+    existingSessionIdByName.set(name, newSession.id);
+    await autoAssignLayout(newSession.id);
+    summary.sessions_created++;
+    return newSession.id;
+  };
+
+  const insertResults = async (
+    sessionId: string, entries: any[], sessionType: string, isOverallEndurance: boolean,
+    hourNumber?: number, timeCardMap?: Map<string, Map<number, string>>, sessionName?: string
+  ) => {
+    const { raceRows, qualifyingRows, practiceRows } = buildResultRows(
+      sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary,
+      hourNumber, timeCardMap, pointsRules, officialPoints, sessionName
+    );
+    // Batch insert all at once
+    const inserts: Promise<any>[] = [];
+    if (raceRows.length > 0) inserts.push(adminClient.from("v2_race_results").insert(raceRows));
+    if (qualifyingRows.length > 0) inserts.push(adminClient.from("v2_qualifying_results").insert(qualifyingRows));
+    if (practiceRows.length > 0) inserts.push(adminClient.from("v2_practice_results").insert(practiceRows));
+    await Promise.all(inserts);
+  };
+
+  // ── Weather processing from IMSA Weather JSON ─────────────────────
+  
+  // Build a map using a composite key: timestamp + optional HOUR N
+  // E.g. "202601241340" for session-level, "202601241340_HOUR 1" for hour sub-sessions
+  const weatherByKey = new Map<string, string>();
+  for (const wl of allWeatherJsonLinks) {
+    if (matchesSeriesFolder(wl)) {
+      const decoded = decodeURIComponent(wl);
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+        const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+        weatherByKey.set(key, wl);
+      }
+    }
+  }
+  log(`Weather JSON mapped: ${weatherByKey.size} sessions`, Array.from(weatherByKey.keys()));
+
+  // ── Flags Analysis mapping ────────────────────────────────────────────
+  const flagsByKey = new Map<string, string>();
+  for (const fl of allFlagsJsonLinks) {
+    if (matchesSeriesFolder(fl)) {
+      const decoded = decodeURIComponent(fl);
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+        const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+        flagsByKey.set(key, fl);
+      }
+    }
+  }
+  log(`Flags JSON mapped: ${flagsByKey.size} sessions`, Array.from(flagsByKey.keys()));
+
+  // ── Flags Analysis PDF mapping (fallback when JSON unavailable) ───────
+  const flagsPdfByKey = new Map<string, string>();
+  for (const fl of allFlagsPdfLinks) {
+    if (matchesSeriesFolder(fl)) {
+      const decoded = decodeURIComponent(fl);
+      const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+      if (tsMatch) {
+        const hourMatch = decoded.match(/HOUR\s*(\d+)/i);
+        const key = hourMatch ? `${tsMatch[1]}_HOUR ${hourMatch[1]}` : tsMatch[1];
+        flagsPdfByKey.set(key, fl);
+      }
+    }
+  }
+  if (flagsPdfByKey.size > 0) log(`Flags PDF mapped: ${flagsPdfByKey.size} sessions (fallback)`, Array.from(flagsPdfByKey.keys()));
+
+  // Estimate local hour from UTC timestamp string
+  // Daytona is UTC-5, but we'll derive offset from the session_date vs UTC time
+  function estimateLocalHour(utcTimeStr: string, utcOffset: number): number {
+    // utcTimeStr like "1/22/2026 3:05:20 PM"
+    const timePart = utcTimeStr.split(" ").slice(1).join(" "); // "3:05:20 PM"
+    const isPM = timePart.toUpperCase().includes("PM");
+    const hourStr = timePart.split(":")[0];
+    let hour = parseInt(hourStr, 10);
+    if (isPM && hour !== 12) hour += 12;
+    if (!isPM && hour === 12) hour = 0;
+    // Apply UTC offset to get local hour
+    const localHour = (hour + utcOffset + 24) % 24;
+    return localHour;
+  }
+
+  function imWeatherEmoji(trackStatus: string, localHour?: number): string {
+    const isNight = localHour !== undefined && (localHour >= 20 || localHour < 6);
+    const isDusk = localHour !== undefined && (localHour >= 18 && localHour < 20);
+    const isDawn = localHour !== undefined && (localHour >= 6 && localHour < 8);
+
+    const s = (trackStatus || "").toLowerCase();
+    if (s.includes("rain") || s.includes("wet")) {
+      if (isNight) return "🌧️";
+      return "🌧️";
+    }
+    if (s.includes("damp")) return "🌦️";
+    if (s.includes("fog")) return "🌫️";
+    if (isNight) return "🌙";
+    if (isDusk) return "🌇";
+    if (isDawn) return "🌅";
+    if (s === "dry" || !s) return "☀️";
+    return "🌤️";
+  }
+
+  // Circuit longitude, to resolve local times in the weather files (see processImWeather).
+  let circuitLongitude: number | null = null;
+  if (event.circuit_id) {
+    const { data: circuitRow } = await adminClient.from("v2_circuits").select("longitude").eq("id", event.circuit_id).maybeSingle();
+    const lon = Number(circuitRow?.longitude);
+    circuitLongitude = circuitRow?.longitude != null && Number.isFinite(lon) ? lon : null;
+  }
+
+  const processImWeather = async (sessionId: string, weatherJsonUrl: string) => {
+    try {
+      const fullUrl = (() => { try { return new URL(weatherJsonUrl, baseUrl).href; } catch { return null; } })();
+      if (!fullUrl) return;
+
+      const resp = await fetchWithRetry(ctx, fullUrl);
+      if (!resp.ok) return;
+      const weatherData = await resp.json();
+
+      const sessionWeather = weatherData.session?.weather;
+      const samples = weatherData.meteoSamples || [];
+      const units = weatherData.units || {};
+
+      if (samples.length === 0 && !sessionWeather) return;
+
+      // IMSA's weather JSON usually has no `units` block: its samples are then imperial
+      // (°F, mph; the CSV twin shows pressure in inHg). A median air temperature above 35
+      // cannot be °C at a race, so use that to tell the two apart.
+      const medianAir = median(samples.map((x: any) => Number(x.air_temp)).filter((v: number) => Number.isFinite(v)));
+      const imperial = !units.AirTemperature && medianAir > 35;
+      const isF = units.AirTemperature ? String(units.AirTemperature).includes("F") : imperial;
+      const toC = (f: number) => isF ? Math.round(((f - 32) * 5 / 9) * 10) / 10 : f;
+
+      const isMph = units.WindSpeed ? String(units.WindSpeed).toUpperCase().includes("MPH") : imperial;
+      const toKmh = (mph: number) => isMph ? Math.round(mph * 1.60934) : mph;
+
+      const airTemps: number[] = [];
+      const trackTemps: number[] = [];
+      const windSpeeds: number[] = [];
+      const windDirs: number[] = [];
+      let totalRainSamples = 0;
+
+      for (const s of samples) {
+        if (s.air_temp != null) airTemps.push(toC(s.air_temp));
+        if (s.track_temp != null) trackTemps.push(toC(s.track_temp));
+        if (s.wind_speed != null) windSpeeds.push(toKmh(s.wind_speed));
+        if (s.wind_direction != null) windDirs.push(s.wind_direction);
+        if (s.rain != null && s.rain > 0) totalRainSamples++;
+      }
+
+      // Determine UTC offset: session_date is local (24h), time_utc_str is UTC (12h AM/PM)
+      // session_date "22/01/2026 10:05" = local 10:05
+      // time_utc_str "1/22/2026 3:05:20 PM" = UTC 15:05
+      // offset = local - UTC = 10 - 15 = -5
+      let utcOffset = -5; // Default EST
+      const sessionDateStr = weatherData.session?.session_date;
+      if (sessionDateStr && samples.length > 0) {
+        const localTimeMatch = sessionDateStr.match(/\d+\/\d+\/\d+\s+(\d+):(\d+)/);
+        if (localTimeMatch) {
+          const localH = parseInt(localTimeMatch[1], 10);
+          const localM = parseInt(localTimeMatch[2], 10);
+          const firstSample = samples[0];
+          if (firstSample.time_utc_secconds) {
+            // Use UTC epoch to get UTC hour directly
+            const utcDate = new Date(firstSample.time_utc_secconds * 1000);
+            const utcH = utcDate.getUTCHours();
+            const utcM = utcDate.getUTCMinutes();
+            // Compute offset in hours (local - UTC)
+            const offsetFor = (h: number) => {
+              let diffMinutes = (h * 60 + localM) - (utcH * 60 + utcM);
+              if (diffMinutes > 720) diffMinutes -= 1440;
+              if (diffMinutes < -720) diffMinutes += 1440;
+              return Math.round(diffMinutes / 60);
+            };
+            utcOffset = offsetFor(localH);
+            // Some feeds write session_date on a 12-hour clock without AM/PM ("12/04/2025 02:05"
+            // for a 14:05 start): take the reading whose offset fits the circuit's longitude.
+            if (localH < 12 && circuitLongitude != null) {
+              const expected = circuitLongitude / 15;
+              const pm = offsetFor(localH + 12);
+              if (Math.abs(pm - expected) < Math.abs(utcOffset - expected)) utcOffset = pm;
+            }
+          }
+        }
+      }
+      log(`UTC offset computed: ${utcOffset}`);
+
+      // Track status from session summary  
+      const trackStatus = sessionWeather?.track_status || "Dry";
+
+      // Build emojis based on local time of day and conditions
+      const emojiSet: string[] = [];
+      const seenEmojis = new Set<string>();
+      if (samples.length > 0) {
+        // Sample a few points across the session for diverse emojis
+        const indices = [0, Math.floor(samples.length / 2), samples.length - 1];
+        for (const idx of indices) {
+          const s = samples[idx];
+          const localHour = estimateLocalHour(s.time_utc_str || "", utcOffset);
+          const emoji = imWeatherEmoji(trackStatus, localHour);
+          if (!seenEmojis.has(emoji)) {
+            seenEmojis.add(emoji);
+            emojiSet.push(emoji);
+          }
+        }
+      } else {
+        emojiSet.push(imWeatherEmoji(trackStatus));
+      }
+
+      const conditionEmoji = emojiSet.join("");
+
+      // Build summary
+      let conditionSummary = trackStatus;
+      if (totalRainSamples > 0 && samples.length > 0) {
+        const rainPct = Math.round((totalRainSamples / samples.length) * 100);
+        conditionSummary = `${trackStatus} (rain ${rainPct}% of session)`;
+      }
+
+      const avgWindDir = windDirs.length > 0 ? Math.round(windDirs.reduce((a, b) => a + b, 0) / windDirs.length) : 0;
+      const windDirStr = (() => {
+        const dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+        return dirs[Math.round(avgWindDir / 22.5) % 16];
+      })();
+
+      const windMin = windSpeeds.length > 0 ? Math.round(Math.min(...windSpeeds)) : null;
+      const windMax = windSpeeds.length > 0 ? Math.round(Math.max(...windSpeeds)) : null;
+      let windSummary: string | null = null;
+      if (windMin !== null && windMax !== null) {
+        if (windMax < 15) windSummary = "Light winds";
+        else windSummary = `${windMin}–${windMax} km/h ${windDirStr}`;
+      }
+
+      // Use summary weather values as fallback if no samples
+      let airMin = airTemps.length > 0 ? Math.round(Math.min(...airTemps) * 10) / 10 : null;
+      let airMax = airTemps.length > 0 ? Math.round(Math.max(...airTemps) * 10) / 10 : null;
+      let trkMin = trackTemps.length > 0 ? Math.round(Math.min(...trackTemps) * 10) / 10 : null;
+      let trkMax = trackTemps.length > 0 ? Math.round(Math.max(...trackTemps) * 10) / 10 : null;
+
+      // If no samples but session summary has temps, parse those
+      if (airMin === null && sessionWeather?.air_temperature) {
+        const parsed = parseFloat(sessionWeather.air_temperature);
+        if (!isNaN(parsed)) { airMin = parsed; airMax = parsed; }
+      }
+      if (trkMin === null && sessionWeather?.track_temperature) {
+        const parsed = parseFloat(sessionWeather.track_temperature);
+        if (!isNaN(parsed)) { trkMin = parsed; trkMax = parsed; }
+      }
+
+      const weatherRecord = {
+        session_id: sessionId,
+        condition_summary: conditionSummary,
+        condition_emoji: conditionEmoji,
+        air_temp_min: airMin,
+        air_temp_max: airMax,
+        track_temp_min: trkMin,
+        track_temp_max: trkMax,
+        rain_mm: totalRainSamples > 0 ? totalRainSamples : 0,
+        rain_detail: null,
+        wind_summary: windSummary,
+        wind_speed_min: windMin,
+        wind_speed_max: windMax,
+        wind_direction: windDirStr,
+        hourly_data: samples.slice(0, 50),
+        fetched_at: new Date().toISOString(),
+      };
+
+      await adminClient
+        .from("v2_session_weather")
+        .upsert(weatherRecord, { onConflict: "session_id" });
+      log(`Weather upserted for session ${sessionId}: ${conditionEmoji} ${conditionSummary}`);
+    } catch (err) {
+      logError(`Failed to process weather for session ${sessionId}:`, err);
+    }
+  };
+
+  // Match a results JSON URL to its corresponding weather JSON URL
+  // Use composite key: timestamp + optional HOUR N
+  const weatherUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
+    const decoded = decodeURIComponent(jsonUrl);
+    const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+    if (tsMatch) {
+      // Try hour-specific key first, then fall back to session-level
+      if (hourNumber) {
+        const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+        const hourUrl = weatherByKey.get(hourKey);
+        if (hourUrl) return hourUrl;
+      }
+      return weatherByKey.get(tsMatch[1]) || null;
+    }
+    return null;
+  };
+
+  // Match a results JSON URL to its corresponding flags JSON URL
+  const flagsUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
+    const decoded = decodeURIComponent(jsonUrl);
+    const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+    if (tsMatch) {
+      if (hourNumber) {
+        const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+        const hourUrl = flagsByKey.get(hourKey);
+        if (hourUrl) return hourUrl;
+      }
+      return flagsByKey.get(tsMatch[1]) || null;
+    }
+    return null;
+  };
+
+  // Fallback: get PDF URL for flags when JSON is unavailable
+  const flagsPdfUrlForSession = (jsonUrl: string, hourNumber?: number): string | null => {
+    const decoded = decodeURIComponent(jsonUrl);
+    const tsMatch = decoded.match(/\/(\d{12})_[^/]+\//);
+    if (tsMatch) {
+      if (hourNumber) {
+        const hourKey = `${tsMatch[1]}_HOUR ${hourNumber}`;
+        const hourUrl = flagsPdfByKey.get(hourKey);
+        if (hourUrl) return hourUrl;
+      }
+      return flagsPdfByKey.get(tsMatch[1]) || null;
+    }
+    return null;
+  };
+
+  // ── Race Control processing ───────────────────────────────────────────
+  function rcItemColor(recType: string, flag: string, message: string): string {
+    const f = (flag || "").toUpperCase();
+    const m = (message || "").toUpperCase();
+    const rt = (recType || "").toUpperCase();
+    // Green flag
+    if (rt === "GF" || f.includes("GREEN") || m === "GREEN FLAG") return "#22c55e";
+    // Yellow flag / caution
+    if (rt === "YF" || rt === "FCY" || f.includes("YELLOW") || f.includes("CAUTION") || m.includes("YELLOW") || m.includes("FULL COURSE CAUTION")) return "#eab308";
+    // Red flag
+    if (rt === "RF" || f.includes("RED") || m.includes("RED FLAG")) return "#ef4444";
+    // Safety car
+    if (rt === "SC" || f.includes("SAFETY CAR") || m.includes("SAFETY CAR")) return "#f97316";
+    // Chequered / checkered
+    if (rt === "FF" || f.includes("CHEQUER") || f.includes("CHECKER") || m.includes("CHECKERED") || m.includes("CHEQUERED")) return "#a1a1aa";
+    // Penalties / drive-through / stop-and-go
+    if (m.includes("PENALTY") || m.includes("DRIVE THROUGH") || m.includes("STOP AND GO") || m.includes("STOP & GO") || m.includes("TIME PENALTY")) return "#a855f7";
+    // Incident / spin / contact / off-track
+    if (m.includes("SPUN") || m.includes("CONTACT") || m.includes("OFF TRACK") || m.includes("STOPPED") || m.includes("INCIDENT") || m.includes("ACCIDENT") || m.includes("DEBRIS")) return "#f59e0b";
+    // Impound
+    if (m.includes("IMPOUND")) return "#6b7280";
+    // Default: neutral blue
+    return "#3b82f6";
+  }
+
+  const processRaceControl = async (sessionId: string, flagsJsonUrl: string) => {
+    try {
+      const fullUrl = (() => { try { return new URL(flagsJsonUrl, baseUrl).href; } catch { return null; } })();
+      if (!fullUrl) return;
+
+      const resp = await fetchWithRetry(ctx, fullUrl);
+      if (!resp.ok) return;
+      const flagsData = await resp.json();
+      const flags = flagsData.flags || [];
+      if (flags.length === 0) return;
+
+      // Create annotation section
+      const { data: section, error: secErr } = await adminClient
+        .from("v2_annotation_sections")
+        .insert({ session_id: sessionId, title: "Race Control", sort_order: 0 })
+        .select("id")
+        .single();
+      if (secErr || !section) {
+        logError(`Failed to create RC section for session ${sessionId}:`, secErr);
+        return;
+      }
+
+      // Build annotation items
+      const items = flags.map((f: any, idx: number) => {
+        const recType = f.rec_type || "";
+        const flagName = f.flag || "";
+        const message = f.message || "";
+        const elapsed = f.elapsed || "";
+        const time = f.time || "";
+        const lap = f.lap || 0;
+
+        // Build description: [TIME] (Elapsed: ELAPSED) [Lap N] FLAG/MESSAGE
+        const parts: string[] = [];
+        if (time) parts.push(`[${time}]`);
+        if (elapsed && elapsed !== "-") parts.push(`(+${elapsed})`);
+        if (lap > 0) parts.push(`Lap ${lap}`);
+        if (flagName) parts.push(flagName);
+        if (message) parts.push(message);
+
+        return {
+          section_id: section.id,
+          description: parts.join(" ") || "Race Control entry",
+          color: rcItemColor(recType, flagName, message),
+          sort_order: idx,
+        };
+      });
+
+      // Batch insert (chunks of 100)
+      for (let i = 0; i < items.length; i += 100) {
+        const chunk = items.slice(i, i + 100);
+        await adminClient.from("v2_annotation_items").insert(chunk);
+      }
+      log(`Race Control: ${items.length} items added for session ${sessionId}`);
+    } catch (err) {
+      logError(`Failed to process Race Control for session ${sessionId}:`, err);
+    }
+  };
+
+
+  if (isEndurance) {
+    // 1. Non-race sessions
+    for (const f of fetchedResults.filter(f => f.kind === "nonrace")) {
+      const sessionData = f.data.session || {};
+      const sessionName = sessionData.session_name || "Unknown Session";
+      const sessionInfo = detectSessionType(sessionName, sessionData.session_type || "");
+      if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
+      const entries = f.data.classification || [];
+      if (entries.length === 0) continue;
+      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
+      const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
+      if (!sessionId) continue;
+      await insertResults(sessionId, entries, sessionInfo.type, false, undefined, undefined, sessionInfo.name);
+      // Process weather for this session
+      const weatherUrl = weatherUrlForSession(f.url);
+      if (weatherUrl) await processImWeather(sessionId, weatherUrl);
+      // Process Race Control
+      const flagsUrl = flagsUrlForSession(f.url);
+      if (flagsUrl) await processRaceControl(sessionId, flagsUrl);
+    }
+
+    // 2. Fetch Time Card CSV for driver detection in hour sub-sessions
+    let timeCardMap: Map<string, Map<number, string>> = new Map();
+    let timeCardLapsByCar: Map<string, TimeCardLapRow[]> = new Map();
+    let timeCardFlagEvents: StrategyFlagEvent[] = [];
+    const raceTimeCardLinks = allTimeCardLinks
+      .filter(l => matchesSeriesFolder(l))
+      .filter(l => {
+        const decoded = decodeURIComponent(l).toLowerCase();
+        return /\d+_race\//i.test(decoded);
+      });
+
+    if (raceTimeCardLinks.length > 0) {
+      // Prefer the one in the highest hour folder (it covers the full race)
+      const sortedByHour = raceTimeCardLinks.sort((a, b) => {
+        const hourA = extractHourNumber(a) || 0;
+        const hourB = extractHourNumber(b) || 0;
+        return hourB - hourA;
+      });
+      const timeCardUrl = (() => { try { return new URL(sortedByHour[0], baseUrl).href; } catch { return null; } })();
+      if (timeCardUrl) {
+        log("Fetching Time Card CSV:", timeCardUrl);
+        try {
+          const tcResp = await fetchWithRetry(ctx, timeCardUrl);
+          if (tcResp.ok) {
+            const csvText = await tcResp.text();
+            timeCardMap = parseTimeCardCSV(csvText, log);
+            timeCardLapsByCar = parseTimeCardLaps(csvText, log);
+            timeCardFlagEvents = parseTimeCardFlagEvents(csvText);
+            log(`Time Card data loaded for ${timeCardMap.size} cars`);
+          } else {
+            log(`Time Card CSV returned ${tcResp.status}`);
+          }
+        } catch (err) {
+          logError("Failed to fetch Time Card CSV:", err);
+        }
+      }
+    } else {
+      log("No Time Card CSV links found for this race");
+    }
+
+    // 3. Parent endurance_race session
+    const raceSessionName = "Race";
+    let parentSessionId: string | null = null;
+    let raceDate: string | null = null;
+    let raceStartTime: string | null = null;
+    if (!existingSessionNames.has(raceSessionName)) {
+      const sortedHourLinks = fetchedResults
+        .filter(f => f.kind === "hour")
+        .sort((a, b) => (a.hour || 0) - (b.hour || 0));
+      const overallData = fetchedResults.find(f => f.kind === "overall");
+      const raceDataSource = overallData || (sortedHourLinks.length > 0 ? sortedHourLinks[sortedHourLinks.length - 1] : null);
+      if (raceDataSource) {
+        const parsed = parseSessionDateTime(raceDataSource.data.session || {}, raceDataSource.url);
+        raceDate = parsed.date;
+        raceStartTime = parsed.startTime;
+      }
+
+      parentSessionId = await createSession(raceSessionName, "endurance_race", url, raceDate, raceStartTime, null);
+      // Scheduled end of an endurance race: start + number of hour folders.
+      const raceHours = sortedHourLinks.length ? sortedHourLinks[sortedHourLinks.length - 1].hour || 0 : 0;
+      if (parentSessionId && raceStartTime && raceHours > 0) {
+        const [h, m] = raceStartTime.split(":").map(Number);
+        const end = (h * 60 + m + raceHours * 60) % 1440;
+        const raceEnd = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+        await adminClient.from("v2_sessions").update({ end_time: raceEnd } as any).eq("id", parentSessionId);
+      }
+      if (parentSessionId && raceDataSource) {
+        const entries = raceDataSource.data.classification || [];
+        await insertResults(parentSessionId, entries, "endurance_race", true);
+        // For parent endurance race, try to get RC from last hour's flags file
+        const lastHour = fetchedResults
+          .filter(f => f.kind === "hour")
+          .sort((a, b) => (b.hour || 0) - (a.hour || 0))[0];
+        if (lastHour) {
+          const parentFlagsUrl = flagsUrlForSession(lastHour.url, lastHour.hour);
+          if (parentFlagsUrl) await processRaceControl(parentSessionId, parentFlagsUrl);
+        }
+      }
+    } else {
+      summary.sessions_skipped++;
+      // Look up existing parent session so we can still update driver_ids from final hour
+      const { data: existingParent } = await adminClient
+        .from("v2_sessions")
+        .select("id")
+        .eq("event_id", event_id)
+        .eq("name", raceSessionName)
+        .single();
+      if (existingParent) parentSessionId = existingParent.id;
+    }
+
+    // 4. Hour sub-sessions (using Time Card data for driver detection)
+    // IMPORTANT: Derive hour dates/times from the parent Race date, NOT from individual JSON files.
+    // The JSON files can have inconsistent dates. The Race date is the single source of truth.
+    const sortedHours = fetchedResults
+      .filter(f => f.kind === "hour")
+      .sort((a, b) => (a.hour || 0) - (b.hour || 0));
+
+    // Look up the parent Race session's date to use as base for all hours
+    let raceDateForHours: string | null = raceDate;
+    let raceStartForHours: string | null = raceStartTime;
+    if (!raceDateForHours && parentSessionId) {
+      const { data: parentRow } = await adminClient
+        .from("v2_sessions")
+        .select("date, start_time")
+        .eq("id", parentSessionId)
+        .single();
+      if (parentRow) {
+        raceDateForHours = parentRow.date ? (parentRow.date as string).split("T")[0] : null;
+        raceStartForHours = parentRow.start_time || null;
+      }
+    }
+
+    const hourSessionIdByHour = new Map<number, string>();
+
+    for (const f of sortedHours) {
+      const hourSessionName = `Hour ${f.hour}`;
+      if (existingSessionNames.has(hourSessionName)) {
+        summary.sessions_skipped++;
+        const existingHourId = existingSessionIdByName.get(hourSessionName);
+        if (existingHourId && f.hour) hourSessionIdByHour.set(f.hour, existingHourId);
+        continue;
+      }
+      const entries = f.data.classification || [];
+      if (entries.length === 0) continue;
+
+      // Calculate this hour's date and time from the Race base date + start time
+      let hourDate = raceDateForHours;
+      let hourStart: string | null = null;
+      let hourEnd: string | null = null;
+
+      if (raceDateForHours && raceStartForHours) {
+        const [sH, sM] = raceStartForHours.split(":").map(Number);
+        if (!isNaN(sH) && !isNaN(sM)) {
+          const hourOffset = (f.hour! - 1); // Hour 1 = offset 0
+          const startMinutes = sH * 60 + sM + hourOffset * 60;
+          const endMinutes = startMinutes + 60;
+
+          const startInDay = startMinutes % 1440;
+          const endInDay = endMinutes % 1440;
+          const dayOffset = Math.floor(startMinutes / 1440);
+          const crossesMidnight = startInDay > endInDay;
+
+          // Calculate date with day offset
+          const dp = raceDateForHours.split("-").map(Number);
+          const dt = new Date(Date.UTC(dp[0], dp[1] - 1, dp[2] + dayOffset));
+          hourDate = dt.toISOString().slice(0, 10);
+
+          const fmt = (m: number) => {
+            const h = Math.floor(m / 60) % 24;
+            const min = m % 60;
+            return `${h.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+          };
+          hourStart = fmt(startInDay);
+          hourEnd = crossesMidnight ? "23:59" : fmt(endInDay);
+        }
+      } else if (!hourDate) {
+        // Fallback: use the hour JSON's own date if we have no race date at all
+        const { date: fallbackDate } = parseSessionDateTime(f.data.session || {});
+        hourDate = fallbackDate;
+      }
+
+      const childSessionId = await createSession(hourSessionName, "race", f.url, hourDate, hourStart, parentSessionId);
+      if (!childSessionId) continue;
+      if (f.hour) hourSessionIdByHour.set(f.hour, childSessionId);
+
+      if (hourEnd) {
+        await adminClient.from("v2_sessions").update({ end_time: hourEnd } as any).eq("id", childSessionId);
+      }
+      await insertResults(childSessionId, entries, "race", false, f.hour, timeCardMap.size > 0 ? timeCardMap : undefined);
+      // Process weather for this hour session (use hour-specific weather)
+      const hourWeatherUrl = weatherUrlForSession(f.url, f.hour);
+      if (hourWeatherUrl) await processImWeather(childSessionId, hourWeatherUrl);
+      // Process Race Control for this hour (JSON first, PDF fallback)
+      const hourFlagsUrl = flagsUrlForSession(f.url, f.hour);
+      if (hourFlagsUrl) {
+        await processRaceControl(childSessionId, hourFlagsUrl);
+      } else {
+        // PDF fallback for race control flags on hourly sessions
+        const hourPdfUrl = flagsPdfUrlForSession(f.url, f.hour);
+        if (hourPdfUrl) {
+          const fullPdfUrl = (() => { try { return new URL(hourPdfUrl, baseUrl).href; } catch { return null; } })();
+          if (fullPdfUrl) {
+            log(`No JSON flags for hour ${f.hour}, trying PDF fallback`);
+            const pdfText = await extractPdfText(ctx, fullPdfUrl);
+            if (pdfText) {
+              const pdfFlagEvents = parseFlagsAnalysisPdfText(pdfText, log);
+              if (pdfFlagEvents.length > 0) {
+                const maxEl = Math.max(...pdfFlagEvents.map(e => e.elapsedSec), 3600);
+                const segments = deriveFlagSegments(pdfFlagEvents, maxEl);
+                await adminClient.from("v2_flag_segments").delete().eq("session_id", childSessionId);
+                if (segments.length > 0) {
+                  await insertRowsInChunks(adminClient, "v2_flag_segments", segments.map(s => ({ ...s, session_id: childSessionId })));
+                }
+                log(`PDF flags fallback for hour ${f.hour}: ${segments.length} segments`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Strategy derivation from Time Card telemetry (deterministic)
+    if (timeCardLapsByCar.size > 0) {
+      try {
+        let strategyFlagEvents: StrategyFlagEvent[] = [];
+        const strategyFlagsUrl = (() => {
+          const lastHourSession = sortedHours[sortedHours.length - 1];
+          if (lastHourSession) return flagsUrlForSession(lastHourSession.url, lastHourSession.hour);
+          const overallRace = fetchedResults.find(fr => fr.kind === "overall");
+          return overallRace ? flagsUrlForSession(overallRace.url) : null;
+        })();
+
+        if (strategyFlagsUrl) {
+          const fullFlagsUrl = (() => { try { return new URL(strategyFlagsUrl, baseUrl).href; } catch { return null; } })();
+          if (fullFlagsUrl) {
+            const flagsResp = await fetchWithRetry(ctx, fullFlagsUrl);
+            if (flagsResp.ok) {
+              const flagsData = await flagsResp.json();
+              strategyFlagEvents = parseStrategyFlagEvents(flagsData);
+            }
+          }
+        }
+
+        // PDF fallback: if no JSON flags found, try the PDF version
+        if (strategyFlagEvents.length === 0) {
+          const pdfFlagsUrl = (() => {
+            const lastHourSession = sortedHours[sortedHours.length - 1];
+            if (lastHourSession) return flagsPdfUrlForSession(lastHourSession.url, lastHourSession.hour);
+            const overallRace = fetchedResults.find(fr => fr.kind === "overall");
+            return overallRace ? flagsPdfUrlForSession(overallRace.url) : null;
+          })();
+          if (pdfFlagsUrl) {
+            const fullPdfUrl = (() => { try { return new URL(pdfFlagsUrl, baseUrl).href; } catch { return null; } })();
+            if (fullPdfUrl) {
+              log("No JSON flags found, trying PDF fallback:", fullPdfUrl);
+              const pdfText = await extractPdfText(ctx, fullPdfUrl);
+              if (pdfText) {
+                strategyFlagEvents = parseFlagsAnalysisPdfText(pdfText, log);
+                log(`PDF flags fallback: got ${strategyFlagEvents.length} flag events`);
+              }
+            }
+          }
+        }
+
+        // Last resort: the time cards' FLAG_AT_FL column
+        if (strategyFlagEvents.length === 0 && timeCardFlagEvents.length > 0) {
+          strategyFlagEvents = timeCardFlagEvents;
+          log(`Flags from time cards (FLAG_AT_FL): ${strategyFlagEvents.length} flag events`);
+        }
+
+        const { stints: baseStrategyStints, pitStops: baseStrategyPits } = deriveStrategyRowsFromTimeCard(
+          timeCardLapsByCar,
+          driverMap,
+          strategyFlagEvents
+        );
+
+        // Derive flag segments for the timeline visualization
+        const maxElapsed = Math.max(...Array.from(timeCardLapsByCar.values()).flatMap(laps => laps.map(l => l.elapsedSec)), 0);
+        const flagSegments = deriveFlagSegments(strategyFlagEvents, maxElapsed);
+
+        if (parentSessionId) {
+          await replaceStrategyRowsForSession(adminClient, parentSessionId, baseStrategyStints, baseStrategyPits, log);
+          // Persist flag segments for parent
+          await adminClient.from("v2_flag_segments").delete().eq("session_id", parentSessionId);
+          if (flagSegments.length > 0) {
+            await insertRowsInChunks(adminClient, "v2_flag_segments", flagSegments.map(s => ({ ...s, session_id: parentSessionId })));
+          }
+          log(`Flag segments saved for parent ${parentSessionId}: ${flagSegments.length} segments`);
+
+          // Persist per-lap timing data for Class Time Delta chart
+          const lapTimeRows: any[] = [];
+          for (const [carNumber, laps] of timeCardLapsByCar) {
+            for (const lap of laps) {
+              lapTimeRows.push({
+                session_id: parentSessionId,
+                car_number: carNumber,
+                lap_number: lap.lapNumber ?? 0,
+                elapsed: round3(lap.elapsedSec),
+              });
+            }
+          }
+          if (lapTimeRows.length > 0) {
+            await adminClient.from("v2_lap_times").delete().eq("session_id", parentSessionId);
+            await insertRowsInChunks(adminClient, "v2_lap_times", lapTimeRows);
+            log(`Lap times saved for parent ${parentSessionId}: ${lapTimeRows.length} rows`);
+          }
+        }
+
+        for (const [hourNumber, sessionId] of hourSessionIdByHour.entries()) {
+          const hourStrategy = bucketStrategyRowsForHour(baseStrategyStints, baseStrategyPits, hourNumber);
+          await replaceStrategyRowsForSession(adminClient, sessionId, hourStrategy.stints, hourStrategy.pitStops, log);
+          // Clip flag segments for this hour
+          const hStart = (hourNumber - 1) * 3600;
+          const hEnd = hStart + 3600;
+          const hourFlags = flagSegments
+            .filter(s => s.end_elapsed > hStart && s.start_elapsed < hEnd)
+            .map(s => ({ flag_state: s.flag_state, start_elapsed: round3(Math.max(s.start_elapsed, hStart)), end_elapsed: round3(Math.min(s.end_elapsed, hEnd)), session_id: sessionId }));
+          await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+          if (hourFlags.length > 0) await insertRowsInChunks(adminClient, "v2_flag_segments", hourFlags);
+        }
+      } catch (strategyErr) {
+        logError("Strategy derivation failed:", strategyErr);
+      }
+    } else {
+      log("Strategy derivation skipped: no Time Card lap telemetry");
+    }
+
+    // Note: Step 5 (updating parent race driver_ids) removed.
+    // The parent endurance_race session now stores one row per driver in the car,
+    // so there's no need to overwrite them with the final hour's driver.
+  } else {
+    // Standard (non-endurance) flow
+    // Collect Time Card CSV links matching this series for lap timing data
+    const seriesTimeCardLinks = allTimeCardLinks.filter(l => matchesSeriesFolder(l));
+    log(`Non-endurance: found ${seriesTimeCardLinks.length} Time Card CSV links for this series`);
+
+    for (const f of fetchedResults) {
+      const sessionData = f.data.session || {};
+      const sessionName = sessionData.session_name || "Unknown Session";
+      const sessionInfo = detectSessionType(sessionName, sessionData.session_type || "");
+      if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
+      const entries = f.data.classification || [];
+      if (entries.length === 0) continue;
+      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
+      const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
+      if (!sessionId) continue;
+      await insertResults(sessionId, entries, sessionInfo.type, false, undefined, undefined, sessionInfo.name);
+
+      // Process weather for this session
+      const weatherUrl = weatherUrlForSession(f.url);
+      if (weatherUrl) await processImWeather(sessionId, weatherUrl);
+
+      // Process Race Control (JSON first, PDF fallback)
+      const flagsUrl = flagsUrlForSession(f.url);
+      if (flagsUrl) {
+        await processRaceControl(sessionId, flagsUrl);
+      } else {
+        const pdfUrl = flagsPdfUrlForSession(f.url);
+        if (pdfUrl) {
+          const fullPdfUrl = (() => { try { return new URL(pdfUrl, baseUrl).href; } catch { return null; } })();
+          if (fullPdfUrl) {
+            log("No JSON flags, trying PDF fallback for non-endurance session");
+            const pdfText = await extractPdfText(ctx, fullPdfUrl);
+            if (pdfText) {
+              const pdfFlagEvents = parseFlagsAnalysisPdfText(pdfText, log);
+              if (pdfFlagEvents.length > 0) {
+                const maxEl = Math.max(...pdfFlagEvents.map(e => e.elapsedSec), 3600);
+                const segments = deriveFlagSegments(pdfFlagEvents, maxEl);
+                await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+                if (segments.length > 0) {
+                  await insertRowsInChunks(adminClient, "v2_flag_segments", segments.map(s => ({ ...s, session_id: sessionId })));
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // ── Lap timing data for non-endurance race sessions ──
+      const isRaceSession = sessionInfo.type === "race" || sessionInfo.type === "sprint_race";
+      if (isRaceSession && seriesTimeCardLinks.length > 0) {
+        // Find Time Card CSV in the same session folder as the results JSON
+        const resultsFolder = decodeURIComponent(f.url).replace(/[^/]*$/, "");
+        const matchingTC = seriesTimeCardLinks.find(tcLink => {
+          const tcDecoded = decodeURIComponent(tcLink);
+          const tcFolder = tcDecoded.replace(/[^/]*$/, "");
+          // Check if both files are in the same session folder or parent folder
+          return resultsFolder.includes(tcFolder) || tcFolder.includes(resultsFolder) ||
+            // Also try matching by session timestamp
+            (() => {
+              const resultTs = resultsFolder.match(/\/(\d{12})_[^/]+\//);
+              const tcTs = tcDecoded.match(/\/(\d{12})_[^/]+\//);
+              return resultTs && tcTs && resultTs[1] === tcTs[1];
+            })();
+        });
+
+        if (matchingTC) {
+          const tcUrl = (() => { try { return new URL(matchingTC, baseUrl).href; } catch { return null; } })();
+          if (tcUrl) {
+            log(`Fetching Time Card CSV for ${sessionInfo.name}:`, tcUrl);
+            try {
+              const tcResp = await fetchWithRetry(ctx, tcUrl);
+              if (tcResp.ok) {
+                const csvText = await tcResp.text();
+                const lapsByCar = parseTimeCardLaps(csvText, log);
+                log(`Time Card parsed for ${sessionInfo.name}: ${lapsByCar.size} cars`);
+
+                if (lapsByCar.size > 0) {
+                  // Insert lap times into v2_lap_times
+                  const lapTimeRows: any[] = [];
+                  for (const [carNumber, laps] of lapsByCar) {
+                    for (const lap of laps) {
+                      lapTimeRows.push({
+                        session_id: sessionId,
+                        car_number: carNumber,
+                        lap_number: lap.lapNumber ?? 0,
+                        elapsed: round3(lap.elapsedSec),
+                      });
+                    }
+                  }
+                  if (lapTimeRows.length > 0) {
+                    await adminClient.from("v2_lap_times").delete().eq("session_id", sessionId);
+                    await insertRowsInChunks(adminClient, "v2_lap_times", lapTimeRows);
+                    log(`Lap times saved for ${sessionInfo.name}: ${lapTimeRows.length} rows`);
+                  }
+
+                  // Derive flag segments from Flags Analysis for visualization overlays
+                  let strategyFlagEvents: StrategyFlagEvent[] = [];
+                  const sessionFlagsUrl = flagsUrlForSession(f.url);
+                  if (sessionFlagsUrl) {
+                    const fullFlagsUrl = (() => { try { return new URL(sessionFlagsUrl, baseUrl).href; } catch { return null; } })();
+                    if (fullFlagsUrl) {
+                      const flagsResp = await fetchWithRetry(ctx, fullFlagsUrl);
+                      if (flagsResp.ok) {
+                        const flagsData = await flagsResp.json();
+                        strategyFlagEvents = parseStrategyFlagEvents(flagsData);
+                      }
+                    }
+                  }
+                  // PDF fallback for flag segments
+                  if (strategyFlagEvents.length === 0) {
+                    const sessionPdfUrl = flagsPdfUrlForSession(f.url);
+                    if (sessionPdfUrl) {
+                      const fullPdfUrl = (() => { try { return new URL(sessionPdfUrl, baseUrl).href; } catch { return null; } })();
+                      if (fullPdfUrl) {
+                        log("Trying PDF fallback for flag segments:", fullPdfUrl);
+                        const pdfText = await extractPdfText(ctx, fullPdfUrl);
+                        if (pdfText) {
+                          strategyFlagEvents = parseFlagsAnalysisPdfText(pdfText, log);
+                        }
+                      }
+                    }
+                  }
+                  // Last resort: the time cards' FLAG_AT_FL column
+                  if (strategyFlagEvents.length === 0) {
+                    strategyFlagEvents = parseTimeCardFlagEvents(csvText);
+                    if (strategyFlagEvents.length > 0) log(`Flags from time cards (FLAG_AT_FL) for ${sessionInfo.name}: ${strategyFlagEvents.length} flag events`);
+                  }
+
+                  // Persist flag segments
+                  if (strategyFlagEvents.length > 0) {
+                    const maxElapsed = Math.max(...Array.from(lapsByCar.values()).flatMap(laps => laps.map(l => l.elapsedSec)), 0);
+                    const flagSegments = deriveFlagSegments(strategyFlagEvents, maxElapsed);
+                    await adminClient.from("v2_flag_segments").delete().eq("session_id", sessionId);
+                    if (flagSegments.length > 0) {
+                      await insertRowsInChunks(adminClient, "v2_flag_segments", flagSegments.map(s => ({ ...s, session_id: sessionId })));
+                    }
+                    log(`Flag segments saved for ${sessionInfo.name}: ${flagSegments.length} segments`);
+                  }
+
+                  // Stints and pit stops from the same time cards (as for endurance races)
+                  const strategy = deriveStrategyRowsFromTimeCard(lapsByCar, driverMap, strategyFlagEvents);
+                  await replaceStrategyRowsForSession(adminClient, sessionId, strategy.stints, strategy.pitStops, log);
+                }
+              }
+            } catch (err) {
+              logError(`Failed to process Time Card for ${sessionInfo.name}:`, err);
+            }
+          }
+        } else {
+          log(`No matching Time Card CSV found for ${sessionInfo.name}`);
+        }
+      }
+    }
+  }
+
+  return { ...summary, success: true };
+}

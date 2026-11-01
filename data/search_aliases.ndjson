@@ -1,0 +1,46 @@
+{"id":"01962bd1-7c94-48fd-a912-d4805aeacab7","alias":"Alpine Renault","canonical":"48dee9b7-e511-43d5-b775-779c9555bf8c","entity_type":"team"}
+{"id":"07122a43-4400-4200-bc75-ee3b3c594d7a","alias":"NASCAR","canonical":"NASCAR Cup Series","entity_type":"series"}
+{"id":"09841e4b-18bc-4f21-9961-62455e69db18","alias":"Robert Michaelian","canonical":"cb3c614b-62a0-44ef-8d9f-3364c92d8128","entity_type":"driver"}
+{"id":"0cdb4074-3e66-49c2-a35f-2ae08d96b294","alias":"McLaren Mercedes","canonical":"290f24b1-d2f0-4eb6-bdb7-92dbd20d4fe7","entity_type":"team"}
+{"id":"1600b76e-52f3-4a87-af5c-5b79b3d737ea","alias":"Aston Martin Mercedes","canonical":"b71f56b6-d88e-4e9a-9372-74a7d9f76911","entity_type":"team"}
+{"id":"1e579e71-b1a7-4ce3-a9ac-f507a6557579","alias":"Bathurst","canonical":"Mount Panorama Circuit","entity_type":"circuit"}
+{"id":"2831e82c-f94f-499d-9f68-a680ab73733c","alias":"FastMD with Remstar","canonical":"b91c9fc4-4143-403a-8382-3fff47d597b2","entity_type":"team"}
+{"id":"2baca0e7-0206-46e0-9247-25f92f5e5333","alias":"Monza","canonical":"Autodromo Nazionale Monza","entity_type":"circuit"}
+{"id":"36e7d0c1-a565-49cf-84df-df9754bdc5f2","alias":"AlphaTauri RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
+{"id":"37413705-0b29-42ad-8bcc-15d9efc7fd58","alias":"Albert Costa Balboa","canonical":"891152ec-034b-4475-a176-0735543bebe5","entity_type":"driver"}
+{"id":"381197f6-c90f-47f2-aeb5-40c20bba5ca6","alias":"Spa","canonical":"Circuit de Spa-Francorchamps","entity_type":"circuit"}
+{"id":"3b142a8e-db04-42ff-a1b2-c66a13bd261d","alias":"Red Bull Racing RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
+{"id":"3fd75071-4b88-47fd-b8c3-3554316e2e63","alias":"IndyCar","canonical":"IndyCar Series","entity_type":"series"}
+{"id":"41795e72-33b1-4afb-ad4c-b137297dffb0","alias":"Red Bull Racing Honda RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
+{"id":"4408dbc3-eccb-4d76-b532-383dfc715521","alias":"Le Mans","canonical":"24 Hours of Le Mans","entity_type":"event"}
+{"id":"507b2641-e7be-4cb4-9bc0-1eb0ca810374","alias":"F4","canonical":"Formula 4","entity_type":"series"}
+{"id":"599f5e1e-4a17-4f58-8902-01ee98425525","alias":"Saito Motorsport Group","canonical":"95676562-b015-4d9a-9aa2-43276b824d3d","entity_type":"team"}
+{"id":"5a2e380c-4875-4a97-9473-929dbabc5baf","alias":"Haas Ferrari","canonical":"fa840789-c223-4e17-9683-a0f6e66ce7a0","entity_type":"team"}
+{"id":"5f5340e5-25d2-47bb-8ca1-818ec1259db0","alias":"Indy 500","canonical":"Indianapolis 500","entity_type":"event"}
+{"id":"6804167e-1dc0-48d6-bde8-38272b2fc5f8","alias":"Alfa Romeo Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
+{"id":"69c1f981-8b52-43ca-8258-5ffbe11acfa6","alias":"Eduardo Barrichello","canonical":"929f8d42-75b5-4667-b34c-93f66bcc43e7","entity_type":"driver"}
+{"id":"762c6cf2-3487-46c0-9392-84bf7448cb2f","alias":"IMSA","canonical":"IMSA SportsCar Championship","entity_type":"series"}
+{"id":"778fdf6e-0b7c-416d-8a74-b4936e840a57","alias":"Zachary Veach","canonical":"a205162a-8ef8-4f7e-acdc-3aaf15edb984","entity_type":"driver"}
+{"id":"7cb083f3-aa9b-4c75-a4de-0091256948b8","alias":"Ligier LMP2","canonical":"c42b4659-c5e5-41da-b4ef-67db3819909b","entity_type":"car"}
+{"id":"7f17a8da-eae6-4c8f-8589-020098ce02ff","alias":"Turner Motorpsort","canonical":"fad258bc-ecd9-4e1c-ad1f-6168c0297564","entity_type":"team"}
+{"id":"82c20884-91f8-4d24-aa9c-d3a92be5297e","alias":"Kimi Antonelli","canonical":"17f22941-9dee-4d47-92d4-48904435d66a","entity_type":"driver"}
+{"id":"8aa3902a-cd6a-43ac-8d5c-c3ee77c87913","alias":"F1","canonical":"Formula 1","entity_type":"series"}
+{"id":"9027c00f-edaa-4645-a1bd-468aa3ec263e","alias":"F2","canonical":"Formula 2","entity_type":"series"}
+{"id":"a137fbc5-de2e-4424-bae2-ca89c5044e23","alias":"Silverstone","canonical":"Silverstone Circuit","entity_type":"circuit"}
+{"id":"b17ef47e-b4a1-4d4f-8edc-70d0d86a7865","alias":"LMH","canonical":"Le Mans Hypercar","entity_type":"car"}
+{"id":"b2626590-29f2-4a71-b199-1dd536031e96","alias":"Alfa Romeo Racing Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
+{"id":"c1f9e1e6-37fb-4a64-9a2b-0c80eed80cd5","alias":"Daytona","canonical":"Rolex 24 At Daytona","entity_type":"event"}
+{"id":"c4cff68f-d0fd-4c4d-8558-daa230631663","alias":"Ferdinand Habsburg-Lothringen","canonical":"a4b20873-9572-4f83-bbbf-65b994c77592","entity_type":"driver"}
+{"id":"c57147e2-80a5-4fbf-a30b-77698ed1417d","alias":"WEC","canonical":"World Endurance Championship","entity_type":"series"}
+{"id":"d0aa2d5c-672e-41f8-a505-7dcd76b0cb8f","alias":"Nurburgring","canonical":"Nürburgring","entity_type":"circuit"}
+{"id":"d161534d-da1e-44fa-b70c-10f43d14c644","alias":"F3","canonical":"Formula 3","entity_type":"series"}
+{"id":"d16a5610-3eae-4e45-8c87-5ae54715ed88","alias":"Aston Martin Aramco Mercedes","canonical":"b71f56b6-d88e-4e9a-9372-74a7d9f76911","entity_type":"team"}
+{"id":"d4bb572e-5a98-442d-a26e-a13ed516309a","alias":"Williams Mercedes","canonical":"761d041f-f3b7-4fbe-b191-1b5664d8f30e","entity_type":"team"}
+{"id":"d5122043-4829-4d80-b4a1-9b82e4aa4276","alias":"AlphaTauri Honda RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
+{"id":"d521d057-4f04-4f9c-ac4e-b525e77e5955","alias":"GT4","canonical":"GT4","entity_type":"car"}
+{"id":"d5d56d7b-000d-4e53-b101-c24749300b8c","alias":"GT3","canonical":"GT World Challenge","entity_type":"series"}
+{"id":"e144bcb4-0d48-4f1f-82bc-3c0dc1cafa7a","alias":"Kick Sauber Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
+{"id":"eed26529-a3d3-45f6-8584-23352079ae81","alias":"RB Honda RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
+{"id":"f36e7660-79be-4aa7-9213-b37aaa474091","alias":"Rafa Martinez","canonical":"a83ddf9c-3444-4015-ae34-0301470d83cb","entity_type":"driver"}
+{"id":"f9072a64-698e-4a21-a9ce-1e935f01a353","alias":"LMDh","canonical":"LMDh","entity_type":"car"}
+{"id":"feb2744f-ed7f-43b8-8e25-31218d93133f","alias":"DTM","canonical":"Deutsche Tourenwagen Masters","entity_type":"series"}

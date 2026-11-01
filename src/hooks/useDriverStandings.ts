@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { computeDriverStandings } from "@/lib/standings";
+import { fetchSeasonStandingsInput } from "@/lib/standings-data";
 
 export interface StandingEntry {
   carNumber: string;
@@ -35,10 +37,11 @@ export interface DriverStandingsResult {
 }
 
 /**
- * Hook that computes championship standings for a driver across all series/seasons
- * they've participated in, based on points from race, qualifying, and practice results.
- * 
- * For endurance racing, all drivers sharing a car_number in a season get the same points total.
+ * Hook that computes the drivers' championship standing for a driver across all
+ * series/seasons they've scored in, from stored race and qualifying points.
+ * Driver points follow IMSA's rules (see src/lib/standings.ts): each driver
+ * earns their car's points, qualifying points go to every driver of the car,
+ * a cross-entered driver scores only for their regular car, ties use countback.
  */
 export function useDriverStandings(driverId: string | undefined): DriverStandingsResult {
   const [seasons, setSeasons] = useState<StandingsSeason[]>([]);
@@ -152,7 +155,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
 
           // Fetch classes for multiclass seasons
           const multiclassIds = seasonsData.filter((s: any) => s.is_multiclass).map((s: any) => s.id);
-          let classMap: Record<string, { id: string; name: string }[]> = {};
+          const classMap: Record<string, { id: string; name: string }[]> = {};
           if (multiclassIds.length > 0) {
             const { data: classes } = await supabase
               .from("v2_season_classes")
@@ -249,152 +252,45 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
     })();
   }, [driverId]);
 
-  // Step 2: Compute standings for the selected season
+  // Step 2: Drivers' standings for the selected season (rules in src/lib/standings.ts)
   useEffect(() => {
     if (!selectedSeasonId || !driverId) return;
+    let cancelled = false;
     (async () => {
-      // Get all events for this season
-      const { data: seasonEvents } = await supabase
-        .from("v2_events")
-        .select("id")
-        .eq("season_id", selectedSeasonId);
+      try {
+        const input = await fetchSeasonStandingsInput(selectedSeasonId);
+        const all = computeDriverStandings(input.sessions, input.rows);
+        if (cancelled) return;
 
-      if (!seasonEvents || seasonEvents.length === 0) {
-        setStandings([]);
-        return;
+        // The class this driver scored most in (a driver can score in two classes)
+        const mine = all.filter((d) => d.driverId === driverId).sort((a, b) => b.totalPoints - a.totalPoints);
+        const season = seasons.find((s) => s.seasonId === selectedSeasonId);
+        let cls = selectedClass;
+        if (season?.isMulticlass && (!cls || !all.some((d) => d.className === cls))) {
+          cls = mine[0]?.className || null;
+          if (cls && cls !== selectedClass) setSelectedClass(cls);
+        }
+        const inClass = season?.isMulticlass && cls ? all.filter((d) => d.className === cls) : all;
+
+        const standingsResult: StandingEntry[] = inClass.map((d) => ({
+          carNumber: d.carNumbers[0] || "",
+          driverIds: [d.driverId],
+          driverNames: [input.drivers.get(d.driverId)?.name || ""].filter(Boolean),
+          teamName: d.teamId ? input.teams.get(d.teamId) || null : null,
+          teamId: d.teamId,
+          totalPoints: d.totalPoints,
+          position: d.position,
+        }));
+        setStandings(standingsResult);
+        setTotalCarsCount(standingsResult.length);
+      } catch (err) {
+        console.error("Driver standings failed", err);
+        if (!cancelled) setStandings([]);
       }
-
-      const evtIds = seasonEvents.map((e) => e.id);
-
-      // Get all sessions (excluding hour sub-sessions for endurance)
-      const { data: sessions } = await supabase
-        .from("v2_sessions")
-        .select("id, parent_session_id")
-        .in("event_id", evtIds);
-
-      if (!sessions || sessions.length === 0) {
-        setStandings([]);
-        return;
-      }
-
-      // Only use parent-level sessions (no sub-sessions)
-      const sessIds = sessions.filter((s) => !s.parent_session_id).map((s) => s.id);
-
-      // Fetch all results with points
-      const [{ data: raceResults }, { data: qualResults }, { data: pracResults }] = await Promise.all([
-        supabase
-          .from("v2_race_results" as any)
-          .select("car_number, driver_id, points, extra_data, session_id, v2_drivers(full_name), v2_teams(id, full_name)")
-          .in("session_id", sessIds),
-        supabase
-          .from("v2_qualifying_results" as any)
-          .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-          .in("session_id", sessIds),
-        supabase
-          .from("v2_practice_results" as any)
-          .select("car_number, driver_id, points, extra_data, session_id, v2_drivers(full_name), v2_teams(id, full_name)")
-          .in("session_id", sessIds),
-      ]);
-
-      const allResults = [
-        ...((raceResults || []) as any[]),
-        ...((qualResults || []) as any[]),
-        ...((pracResults || []) as any[]),
-      ];
-
-      // Group by car_number, summing points
-      const carMap = new Map<
-        string,
-        {
-          carNumber: string;
-          driverIds: Set<string>;
-          driverNames: Set<string>;
-          teamName: string | null;
-          teamId: string | null;
-          totalPoints: number;
-          className: string | null;
-        }
-      >();
-
-      // Track which (car_number, session_id) combos we've already counted points for
-      const countedPoints = new Set<string>();
-
-      for (const r of allResults) {
-        if (!r.car_number) continue;
-        const pts = r.points != null ? Number(r.points) : 0;
-        const className = r.extra_data?.Class || r.extra_data?.class || null;
-
-        if (!carMap.has(r.car_number)) {
-          carMap.set(r.car_number, {
-            carNumber: r.car_number,
-            driverIds: new Set(),
-            driverNames: new Set(),
-            teamName: r.v2_teams?.full_name || null,
-            teamId: r.v2_teams?.id || null,
-            totalPoints: 0,
-            className,
-          });
-        }
-
-        const entry = carMap.get(r.car_number)!;
-
-        // Only count points once per car per session (endurance cars have multiple driver rows)
-        const pointsKey = `${r.car_number}|${r.session_id}`;
-        if (pts > 0 && !countedPoints.has(pointsKey)) {
-          entry.totalPoints += pts;
-          countedPoints.add(pointsKey);
-        }
-
-        if (r.driver_id) entry.driverIds.add(r.driver_id);
-        if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
-        if (!entry.teamName && r.v2_teams?.full_name) {
-          entry.teamName = r.v2_teams.full_name;
-          entry.teamId = r.v2_teams.id;
-        }
-        if (!entry.className && className) entry.className = className;
-      }
-
-      // Filter by class if multiclass and class selected
-      let entries = [...carMap.values()];
-      
-      // Auto-detect which class the driver belongs to (for multiclass)
-      const season = seasons.find((s) => s.seasonId === selectedSeasonId);
-      if (season?.isMulticlass) {
-        // Find which class this driver's car is in
-        const driverCar = entries.find((e) => e.driverIds.has(driverId));
-        if (driverCar?.className && !selectedClass) {
-          setSelectedClass(driverCar.className);
-        }
-        
-        const filterClass = selectedClass || driverCar?.className;
-        if (filterClass) {
-          entries = entries.filter((e) => e.className === filterClass);
-        }
-      }
-
-      // Count total unique cars (including those with 0 points) for the denominator
-      const totalCarsInSeason = [...carMap.values()].length;
-
-      // Filter to only entries with points > 0 for ranking
-      entries = entries.filter((e) => e.totalPoints > 0);
-
-      // Sort by total points desc
-      entries.sort((a, b) => b.totalPoints - a.totalPoints);
-
-      // Assign positions
-      const standingsResult: StandingEntry[] = entries.map((e, i) => ({
-        carNumber: e.carNumber,
-        driverIds: [...e.driverIds],
-        driverNames: [...e.driverNames],
-        teamName: e.teamName,
-        teamId: e.teamId,
-        totalPoints: e.totalPoints,
-        position: i + 1,
-      }));
-
-      setStandings(standingsResult);
-      setTotalCarsCount(totalCarsInSeason);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSeasonId, selectedClass, driverId, seasons]);
 
   // Computed values for this driver

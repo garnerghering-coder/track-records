@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { CHART_FONT, chip, segItem, segWrap, useChartTheme } from "@/components/event-ui";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -28,10 +30,7 @@ interface CarMeta {
 
 const DEFAULT_CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const DEFAULT_CLASS_COLORS: Record<string, string> = {
-  GTP: "#e63946", GTDPRO: "#457b9d", GTD: "#2a9d8f",
-  LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
-};
+const DEFAULT_CLASS_COLORS: Record<string, string> = SHARED_CLASS_COLORS;
 
 const INDIVIDUAL_COLORS = [
   "#3b82f6","#ef4444","#22c55e","#f59e0b","#8b5cf6","#ec4899","#06b6d4",
@@ -41,7 +40,7 @@ const INDIVIDUAL_COLORS = [
 ];
 
 const FLAG_COLORS: Record<string, string> = {
-  GREEN: "rgba(34, 197, 94, 0.08)", YELLOW: "rgba(234, 179, 8, 0.12)",
+  GREEN: "rgba(34, 197, 94, 0.035)", YELLOW: "rgba(234, 179, 8, 0.12)",
   FCY: "rgba(251, 146, 60, 0.12)", RED: "rgba(239, 68, 68, 0.12)",
   SC: "rgba(251, 146, 60, 0.12)",
 };
@@ -54,6 +53,23 @@ function formatElapsed(seconds: number): string {
   const s = Math.floor(seconds % 60);
   if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** Smallest step from `steps` that is >= raw (falls back to the largest) */
+function niceStep(raw: number, steps: number[]): number {
+  return steps.find((s) => s >= raw) ?? steps[steps.length - 1];
+}
+
+function formatDelta(d: number): string {
+  if (Math.abs(d) < 60) return `${d}s`;
+  if (d >= 3600) {
+    const h = Math.floor(d / 3600);
+    const mm = Math.round((d % 3600) / 60);
+    return mm ? `${h}h${mm.toString().padStart(2, "0")}` : `${h}h`;
+  }
+  const m = Math.floor(d / 60);
+  const s = Math.round(d % 60);
+  return s ? `${m}m${s.toString().padStart(2, "0")}` : `${m}m`;
 }
 
 function shadeColor(hex: string, index: number, total: number): string {
@@ -88,6 +104,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPx, setDragStartPx] = useState<{ x: number; y: number } | null>(null);
   const [dragEndPx, setDragEndPx] = useState<{ x: number; y: number } | null>(null);
+  const theme = useChartTheme();
 
   // ── Data fetching ─────────────────────────────────────────────
 
@@ -408,9 +425,9 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
     }
 
     // ── Grid lines (Y axis) ──
-    ctx.strokeStyle = "rgba(107, 114, 128, 0.15)";
-    ctx.lineWidth = 0.5;
-    const yTickInterval = deltaRange > 300 ? 60 : deltaRange > 60 ? 10 : deltaRange > 20 ? 5 : 1;
+    ctx.strokeStyle = theme.a("--muted-foreground", theme.dark ? 0.14 : 0.18);
+    ctx.lineWidth = 1;
+    const yTickInterval = niceStep(deltaRange / Math.max(3, Math.floor(chartH / 44)), [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200]);
     const firstYTick = Math.ceil(visMinDelta / yTickInterval) * yTickInterval;
     for (let d = firstYTick; d <= visMaxDelta; d += yTickInterval) {
       const yy = y(d);
@@ -420,25 +437,25 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       ctx.lineTo(MARGIN.left + chartW, yy);
       ctx.stroke();
       if (!compact) {
-        ctx.fillStyle = "#6b7280";
-        ctx.font = "9px system-ui, sans-serif";
+        ctx.fillStyle = theme.muted;
+        ctx.font = `10px ${CHART_FONT.mono}`;
         ctx.textAlign = "right";
-        ctx.fillText(`${d}s`, MARGIN.left - 6, yy + 3);
+        ctx.fillText(formatDelta(d), MARGIN.left - 6, yy + 3);
       }
     }
 
     // ── Time axis ticks (X) ──
-    const tickInterval = viewDuration > 14400 ? 3600 : viewDuration > 3600 ? 1800 : viewDuration > 600 ? 300 : 60;
+    const tickInterval = niceStep(viewDuration / Math.max(2, Math.floor(chartW / 80)), [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600]);
     const firstTick = Math.ceil(viewRange[0] / tickInterval) * tickInterval;
-    ctx.fillStyle = "#6b7280";
-    ctx.font = "9px system-ui, sans-serif";
+    ctx.fillStyle = theme.muted;
+    ctx.font = `10px ${CHART_FONT.mono}`;
     ctx.textAlign = "center";
     for (let t = firstTick; t <= viewRange[1]; t += tickInterval) {
       const xx = x(t);
       if (xx < MARGIN.left || xx > MARGIN.left + chartW) continue;
       if (!compact) ctx.fillText(formatElapsed(t), xx, height - MARGIN.bottom + 14);
-      ctx.strokeStyle = "rgba(107, 114, 128, 0.1)";
-      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = theme.a("--muted-foreground", theme.dark ? 0.1 : 0.14);
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(xx, MARGIN.top);
       ctx.lineTo(xx, MARGIN.top + chartH);
@@ -447,7 +464,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
 
     // ── Zero baseline ──
     if (visMinDelta <= 0 && visMaxDelta >= 0) {
-      ctx.strokeStyle = "rgba(107, 114, 128, 0.4)";
+      ctx.strokeStyle = theme.a("--muted-foreground", 0.5);
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(MARGIN.left, y(0));
@@ -488,15 +505,15 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
 
     // ── Axis labels ──
     if (!compact) {
-      ctx.fillStyle = "#9ca3af";
-      ctx.font = "10px system-ui, sans-serif";
+      ctx.fillStyle = theme.muted;
+      ctx.font = `600 11px ${CHART_FONT.display}`;
       ctx.textAlign = "center";
-      ctx.fillText("Session Elapsed Time", MARGIN.left + chartW / 2, height - 4);
+      ctx.fillText("SESSION ELAPSED TIME", MARGIN.left + chartW / 2, height - 4);
 
       ctx.save();
       ctx.translate(12, MARGIN.top + chartH / 2);
       ctx.rotate(-Math.PI / 2);
-      ctx.fillText(deltaMode === "leader" ? "Gap to Leader (s)" : "Interval to Car Ahead (s)", 0, 0);
+      ctx.fillText(deltaMode === "leader" ? "GAP TO LEADER (S)" : "INTERVAL TO CAR AHEAD (S)", 0, 0);
       ctx.restore();
     }
 
@@ -506,13 +523,13 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       const x2 = Math.max(dragStartPx.x, dragEndPx.x);
       const y1 = Math.min(dragStartPx.y, dragEndPx.y);
       const y2 = Math.max(dragStartPx.y, dragEndPx.y);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
+      ctx.fillStyle = theme.a("--primary", 0.12);
       ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
-      ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.strokeStyle = theme.a("--primary", 0.6);
       ctx.lineWidth = 1;
       ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
     }
-  }, [deltaSeries, flagSegments, viewRange, viewDuration, compact, isDragging, dragStartPx, dragEndPx, isAllView, carMetaMap, deltaMode, MARGIN, getCarColor, visMinDelta, visMaxDelta, deltaRange]);
+  }, [deltaSeries, flagSegments, viewRange, viewDuration, compact, isDragging, dragStartPx, dragEndPx, isAllView, carMetaMap, deltaMode, MARGIN, getCarColor, visMinDelta, visMaxDelta, deltaRange, theme]);
 
   useEffect(() => {
     drawCanvas();
@@ -653,127 +670,118 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
   // ── Render ────────────────────────────────────────────────────
 
   if (isLoading) {
-    return <div className="text-xs text-muted-foreground p-4">Loading lap data…</div>;
+    return <div className="p-4 text-xs text-muted-foreground">Loading lap data…</div>;
   }
 
   if (lapTimes.length === 0) {
-    return <div className="text-xs text-muted-foreground p-4">No lap timing data available for this session.</div>;
+    return <div className="p-4 text-xs text-muted-foreground">No lap timing data available for this session.</div>;
   }
 
+  const leaderPresets =
+    deltaMode === "leader"
+      ? [
+          { label: "Auto", max: null },
+          { label: "30s", max: 30 },
+          { label: "60s", max: 60 },
+          { label: "3m", max: 180 },
+          { label: "5m", max: 300 },
+        ]
+      : [
+          { label: "Auto", max: null },
+          { label: "5s", max: 5 },
+          { label: "15s", max: 15 },
+          { label: "30s", max: 30 },
+          { label: "60s", max: 60 },
+        ];
+
   return (
-    <div className="space-y-2">
+    <div className={compact ? "space-y-0" : "space-y-3"}>
       {/* Controls */}
       {!compact && (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Class filter with "All" — hide if single class */}
-          {allClasses.length > 1 && (
-          <div className="flex gap-1">
-            <button
-              onClick={() => setSelectedClass(null)}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
-                isAllView
-                  ? "border-primary/30 text-primary bg-primary/10"
-                  : "border-border text-muted-foreground bg-muted/50 hover:text-foreground"
-              }`}
-            >
-              All
-            </button>
-            {allClasses.map(cls => (
-              <button
-                key={cls}
-                onClick={() => setSelectedClass(cls)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all ${
-                  cls === activeClass
-                    ? "border-primary/30 text-primary bg-primary/10"
-                    : "border-border text-muted-foreground bg-muted/50 hover:text-foreground"
-                }`}
-                style={cls === activeClass ? { borderColor: (classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280") + "60", color: classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280" } : {}}
-              >
-                {cls}
-              </button>
-            ))}
-          </div>
-          )}
-
-          {/* Mode toggle */}
-          <div className="flex border border-border rounded overflow-hidden ml-auto">
-            <button
-              onClick={() => setDeltaMode("leader")}
-              className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                deltaMode === "leader" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Gap to Leader
-            </button>
-            <button
-              onClick={() => setDeltaMode("interval")}
-              className={`px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                deltaMode === "interval" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Interval
-            </button>
-          </div>
-
-          {/* Delta range presets */}
-          <div className="flex gap-1 items-center">
-            <span className="text-[10px] text-muted-foreground mr-0.5">Δ Range:</span>
-            {(deltaMode === "leader"
-              ? [
-                  { label: "Auto", max: null },
-                  { label: "30s", max: 30 },
-                  { label: "60s", max: 60 },
-                  { label: "3m", max: 180 },
-                  { label: "5m", max: 300 },
-                ]
-              : [
-                  { label: "Auto", max: null },
-                  { label: "5s", max: 5 },
-                  { label: "15s", max: 15 },
-                  { label: "30s", max: 30 },
-                  { label: "60s", max: 60 },
-                ]
-            ).map(p => {
-              const isActive = p.max === null ? yZoomRange === null : (yZoomRange && yZoomRange[0] === 0 && yZoomRange[1] === p.max);
-              return (
-                <button
-                  key={p.label}
-                  onClick={() => setYZoomRange(p.max === null ? null : [0, p.max])}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
-                    isActive
-                      ? "border-primary/30 text-primary bg-primary/10"
-                      : "border-border text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {p.label}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Class filter with "All" — hide if single class */}
+            {allClasses.length > 1 && (
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setSelectedClass(null)} className={chip(isAllView)}>
+                  All
                 </button>
-              );
-            })}
+                {allClasses.map((cls) => {
+                  const c = classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280";
+                  const active = cls === activeClass;
+                  return (
+                    <button
+                      key={cls}
+                      onClick={() => setSelectedClass(cls)}
+                      className={chip(active)}
+                      style={active ? { backgroundColor: c, borderColor: c, color: "#fff" } : undefined}
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: active ? "#fff" : c }} />
+                      {cls}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Mode toggle */}
+            <div className={`${segWrap} sm:ml-auto`}>
+              <button onClick={() => setDeltaMode("leader")} className={segItem(deltaMode === "leader")}>
+                Gap to leader
+              </button>
+              <button onClick={() => setDeltaMode("interval")} className={segItem(deltaMode === "interval")}>
+                Interval
+              </button>
+            </div>
           </div>
 
-          {/* Time zoom presets + reset */}
-          <div className="flex gap-1">
-            {zoomPresets.map((p, i) => (
-              <button
-                key={i}
-                onClick={() => { setZoomRange(p.range); }}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition-all ${
-                  (p.range === null && zoomRange === null) || (p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1])
-                    ? "border-primary/30 text-primary bg-primary/10"
-                    : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-            {(zoomRange || yZoomRange) && (
-              <button
-                onClick={() => { setZoomRange(null); setYZoomRange(null); }}
-                className="px-2 py-0.5 rounded text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
-              >
-                Reset All
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {/* Delta range presets */}
+            <div className="flex min-w-0 max-w-full items-center gap-2">
+              <span className="label-caps shrink-0">Δ range</span>
+              <div className={segWrap}>
+                {leaderPresets.map((p) => {
+                  const isActive = p.max === null ? yZoomRange === null : !!(yZoomRange && yZoomRange[0] === 0 && yZoomRange[1] === p.max);
+                  return (
+                    <button key={p.label} onClick={() => setYZoomRange(p.max === null ? null : [0, p.max])} className={segItem(isActive)}>
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Time zoom presets + reset */}
+            <div className="flex min-w-0 max-w-full items-center gap-2">
+              <span className="label-caps shrink-0">Window</span>
+              <div className={segWrap}>
+                {zoomPresets.map((p, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      setZoomRange(p.range);
+                    }}
+                    className={segItem(
+                      (p.range === null && zoomRange === null) || !!(p.range && zoomRange && p.range[0] === zoomRange[0] && p.range[1] === zoomRange[1]),
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {(zoomRange || yZoomRange) && (
+                <button
+                  onClick={() => {
+                    setZoomRange(null);
+                    setYZoomRange(null);
+                  }}
+                  className={chip(false)}
+                >
+                  Reset zoom
+                </button>
+              )}
+            </div>
+            <span className="hidden text-[11px] text-muted-foreground lg:inline">Drag on the chart to zoom</span>
           </div>
         </div>
       )}
@@ -792,7 +800,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
         {/* Tooltip */}
         {tooltip && (
           <div
-            className="absolute z-50 pointer-events-none rounded-md border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl"
+            className="pointer-events-none absolute z-50 rounded-sm border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground"
             style={{
               left: tooltip.x + 12,
               top: tooltip.y - 10,
@@ -800,7 +808,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
             }}
           >
             {tooltip.lines.map((line, i) => (
-              <div key={i} className={i === 0 ? "font-medium text-foreground" : "text-muted-foreground"}>
+              <div key={i} className={i === 0 ? "font-semibold text-foreground" : "num text-[11px] text-muted-foreground"}>
                 {line}
               </div>
             ))}
@@ -810,7 +818,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
 
       {/* Legend */}
       {!compact && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3">
           {Array.from(deltaSeries.keys())
             .sort((a, b) => {
               if (isAllView) return (carMetaMap.get(a)?.position || 999) - (carMetaMap.get(b)?.position || 999);
@@ -820,9 +828,9 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
               const meta = carMetaMap.get(cn);
               const color = getCarColor(cn, i, arr.length);
               return (
-                <div key={cn} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: color }} />
-                  <span>#{cn}</span>
+                <div key={cn} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <div className="h-0.5 w-3" style={{ backgroundColor: color }} />
+                  <span className="num text-foreground">#{cn}</span>
                   {meta?.teamName && <span className="opacity-60">{meta.teamName.split(" ").slice(0, 2).join(" ")}</span>}
                 </div>
               );

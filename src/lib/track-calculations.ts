@@ -1,90 +1,47 @@
-export interface TrackMetrics {
-  tcs100: number | null;
-  tcsCategory: string | null;
-  ei: number | null;
-  eiCategory: string | null;
-  csi: number | null;
-  csiCategory: string | null;
-  tdi: number | null;
-  tdiCategory: string | null;
-}
+import {
+  computeTrackFingerprint,
+  csiCategory,
+  eiCategory,
+  tcsCategory,
+  tdiCategory,
+  type TrackFingerprint,
+} from "../../supabase/functions/_shared/fingerprint-math";
 
+/**
+ * Circuit fingerprint shown on circuit, event and session pages.
+ *
+ * The maths and the categories live in supabase/functions/_shared/fingerprint-math.ts (pure,
+ * shared with the driver fingerprint and the Node recalculation scripts; formulas documented there):
+ *  - tcs100 "Circuit Character"  – straights vs corner density (0 tight … 100 power)
+ *  - ei     "Elevation"          – 5 × elevation range (m) / length (km), 100 ⇔ 20 m/km
+ *  - csi    "Corner Severity"    – heavy-braking corners as % of all corners
+ *  - tdi    "Circuit Demand"     – ((100 − tcs) + ei + 1.5 × csi) / 3.5
+ *
+ * Categories are chosen from the value rounded to an integer, because that is what the UI
+ * displays (so "15" is always "Flat", never "Undulating").
+ */
+export type TrackMetrics = TrackFingerprint;
+export { tcsCategory, eiCategory, csiCategory, tdiCategory };
+
+/**
+ * Inputs may be numbers or numeric strings straight from the database (`numeric` columns arrive
+ * as strings). Zero is a real value (a flat circuit has 0 m elevation change), so do NOT pre-coerce
+ * with `x ? Number(x) : null`.
+ */
 export function computeTrackMetrics(
-  lengthKm: number | null | undefined,
-  turns: number | null | undefined,
-  totalStraightLengthKm: number | null | undefined,
-  totalElevationChangeM: number | null | undefined,
-  heavyBrakingCorners: number | null | undefined
+  lengthKm: number | string | null | undefined,
+  turns: number | string | null | undefined,
+  totalStraightLengthKm: number | string | null | undefined,
+  totalElevationChangeM: number | string | null | undefined,
+  heavyBrakingCorners: number | string | null | undefined,
 ): TrackMetrics {
-  const result: TrackMetrics = {
-    tcs100: null, tcsCategory: null,
-    ei: null, eiCategory: null,
-    csi: null, csiCategory: null,
-    tdi: null, tdiCategory: null,
-  };
-
-  const hasBase = lengthKm && lengthKm > 0 && turns != null && turns > 0;
-
-  // TCS requires length, turns, and straight length
-  if (hasBase && totalStraightLengthKm != null && totalStraightLengthKm >= 0) {
-    const td = turns / lengthKm;
-    const sr = totalStraightLengthKm / lengthKm;
-    const tdNorm = Math.max(0, Math.min(1, (td - 1.5) / 4.3));
-    const tcs = sr - tdNorm;
-    result.tcs100 = Math.round(Math.max(0, Math.min(100, ((tcs + 1.0) / 2.0) * 100)) * 10) / 10;
-    result.tcsCategory = tcsCategory(result.tcs100);
-  }
-
-  // EI requires length and elevation
-  if (hasBase && totalElevationChangeM != null && totalElevationChangeM >= 0) {
-    result.ei = Math.round(Math.max(0, Math.min(100, totalElevationChangeM / (lengthKm / 10))) * 10) / 10;
-    result.eiCategory = eiCategory(result.ei);
-  }
-
-  // CSI requires turns and heavy braking corners
-  if (hasBase && heavyBrakingCorners != null && heavyBrakingCorners >= 0) {
-    result.csi = Math.round(Math.max(0, Math.min(100, (heavyBrakingCorners / turns) * 100)) * 10) / 10;
-    result.csiCategory = csiCategory(result.csi);
-  }
-
-  // TDI requires all three sub-scores
-  if (result.tcs100 != null && result.ei != null && result.csi != null) {
-    result.tdi = Math.round(Math.max(0, Math.min(100, ((100 - result.tcs100) + result.ei + (result.csi * 1.5)) / 3.5)) * 10) / 10;
-    result.tdiCategory = tdiCategory(result.tdi);
-  }
-
-  return result;
-}
-
-function tcsCategory(v: number): string {
-  if (v >= 74.0) return "Power Circuit";
-  if (v >= 61.0) return "Speed Circuit";
-  if (v >= 52.0) return "High-Speed Technical";
-  if (v >= 42.0) return "Balanced";
-  if (v >= 28.0) return "Technical";
-  return "Tight & Twisty";
-}
-
-function eiCategory(v: number): string {
-  if (v <= 15) return "Flat";
-  if (v <= 40) return "Undulating";
-  if (v <= 65) return "Hilly";
-  if (v <= 85) return "Highland";
-  return "Mountainous";
-}
-
-function csiCategory(v: number): string {
-  if (v <= 15) return "Flowing";
-  if (v <= 30) return "Rhythmic";
-  if (v <= 50) return "High Braking Density";
-  return "Extreme Braking Density";
-}
-
-function tdiCategory(v: number): string {
-  if (v <= 25) return "Efficient";
-  if (v <= 45) return "Active";
-  if (v <= 70) return "Punishing";
-  return "Relentless";
+  return computeTrackFingerprint({
+    length_km: lengthKm,
+    turns,
+    total_straight_length_km: totalStraightLengthKm,
+    total_elevation_change_m: totalElevationChangeM,
+    heavy_braking_corners: heavyBrakingCorners,
+  });
 }
 
 export function categoryColor(category: string): string {

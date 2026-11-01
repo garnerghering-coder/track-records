@@ -1,591 +1,857 @@
-import { useEffect, useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Trophy, ChevronDown, ChevronUp, FileDown } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, FileDown, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import EventCard from "@/components/EventCard";
-import { useEventPodiums } from "@/hooks/useEventPodiums";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { exportStandingsPdf } from "@/lib/standings-pdf-export";
+import FlagImage from "@/components/FlagImage";
+import { cn } from "@/lib/utils";
+import { useDigests, useEvents, useLayouts, useNames, useSeasons, layoutFor, lastName, cleanName, type EventLite } from "@/site/data";
+import { CarNum, Eyebrow, Note, Page, PosNum, SectionHead, Skeleton, Tabs, TrackMap, Ticker, dateRange } from "@/site/ui";
+import {
+  classColor,
+  crewLastNames,
+  groupByPosition,
+  headline,
+  joinNames,
+  plural,
+  stripYear,
+  todayISO,
+  useChampionship,
+  useSeasonClasses,
+  useSeries,
+  type ChampEntry,
+  type SeasonClass,
+} from "@/site/archive";
 
-interface DisplayEvent {
-  id: string;
-  name: string;
-  circuitName: string | null;
-  country: string | null;
-  date: string | null;
-  endDate: string | null;
-  year: number;
-  seasonId: string;
-}
+type Mode = "drivers" | "teams";
+type Names = ReturnType<typeof useNames>;
 
-interface StandingEntry {
-  carNumber: string;
-  driverNames: string[];
-  driverIds: string[];
-  teamName: string | null;
-  teamId: string | null;
-  totalPoints: number;
-  position: number;
-  className: string | null;
-  wins: number;
-  podiums: number;
-}
+const roundLabel = (e?: EventLite) =>
+  (e?.short_name || e?.circuit?.location?.split(",")[0] || e?.circuit?.name || e?.name || "")
+    .replace(/\s+(GP|\d+H|GT Challenge|Grand Prix)$/i, "")
+    .replace(/^\d{4}\s+/, "");
 
-const PODIUM_HEIGHT: Record<number, string> = {
-  1: "h-28",
-  2: "h-20",
-  3: "h-16",
+/** Chart label: at most ~20 characters, keeping whole names ("Nasr / Heinrich +1"). */
+const shortLabel = (label: string, max = 20) => {
+  if (label.length <= max) return label;
+  const parts = label.split(" / ");
+  if (parts.length > 2) {
+    const two = `${parts.slice(0, 2).join(" / ")} +${parts.length - 2}`;
+    if (two.length <= max) return two;
+  }
+  if (parts.length > 1) {
+    const one = `${parts[0]} +${parts.length - 1}`;
+    if (one.length <= max) return one;
+  }
+  return `${label.slice(0, max - 1).trimEnd()}…`;
 };
 
-const PODIUM_BG: Record<number, string> = {
-  1: "from-yellow-500/30 to-yellow-600/10 border-yellow-500/50",
-  2: "from-gray-300/20 to-gray-400/10 border-gray-400/40",
-  3: "from-amber-700/25 to-amber-800/10 border-amber-700/40",
-};
+/* ═══════════════════════════════════════════════════════════════ */
 
-const PODIUM_TEXT: Record<number, string> = {
-  1: "text-yellow-400",
-  2: "text-gray-300",
-  3: "text-amber-600",
-};
-
-function shortenName(full: string): string {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length <= 1) return full;
-  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
-}
-
-function PodiumDisplay({ standings, className: classLabel }: { standings: StandingEntry[]; className?: string | null }) {
-  const [showFull, setShowFull] = useState(false);
-  const top3 = standings.slice(0, 3);
-  if (top3.length === 0 || top3[0].totalPoints === 0) return null;
-
-  // Reorder for visual: [2nd, 1st, 3rd]
-  const ordered = [top3[1], top3[0], top3[2]].filter(Boolean);
-
-  // If ANY car in the standings has multiple drivers, use car#/team format for ALL
-  const anyMultiDriver = standings.some(s => s.driverNames.length > 1);
-
-  const getPillarLabel = (entry: StandingEntry) => {
-    if (anyMultiDriver) {
-      return { primary: `#${entry.carNumber}`, secondary: entry.teamName };
-    }
-    return { primary: shortenName(entry.driverNames[0] || "Unknown"), secondary: entry.teamName };
-  };
-
-  const getDisplayName = (entry: StandingEntry) => {
-    if (anyMultiDriver) {
-      return `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`;
-    }
-    return entry.driverNames[0] || "Unknown";
-  };
-
-  const hasWinsOrPodiums = standings.some(s => s.wins > 0 || s.podiums > 0);
-
-  return (
-    <div className="mb-4">
-      {classLabel && (
-        <p className="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider mb-2">{classLabel}</p>
-      )}
-      <div className="flex items-end justify-center gap-2">
-        {ordered.map((entry) => {
-          const pos = entry.position;
-          const label = getPillarLabel(entry);
-          return (
-            <div key={entry.carNumber} className="flex flex-col items-center" style={{ minWidth: 100, maxWidth: 140 }}>
-              <div className="text-center mb-1.5">
-                <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                  {label.primary}
-                </span>
-                {label.secondary && (
-                  <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{label.secondary}</p>
-                )}
-                <p className="text-[10px] text-muted-foreground">{entry.totalPoints} pts</p>
-              </div>
-              <div
-                className={`w-full ${PODIUM_HEIGHT[pos] || "h-12"} rounded-t-md border-t border-x bg-gradient-to-b ${PODIUM_BG[pos] || ""} flex items-center justify-center`}
-              >
-                <span className={`font-display text-2xl font-bold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                  P{pos}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Full standings list */}
-      {standings.length > 3 && (
-        <div className="mt-3">
-          <button
-            onClick={() => setShowFull(!showFull)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mx-auto"
-          >
-            {showFull ? "Hide" : "View all"} standings
-            {showFull ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          {showFull && (
-            <div className="mt-2">
-              {/* Header row */}
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-2 py-1 border-b border-border mb-1">
-                <span className="w-6 text-right">#</span>
-                <span className="flex-1 min-w-0">
-                  {anyMultiDriver ? "Car / Team" : "Driver"}
-                </span>
-                {!anyMultiDriver && <span className="shrink-0 text-right">Team</span>}
-                {hasWinsOrPodiums && (
-                  <>
-                    <span className="w-10 text-center shrink-0">Wins</span>
-                    <span className="w-14 text-center shrink-0">Podiums</span>
-                  </>
-                )}
-                <span className="w-14 text-right shrink-0">Pts</span>
-              </div>
-              <div className="space-y-0.5">
-                {standings.map((entry) => (
-                  <div key={entry.carNumber} className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-muted/50">
-                    <span className="font-mono w-6 text-right font-semibold text-muted-foreground shrink-0">{entry.position}.</span>
-                    <span className="flex-1 min-w-0 truncate text-foreground">{getDisplayName(entry)}</span>
-                    {!anyMultiDriver && (
-                      <span className="shrink-0 text-right text-muted-foreground text-[10px]">{entry.teamName || ""}</span>
-                    )}
-                    {hasWinsOrPodiums && (
-                      <>
-                        <span className="font-mono w-10 text-center text-muted-foreground shrink-0">{entry.wins}</span>
-                        <span className="font-mono w-14 text-center text-muted-foreground shrink-0">{entry.podiums}</span>
-                      </>
-                    )}
-                    <span className="font-mono w-14 text-right text-muted-foreground shrink-0">{entry.totalPoints} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StandingsSection({ standings, classes, isMulticlass, year, seasonId, seriesName }: {
-  standings: StandingEntry[];
-  classes: { id: string; name: string }[];
-  isMulticlass: boolean;
-  year: number;
-  seasonId: string;
-  seriesName: string;
-}) {
-  const [exporting, setExporting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [showClassPicker, setShowClassPicker] = useState(false);
-  const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set(classes.map(c => c.name)));
-
-  const handleExport = async (classNames?: string[] | null) => {
-    setShowClassPicker(false);
-    setExporting(true);
-    setProgress(5);
-    try {
-      await exportStandingsPdf({
-        seriesName,
-        year,
-        seasonId,
-        classNames: classNames,
-        onProgress: setProgress,
-      });
-      setProgress(100);
-      setTimeout(() => {
-        setExporting(false);
-        setProgress(0);
-      }, 800);
-    } catch (e: any) {
-      console.error("Standings PDF export failed:", e);
-      setExporting(false);
-      setProgress(0);
-      alert("PDF export failed: " + (e?.message || "Unknown error"));
-    }
-  };
-
-  const toggleClass = (name: string) => {
-    setSelectedClasses(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (selectedClasses.size === classes.length) {
-      setSelectedClasses(new Set());
-    } else {
-      setSelectedClasses(new Set(classes.map(c => c.name)));
-    }
-  };
-
-  return (
-    <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-display text-sm font-semibold text-foreground flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-yellow-500" />
-          {year} Championship Standings
-        </h4>
-        {!exporting && (
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => isMulticlass ? setShowClassPicker(!showClassPicker) : handleExport(null)}
-            >
-              <FileDown className="h-3 w-3" />
-              Export PDF
-            </Button>
-            {showClassPicker && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-3 min-w-[180px]">
-                <div className="flex items-center gap-2 pb-2 mb-2 border-b border-border">
-                  <input
-                    type="checkbox"
-                    checked={selectedClasses.size === classes.length}
-                    onChange={toggleAll}
-                    className="rounded border-border"
-                  />
-                  <span className="text-xs font-semibold text-foreground">Select All</span>
-                </div>
-                {classes.map((cls) => (
-                  <label key={cls.id} className="flex items-center gap-2 py-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedClasses.has(cls.name)}
-                      onChange={() => toggleClass(cls.name)}
-                      className="rounded border-border"
-                    />
-                    <span className="text-xs text-foreground">{cls.name}</span>
-                  </label>
-                ))}
-                <Button
-                  size="sm"
-                  className="w-full mt-2 h-7 text-xs"
-                  disabled={selectedClasses.size === 0}
-                  onClick={() => handleExport([...selectedClasses])}
-                >
-                  Download {selectedClasses.size === classes.length ? "All" : `${selectedClasses.size} class${selectedClasses.size !== 1 ? "es" : ""}`}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      {exporting && (
-        <div className="mb-3 space-y-1">
-          <Progress value={progress} className="h-1.5" />
-          <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}%</p>
-        </div>
-      )}
-      {isMulticlass ? (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {classes.map((cls) => {
-            const classStandings = standings
-              .filter(s => s.className === cls.name)
-              .sort((a, b) => b.totalPoints - a.totalPoints)
-              .map((s, i) => ({ ...s, position: i + 1 }));
-            return (
-              <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
-            );
-          })}
-        </div>
-      ) : (
-        <PodiumDisplay standings={standings} />
-      )}
-    </div>
-  );
-}
-
-function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap, seriesName }: {
-  events: DisplayEvent[];
-  seriesName: string;
-  seasonsGrouped: Record<number, { events: DisplayEvent[]; seasonId: string }>;
-  seasonStandings: Record<string, StandingEntry[]>;
-  seasonClassMap: Record<string, { id: string; name: string }[]>;
-}) {
-  const eventIds = useMemo(() => events.map(e => e.id), [events]);
-  const { podiums } = useEventPodiums(eventIds);
-
-  return (
-    <div className="container py-8">
-      <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events</h2>
-      {events.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No events linked to this series yet.</p>
-      ) : (
-        <div className="space-y-10">
-          {Object.entries(seasonsGrouped).sort(([a], [b]) => Number(b) - Number(a)).map(([year, { events: yearEvents, seasonId }]) => {
-            const standings = seasonStandings[seasonId] || [];
-            const classes = seasonClassMap[seasonId] || [];
-            const isMulticlass = classes.length > 0;
-
-            return (
-              <div key={year}>
-                <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
-
-                {standings.length > 0 && (
-                  <StandingsSection
-                    standings={standings}
-                    classes={classes}
-                    isMulticlass={isMulticlass}
-                    year={Number(year)}
-                    seasonId={seasonId}
-                    seriesName={seriesName}
-                  />
-                )}
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {yearEvents.map(ev => (
-                    <EventCard key={ev.id} event={ev} podium={podiums[ev.id]} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 const SeriesProfile = () => {
-
   const { id } = useParams<{ id: string }>();
-  const [series, setSeries] = useState<any>(null);
-  const [events, setEvents] = useState<DisplayEvent[]>([]);
-  const [seasonStandings, setSeasonStandings] = useState<Record<string, StandingEntry[]>>({});
-  const [seasonClassMap, setSeasonClassMap] = useState<Record<string, { id: string; name: string }[]>>({});
-  const [loading, setLoading] = useState(true);
+  const [params, setParams] = useSearchParams();
+  const series = useSeries();
+  const seasons = useSeasons();
+  const events = useEvents();
+  const digests = useDigests();
+  const layouts = useLayouts();
+  const names = useNames();
+  const seasonClasses = useSeasonClasses();
 
-  useEffect(() => {
-    if (!id) return;
-    const fetchData = async () => {
-      const { data: s } = await supabase.from("v2_series").select("*").eq("id", id).single();
-      setSeries(s);
+  const info = series?.find((s) => s.id === id);
+  const mySeasons = useMemo(() => (seasons || []).filter((s) => s.series.id === id).sort((a, b) => b.year - a.year), [seasons, id]);
+  const yearParam = Number(params.get("season")) || null;
+  const season = mySeasons.find((s) => s.year === yearParam) || mySeasons.find((s) => s.eventCount > 0) || mySeasons[0];
+  const champ = useChampionship(season?.id);
+  const ch = champ.data;
 
-      if (s) {
-        const { data: seasons } = await supabase.from("v2_seasons").select("id, year, is_multiclass").eq("series_id", id);
-        const seasonIds = (seasons || []).map(sn => sn.id);
-        const seasonYearMap = Object.fromEntries((seasons || []).map(sn => [sn.id, sn.year]));
-        const multiclassSeasons = new Set((seasons || []).filter(sn => sn.is_multiclass).map(sn => sn.id));
+  const classesMeta: SeasonClass[] | undefined = season ? seasonClasses?.[season.id] : undefined;
+  const mode: Mode = params.get("mode") === "teams" ? "teams" : "drivers";
+  const classList = ch?.classes || [];
+  const cls = classList.includes(params.get("class") || "") ? params.get("class")! : classList[0] ?? "";
+  const color = classColor(classesMeta, cls);
+  const entries = ch ? (mode === "drivers" ? ch.drivers[cls] : ch.teams[cls]) || [] : [];
 
-        // Fetch classes for multiclass seasons
-        if (multiclassSeasons.size > 0) {
-          const { data: classes } = await supabase
-            .from("v2_season_classes")
-            .select("id, season_id, class_name, sort_order")
-            .in("season_id", [...multiclassSeasons])
-            .order("sort_order");
-          const cMap: Record<string, { id: string; name: string }[]> = {};
-          for (const c of (classes || []) as any[]) {
-            if (!cMap[c.season_id]) cMap[c.season_id] = [];
-            cMap[c.season_id].push({ id: c.id, name: c.class_name });
-          }
-          setSeasonClassMap(cMap);
-        }
+  const setParam = (k: string, v: string | null) => {
+    const next = new URLSearchParams(params);
+    if (v == null) next.delete(k);
+    else next.set(k, v);
+    setParams(next, { replace: true });
+  };
 
-        if (seasonIds.length > 0) {
-          const { data: evts } = await supabase.from("v2_events")
-            .select("id, name, start_date, end_date, season_id, status, v2_circuits(name, country)")
-            .in("season_id", seasonIds)
-            .eq("status", "published" as any)
-            .order("start_date", { ascending: false });
+  const seasonEvents = useMemo(
+    () => (events || []).filter((e) => e.season_id === season?.id).sort((a, b) => (a.start_date || "").localeCompare(b.start_date || "")),
+    [events, season?.id],
+  );
+  const roundEvents = useMemo(() => (ch?.rounds || []).map((rid) => seasonEvents.find((e) => e.id === rid)), [ch, seasonEvents]);
 
-          const mappedEvents = (evts || []).map(e => ({
-            id: e.id,
-            name: e.name,
-            circuitName: e.v2_circuits?.name || null,
-            country: e.v2_circuits?.country || null,
-            date: e.start_date,
-            endDate: e.end_date,
-            year: seasonYearMap[e.season_id] || 0,
-            seasonId: e.season_id,
-          }));
-          setEvents(mappedEvents);
+  const [active, setActive] = useState<number | null>(null);
+  useEffect(() => setActive(null), [cls, mode, season?.id]);
 
-          // Fetch team season aliases for display names
-          const { data: teamSeasonNames } = await supabase
-            .from("v2_team_season_names" as any)
-            .select("team_id, season_id, display_name")
-            .in("season_id", seasonIds);
-          // Build lookup: "teamId|seasonId" -> display_name
-          const teamAliasMap = new Map<string, string>();
-          for (const tsn of (teamSeasonNames || []) as any[]) {
-            teamAliasMap.set(`${tsn.team_id}|${tsn.season_id}`, tsn.display_name);
-          }
+  // A season is over once its year has passed, or once its last round (a
+  // September-or-later finale, e.g. Petit Le Mans) is behind us.
+  const finished = useMemo(() => {
+    if (!season) return false;
+    if (season.year < new Date().getFullYear()) return true;
+    const today = new Date().toISOString().slice(0, 10);
+    const dates = seasonEvents.map((e) => e.end_date || e.start_date || "").filter(Boolean).sort();
+    const last = dates[dates.length - 1];
+    return !!last && last < today && Number(last.slice(5, 7)) >= 9;
+  }, [season, seasonEvents]);
+  const winnersCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of seasonEvents) for (const r of digests?.[e.id]?.races || []) for (const w of r.winners) set.add(`${w.className}|${[...w.driverIds].sort().join(",")}`);
+    return set.size;
+  }, [seasonEvents, digests]);
+  const scoredDrivers = ch ? Object.values(ch.drivers).reduce((n, l) => n + l.length, 0) : 0;
+  const realClasses = classList.filter(Boolean);
+  const scoredRounds = ch
+    ? ch.rounds.filter((_, i) => [...Object.values(ch.drivers), ...Object.values(ch.teams)].some((l) => l.some((e) => e.perRound[i] > 0))).length
+    : undefined;
 
-          // Compute standings per season from points data
-          const standingsMap: Record<string, StandingEntry[]> = {};
-
-          for (const seasonId of seasonIds) {
-            const seasonEvts = mappedEvents.filter(e => e.seasonId === seasonId);
-            if (seasonEvts.length === 0) continue;
-
-            const evtIds = seasonEvts.map(e => e.id);
-
-            // Get sessions with type info for wins/podiums filtering
-            const { data: sessions } = await supabase
-              .from("v2_sessions")
-              .select("id, parent_session_id, session_type, name")
-              .in("event_id", evtIds);
-
-            if (!sessions || sessions.length === 0) continue;
-
-            const parentSessions = sessions.filter(s => !s.parent_session_id);
-            const sessIds = parentSessions.map(s => s.id);
-            if (sessIds.length === 0) continue;
-
-            // Track which sessions are main races (not sprints/quali) for wins/podiums
-            const raceSessionIds = new Set(
-              parentSessions
-                .filter(s => s.session_type === 'race' && !s.name?.toLowerCase().includes('sprint'))
-                .map(s => s.id)
-            );
-
-            // Fetch results with points
-            const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
-              supabase.from("v2_race_results" as any)
-                .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-                .in("session_id", sessIds),
-              supabase.from("v2_qualifying_results" as any)
-                .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-                .in("session_id", sessIds),
-            ]);
-
-            const allResults = [...((raceRes || []) as any[]), ...((qualRes || []) as any[])];
-
-            // Group by car_number
-            const carMap = new Map<string, {
-              carNumber: string;
-              driverIds: Set<string>;
-              driverNames: Set<string>;
-              teamName: string | null;
-              teamId: string | null;
-              totalPoints: number;
-              className: string | null;
-              wins: number;
-              podiums: number;
-            }>();
-
-            // Track which (car_number, session_id) combos we've already counted points/wins for
-            const countedPoints = new Set<string>();
-            const countedWins = new Set<string>();
-
-            for (const r of allResults) {
-              if (!r.car_number) continue;
-              const pts = r.points != null ? Number(r.points) : 0;
-              const className = r.extra_data?.Class || r.extra_data?.class || null;
-              // Use season alias from v2_team_season_names, fallback to full_name
-              const teamId = r.v2_teams?.id || null;
-              const teamDisplayName = (teamId ? teamAliasMap.get(`${teamId}|${seasonId}`) : null) || r.v2_teams?.full_name || null;
-
-              if (!carMap.has(r.car_number)) {
-                carMap.set(r.car_number, {
-                  carNumber: r.car_number,
-                  driverIds: new Set(),
-                  driverNames: new Set(),
-                  teamName: teamDisplayName,
-                  teamId: r.v2_teams?.id || null,
-                  totalPoints: 0,
-                  className,
-                  wins: 0,
-                  podiums: 0,
-                });
-              }
-
-              const entry = carMap.get(r.car_number)!;
-
-              // Only count points once per car per session (endurance cars have multiple driver rows)
-              const pointsKey = `${r.car_number}|${r.session_id}`;
-              if (pts > 0 && !countedPoints.has(pointsKey)) {
-                entry.totalPoints += pts;
-                countedPoints.add(pointsKey);
-              }
-
-              if (r.driver_id) entry.driverIds.add(r.driver_id);
-              if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
-              if (!entry.teamName && teamDisplayName) {
-                entry.teamName = teamDisplayName;
-                entry.teamId = r.v2_teams?.id;
-              }
-              if (!entry.className && className) entry.className = className;
-
-              // Count wins/podiums only from main race sessions, once per car per session
-              const winKey = `${r.car_number}|${r.session_id}`;
-              if (r.position != null && r.session_id && raceSessionIds.has(r.session_id) && !countedWins.has(winKey)) {
-                countedWins.add(winKey);
-                if (r.position === 1) entry.wins++;
-                if (r.position <= 3) entry.podiums++;
-              }
-            }
-
-            const entries = [...carMap.values()].filter(e => e.totalPoints > 0);
-            entries.sort((a, b) => b.totalPoints - a.totalPoints);
-
-            const standings: StandingEntry[] = entries.map((e, i) => ({
-              carNumber: e.carNumber,
-              driverNames: [...e.driverNames],
-              driverIds: [...e.driverIds],
-              teamName: e.teamName,
-              teamId: e.teamId,
-              totalPoints: e.totalPoints,
-              position: i + 1,
-              className: e.className,
-              wins: e.wins,
-              podiums: e.podiums,
-            }));
-
-            if (standings.length > 0) {
-              standingsMap[seasonId] = standings;
-            }
-          }
-
-          setSeasonStandings(standingsMap);
-        }
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, [id]);
-
-  if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
-  if (!series) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Series not found.</p></div></div>;
-
-  // Group by year
-  const seasonsGrouped = events.reduce<Record<number, { events: DisplayEvent[]; seasonId: string }>>((acc, ev) => {
-    if (!acc[ev.year]) acc[ev.year] = { events: [], seasonId: ev.seasonId };
-    acc[ev.year].events.push(ev);
-    return acc;
-  }, {});
+  if (series && !info) {
+    return (
+      <Shell title="Championship not found">
+        <Page className="pt-16">
+          <Note title="We couldn't find that championship.">
+            It may have been renamed or removed.{" "}
+            <Link to="/series" className="underline underline-offset-4">
+              Browse all championships
+            </Link>
+            .
+          </Note>
+        </Page>
+      </Shell>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead
-        title={series.name}
-        description={`Motorsport series profile for ${series.name}. View seasons and events.`}
-        canonical={`/series/${id}`}
-      />
-      <Header />
-      <section className="pt-24 pb-10 bg-card border-b border-border">
-        <div className="container">
-          <Link to="/series" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back to Series
-          </Link>
-          <h1 className="font-display text-3xl font-bold text-foreground">{series.name}</h1>
-          {series.short_name && <p className="mt-1 text-sm text-muted-foreground">{series.short_name}</p>}
+    <Shell title={info ? `${info.name}${season ? ` ${season.year}` : ""} – Standings & points race` : "Championship"} canonical={`/series/${id}`}>
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <Page className="pt-6 sm:pt-10">
+        <Link to="/series" className="group inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink">
+          <ArrowLeft className="h-3.5 w-3.5 transition-transform group-hover:-translate-x-0.5" /> Championships
+        </Link>
+        <div className="mt-6 grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:items-end">
+          <div className="min-w-0">
+            <Eyebrow>
+              <span>Championship</span>
+              {info?.short_name && (
+                <>
+                  <span>·</span>
+                  <span>{info.short_name}</span>
+                </>
+              )}
+            </Eyebrow>
+            {info ? (
+              <h1 className="display mt-4 text-[3rem] leading-[0.92] sm:text-[4.6rem] lg:text-[5.4rem]">
+                {info.name}
+                {season && <span className="ml-3 align-top font-mono text-base tracking-normal text-ink-3 sm:text-lg">{season.year}</span>}
+              </h1>
+            ) : (
+              <Skeleton className="mt-4 h-28 w-full max-w-2xl" />
+            )}
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              {mySeasons.length > 0 && (
+                <Tabs
+                  value={String(season?.year ?? "")}
+                  onChange={(v) => setParams(new URLSearchParams({ season: v, ...(mode === "teams" ? { mode } : {}) }), { replace: true })}
+                  items={mySeasons.map((s) => ({ value: String(s.year), label: <span className="num">{s.year}</span>, disabled: s.eventCount === 0 }))}
+                />
+              )}
+              {info && season && ch && realClasses.length + (classList.includes("") ? 1 : 0) > 0 && (
+                <ExportPdf seriesName={info.name} year={season.year} seasonId={season.id} classes={realClasses} />
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border bg-rule">
+            {[
+              { label: "Rounds scored", value: scoredRounds },
+              { label: realClasses.length > 1 ? "Classes" : "Class", value: ch ? realClasses.length || (classList.length ? 1 : 0) : undefined },
+              { label: "Drivers scored", value: ch ? scoredDrivers : undefined },
+              { label: "Different winners", value: digests && ch ? winnersCount : undefined },
+            ].map((s) => (
+              <div key={s.label} className="bg-sheet px-5 py-5">
+                <div className="eyebrow">{s.label}</div>
+                <div className="num mt-2 text-3xl">{s.value == null ? <Skeleton className="h-8 w-14" /> : <Ticker value={s.value} />}</div>
+              </div>
+            ))}
+          </div>
         </div>
-      </section>
+      </Page>
 
-      <EventsSection events={events} seasonsGrouped={seasonsGrouped} seasonStandings={seasonStandings} seasonClassMap={seasonClassMap} seriesName={series.name} />
+      {/* ── Points race ──────────────────────────────────────── */}
+      <Page className="mt-14 sm:mt-20">
+        {!ch ? (
+          <Skeleton className="h-[540px] rounded-[28px]" />
+        ) : classList.length === 0 ? (
+          <Note title={`No points on the record for ${season?.year ?? "this season"} yet`}>
+            {seasonEvents.length > 0
+              ? "This season's results are in, but no championship points have been published with them. Its rounds are listed below."
+              : "No rounds of this season have been published yet."}
+          </Note>
+        ) : (
+          <section className="rounded-[28px] border bg-sheet p-5 sm:p-8" aria-labelledby="points-race">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0 max-w-2xl">
+                <Eyebrow>
+                  <span id="points-race">The points race</span>
+                  <span>·</span>
+                  <span>{plural(ch.rounds.length, "round")}</span>
+                </Eyebrow>
+                <LeadLine entries={entries} cls={cls} mode={mode} finished={finished} rounds={ch.rounds.length} />
+              </div>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {classList.length > 1 && (
+                  <Tabs
+                    value={cls}
+                    onChange={(v) => setParam("class", v)}
+                    items={classList.map((c) => ({
+                      value: c,
+                      label: (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: classColor(classesMeta, c) }} />
+                          <span className="font-mono text-[12px] uppercase tracking-[0.06em]">{c || "Overall"}</span>
+                        </span>
+                      ),
+                    }))}
+                  />
+                )}
+                <Tabs
+                  value={mode}
+                  onChange={(v) => setParam("mode", v === "teams" ? "teams" : null)}
+                  items={[
+                    { value: "drivers", label: "Drivers" },
+                    { value: "teams", label: "Teams" },
+                  ]}
+                />
+              </div>
+            </div>
+            {ch.rounds.length < 2 && <p className="mt-3 text-sm text-ink-3">One round scored so far: the race takes shape as the season goes on.</p>}
+            <PointsRace
+              key={`${season?.id}|${cls}|${mode}`}
+              groups={groupByPosition(entries).slice(0, 8)}
+              rounds={roundEvents}
+              color={color}
+              mode={mode}
+              names={names}
+              active={active}
+              setActive={setActive}
+            />
+          </section>
+        )}
+      </Page>
+
+      {/* ── Standings ───────────────────────────────────────── */}
+      {ch && classList.length > 0 && (
+        <Page className="mt-20 sm:mt-28">
+          <SectionHead
+            eyebrow={
+              <>
+                {cls && <span>{cls}</span>}
+                {cls && <span>·</span>}
+                <span>After {plural(ch.rounds.length, "round")}</span>
+              </>
+            }
+            title={mode === "drivers" ? <>Drivers&rsquo; standings</> : <>Teams&rsquo; standings</>}
+          />
+          <Standings key={`${season?.id}|${cls}|${mode}`} entries={entries} mode={mode} color={color} names={names} active={active} setActive={setActive} />
+          <p className="mt-4 max-w-2xl text-xs leading-relaxed text-ink-3">
+            Points as published with the official results; ties are split by countback (most wins, then seconds, and so on), and drivers on identical records share a position. Wins and podiums count main races only.
+          </p>
+        </Page>
+      )}
+
+      {/* ── Season strip ────────────────────────────────────── */}
+      <Page className="mt-24 sm:mt-32">
+        <SeasonStrip events={seasonEvents} loading={!events} season={season?.year} classes={classesMeta} layouts={layouts} digests={digests} names={names} />
+      </Page>
+    </Shell>
+  );
+};
+
+function Shell({ title, canonical, children }: { title: string; canonical?: string; children: ReactNode }) {
+  return (
+    <div className="min-h-screen">
+      <SEOHead title={title} description="Points race, standings and every round of the season, from official results." canonical={canonical} />
+      <Header />
+      {children}
       <Footer />
     </div>
   );
-};
+}
+
+/* ── Lead sentence ─────────────────────────────────────────────── */
+
+const groupLabel = (entries: ChampEntry[], mode: Mode, names: Names) =>
+  mode === "drivers"
+    ? entries.map((e) => lastName(e.name)).join(" / ")
+    : entries.map((e) => `#${e.carNumbers[0]} ${names?.teams[e.teamId || ""]?.short_name || e.name}`).join(" / ");
+
+function LeadLine({ entries, cls, mode, finished, rounds }: { entries: ChampEntry[]; cls: string; mode: Mode; finished: boolean; rounds: number }) {
+  const groups = groupByPosition(entries);
+  const lead = groups[0];
+  if (!lead) return <p className="display mt-3 text-[1.9rem] leading-[1.08] text-ink-2">No points scored in this class yet.</p>;
+  const next = groups[1];
+  const gap = next ? lead.entries[0].totalPoints - next.entries[0].totalPoints : null;
+  const who = mode === "drivers" ? joinNames(lead.entries.map((e) => cleanName(e.name))) : `The #${lead.entries[0].carNumbers[0]} ${lead.entries[0].name}`;
+  const many = mode === "drivers" && lead.entries.length > 1;
+  const verb = finished ? "won" : many ? "lead" : "leads";
+  return (
+    <p className="display mt-3 text-[1.9rem] leading-[1.08] sm:text-[2.4rem]">
+      {who} {verb}
+      {finished ? (cls ? ` the ${cls} title` : " the title") : cls ? ` ${cls}` : " the championship"}
+      {gap != null && gap > 0 ? (
+        <>
+          {" "}
+          by{" "}
+          <span className="mark whitespace-nowrap">
+            {gap.toLocaleString()} {gap === 1 ? "point" : "points"}
+          </span>
+        </>
+      ) : gap === 0 ? (
+        <> on countback</>
+      ) : null}
+      {finished ? "" : ` after ${rounds} ${rounds === 1 ? "round" : "rounds"}`}.
+    </p>
+  );
+}
+
+/* ── Points race chart ─────────────────────────────────────────── */
+
+function useWidth<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [w, setW] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setW(el.clientWidth);
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w] as const;
+}
+
+function niceStep(max: number, count = 4) {
+  const raw = Math.max(1, max) / count;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const n = raw / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+}
+
+function PointsRace({
+  groups,
+  rounds,
+  color,
+  mode,
+  names,
+  active,
+  setActive,
+}: {
+  groups: { position: number; entries: ChampEntry[] }[];
+  rounds: (EventLite | undefined)[];
+  color: string;
+  mode: Mode;
+  names: Names;
+  active: number | null;
+  setActive: (n: number | null) => void;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [cursor, setCursor] = useState<number | null>(null);
+  const compact = width < 640;
+  const H = compact ? 300 : 440;
+  const pad = { l: compact ? 34 : 44, r: compact ? 12 : 230, t: 18, b: compact ? 30 : 48 };
+  const n = rounds.length;
+  const series = groups.map((g) => ({ ...g, label: groupLabel(g.entries, mode, names), values: [0, ...g.entries[0].cumulative] }));
+  const max = Math.max(1, ...series.map((s) => s.values[s.values.length - 1]));
+  const step = niceStep(max);
+  const yMax = Math.ceil(max / step) * step;
+  const iw = Math.max(10, width - pad.l - pad.r);
+  const ih = H - pad.t - pad.b;
+  const x = (i: number) => pad.l + (n ? (i / n) * iw : 0);
+  const y = (v: number) => pad.t + ih - (v / yMax) * ih;
+  const ticks = Array.from({ length: Math.round(yMax / step) + 1 }, (_, i) => i * step);
+
+  // end labels, pushed apart so they never collide
+  const GAP = 20;
+  const ends = series.map((s, i) => ({ i, y: y(s.values[n]) })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + GAP);
+  for (let k = ends.length - 1; k >= 0; k--) {
+    const limit = k === ends.length - 1 ? pad.t + ih + 8 : ends[k + 1].y - GAP;
+    if (ends[k].y > limit) ends[k].y = limit;
+  }
+  const endY = new Map(ends.map((e) => [e.i, e.y]));
+
+  const onMove = (e: React.PointerEvent<SVGRectElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setCursor(Math.max(1, Math.min(n, Math.round(((e.clientX - r.left) / r.width) * n))));
+  };
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (e.key === "ArrowRight") setCursor((c) => Math.min(n, (c ?? 0) + 1));
+    else if (e.key === "ArrowLeft") setCursor((c) => Math.max(1, (c ?? n + 1) - 1));
+    else if (e.key === "Escape") setCursor(null);
+    else return;
+    e.preventDefault();
+  };
+
+  const hi = active != null ? series.findIndex((s) => s.position === active) : -1;
+  const focusIdx = hi === -1 ? 0 : hi;
+  const strokeFor = (i: number) => (i === focusIdx ? color : "hsl(var(--ink))");
+  const opacityFor = (i: number) => (i === focusIdx ? 1 : hi === -1 ? 0.32 : 0.1);
+  const widthFor = (i: number) => (i === focusIdx ? 3 : 1.5);
+
+  const tip = cursor != null && n > 0 ? series.map((s) => ({ s, v: s.values[cursor], d: s.values[cursor] - s.values[cursor - 1] })).sort((a, b) => b.v - a.v) : null;
+  const tipLeft = cursor != null ? x(cursor) : 0;
+  const flip = tipLeft > width - 290;
+  const labelEvery = Math.max(1, Math.ceil(70 / (iw / Math.max(1, n))));
+  const order = series.map((_, i) => i).reverse().sort((a, b) => (a === focusIdx ? 1 : b === focusIdx ? -1 : 0));
+
+  return (
+    <div className="mt-8">
+      <style>{`@keyframes tr-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}@keyframes tr-fade{from{opacity:0}to{opacity:1}}`}</style>
+      <div
+        ref={ref}
+        className="relative select-none rounded-2xl"
+        tabIndex={0}
+        role="group"
+        aria-label={`Points race over ${n} rounds. Use the left and right arrow keys to step through the rounds.`}
+        onKeyDown={onKey}
+        onBlur={() => setCursor(null)}
+      >
+        {width > 0 ? (
+          <svg width={width} height={H} className="block" aria-hidden>
+            {ticks.map((t) => (
+              <g key={t}>
+                <line x1={pad.l} x2={pad.l + iw} y1={y(t)} y2={y(t)} stroke="hsl(var(--rule))" strokeDasharray={t === 0 ? undefined : "2 4"} />
+                <text x={pad.l - 10} y={y(t)} dy="0.32em" textAnchor="end" className="fill-ink-3 font-mono text-[10.5px]">
+                  {t >= 1000 ? `${(t / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : t}
+                </text>
+              </g>
+            ))}
+            {rounds.map((ev, i) => {
+              const xi = x(i + 1);
+              const show = (i + 1) % labelEvery === 0 || i === n - 1;
+              const on = cursor === i + 1;
+              return (
+                <g key={i}>
+                  <line x1={xi} x2={xi} y1={pad.t} y2={pad.t + ih} stroke={on ? "hsl(var(--ink))" : "hsl(var(--rule))"} strokeOpacity={on ? 0.9 : 0.55} />
+                  {(show || on) && (
+                    <text x={xi} y={pad.t + ih + 18} textAnchor="middle" className={cn("font-mono text-[10.5px]", on ? "fill-ink" : "fill-ink-3")}>
+                      R{i + 1}
+                    </text>
+                  )}
+                  {(show || on) && !compact && (
+                    <text x={xi} y={pad.t + ih + 34} textAnchor="middle" className={cn("text-[11px]", on ? "fill-ink" : "fill-ink-3")}>
+                      {roundLabel(ev).slice(0, 13)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {order.map((i) => {
+              const s = series[i];
+              const d = s.values.map((v, k) => `${k ? "L" : "M"}${x(k).toFixed(1)},${y(v).toFixed(1)}`).join("");
+              return (
+                <g key={s.position}>
+                  <path
+                    d={d}
+                    pathLength={1}
+                    fill="none"
+                    stroke={strokeFor(i)}
+                    strokeOpacity={opacityFor(i)}
+                    strokeWidth={widthFor(i)}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    style={{ strokeDasharray: 1, animation: `tr-draw 1.1s cubic-bezier(.3,.7,.2,1) ${i * 60}ms both`, transition: "stroke-opacity .25s, stroke-width .25s, stroke .25s" }}
+                  />
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={14} style={{ pointerEvents: "stroke" }} onPointerEnter={() => setActive(s.position)} onPointerLeave={() => setActive(null)} />
+                  {i === focusIdx &&
+                    s.values.map((v, k) =>
+                      k === 0 ? null : <circle key={k} cx={x(k)} cy={y(v)} r={cursor === k ? 5 : 3} fill={color} stroke="hsl(var(--sheet))" strokeWidth={2} style={{ animation: "tr-fade .4s .9s both" }} />,
+                    )}
+                </g>
+              );
+            })}
+
+            {!compact &&
+              series.map((s, i) => {
+                const ly = endY.get(i)!;
+                const ry = y(s.values[n]);
+                const isHi = i === focusIdx;
+                const label = shortLabel(s.label);
+                const x0 = x(n);
+                return (
+                  <g
+                    key={s.position}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`P${s.position} ${s.label}, ${s.values[n]} points`}
+                    className="outline-none"
+                    onPointerEnter={() => setActive(s.position)}
+                    onPointerLeave={() => setActive(null)}
+                    onFocus={() => setActive(s.position)}
+                    onBlur={() => setActive(null)}
+                    style={{ opacity: hi === -1 || i === hi ? 1 : 0.45, transition: "opacity .25s", animation: `tr-fade .5s ${0.7 + i * 0.05}s both` }}
+                  >
+                    <path d={`M${x0 + 7},${ry} C${x0 + 16},${ry} ${x0 + 12},${ly} ${x0 + 22},${ly}`} fill="none" stroke={isHi ? color : "hsl(var(--rule))"} />
+                    <rect x={x0 + 22} y={ly - 10} width={pad.r - 24} height={20} rx={7} fill={isHi && hi !== -1 ? "hsl(var(--ink) / 0.06)" : "transparent"} />
+                    <text x={x0 + 30} y={ly} dy="0.34em" className={cn("font-mono text-[11px]", isHi ? "fill-ink" : "fill-ink-3")}>
+                      {s.position}
+                    </text>
+                    <text x={x0 + 46} y={ly} dy="0.34em" className={cn("text-[12.5px]", isHi ? "fill-ink" : "fill-ink-2")}>
+                      {label}
+                    </text>
+                    <text x={x0 + pad.r - 8} y={ly} dy="0.34em" textAnchor="end" className={cn("font-mono text-[12px]", isHi ? "fill-ink" : "fill-ink-3")}>
+                      {s.values[n].toLocaleString()}
+                    </text>
+                  </g>
+                );
+              })}
+
+            <rect x={pad.l} y={pad.t} width={iw} height={ih} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setCursor(null)} style={{ cursor: "crosshair" }} />
+          </svg>
+        ) : (
+          <div style={{ height: H }} />
+        )}
+
+        {tip && cursor != null && (
+          <div
+            className="pointer-events-none absolute top-0 z-10 w-64 rounded-2xl border bg-sheet/95 p-3.5 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.35)] backdrop-blur"
+            style={{ left: flip ? undefined : tipLeft + 14, right: flip ? width - tipLeft + 14 : undefined }}
+          >
+            <div className="eyebrow truncate">
+              R{cursor} · {roundLabel(rounds[cursor - 1])}
+            </div>
+            <ol className="mt-2 space-y-1">
+              {tip.map(({ s, v, d }, k) => (
+                <li key={s.position} className="grid grid-cols-[1rem_1fr_auto_2.8rem] items-baseline gap-2 text-[12.5px]">
+                  <span className="num text-[11px] text-ink-3">{k + 1}</span>
+                  <span className={cn("truncate", s.position === active && "font-medium")}>{s.label}</span>
+                  <span className="num">{v.toLocaleString()}</span>
+                  <span className="num text-right text-[11px] text-ink-3">{d > 0 ? `+${d}` : "—"}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+
+      {compact && (
+        <ol className="mt-4 grid gap-1">
+          {series.map((s, i) => (
+            <li key={s.position}>
+              <button
+                onClick={() => setActive(active === s.position ? null : s.position)}
+                aria-pressed={active === s.position}
+                className={cn("flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-[13.5px] transition-colors", active === s.position && "bg-ink/[0.06]")}
+              >
+                <span className="h-[3px] w-4 shrink-0 rounded-full" style={{ backgroundColor: i === focusIdx ? color : "hsl(var(--ink-3))" }} />
+                <span className="num w-4 text-[11px] text-ink-3">{s.position}</span>
+                <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                <span className="num text-[12.5px]">{s.values[n].toLocaleString()}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/* ── Standings table ───────────────────────────────────────────── */
+
+const COLS = "md:grid-cols-[4rem_minmax(0,1fr)_4rem_4.5rem_minmax(8rem,11rem)_5rem]";
+
+function Standings({
+  entries,
+  mode,
+  color,
+  names,
+  active,
+  setActive,
+}: {
+  entries: ChampEntry[];
+  mode: Mode;
+  color: string;
+  names: Names;
+  active: number | null;
+  setActive: (n: number | null) => void;
+}) {
+  const groups = groupByPosition(entries);
+  const [all, setAll] = useState(false);
+  const shown = all ? groups : groups.slice(0, 12);
+  const leader = groups[0]?.entries[0].totalPoints || 0;
+  if (!groups.length) return <Note title="No points in this class yet" />;
+
+  return (
+    <div className="overflow-hidden rounded-3xl border bg-sheet">
+      <div className={cn("hidden items-center gap-4 border-b px-6 py-3 md:grid", COLS)}>
+        <span className="eyebrow">Pos</span>
+        <span className="eyebrow">{mode === "drivers" ? "Driver" : "Entry"}</span>
+        <span className="eyebrow text-right">Wins</span>
+        <span className="eyebrow text-right">Podiums</span>
+        <span className="eyebrow text-right">Points</span>
+        <span className="eyebrow text-right">Gap</span>
+      </div>
+      <ol>
+        {shown.map((g, gi) => {
+          const e0 = g.entries[0];
+          const tied = mode === "teams" ? g.entries.length > 1 : new Set(g.entries.map((e) => e.carNumbers[0])).size > 1;
+          const gap = leader - e0.totalPoints;
+          return (
+            <li
+              key={g.position}
+              onPointerEnter={() => gi < 8 && setActive(g.position)}
+              onPointerLeave={() => setActive(null)}
+              className={cn(
+                "relative grid grid-cols-[2.4rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b px-4 py-4 transition-colors last:border-b-0 md:px-6",
+                COLS,
+                active === g.position && "bg-ink/[0.035]",
+              )}
+            >
+              {gi === 0 && <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: color }} />}
+              <div className="flex flex-col items-start">
+                <PosNum n={g.position} size={gi < 3 ? "md" : "sm"} className={gi < 3 ? "" : "text-ink-2"} />
+                {tied && <span className="mt-1 rounded-full bg-ink/[0.07] px-1.5 font-mono text-[9.5px] uppercase tracking-wider text-ink-2">Tied</span>}
+              </div>
+
+              <div className="min-w-0">
+                {mode === "drivers" ? (
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                    {g.entries.map((e) => (
+                      <Link key={e.key} to={`/driver/${e.driverIds[0]}`} className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-[15.5px] hover:underline hover:underline-offset-4">
+                        <FlagImage nationality={e.nationality} size={14} className="shrink-0 rounded-[2px]" />
+                        <span className="truncate">{cleanName(e.name)}</span>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <CarNum n={e0.carNumbers[0]} />
+                    {e0.teamId ? (
+                      <Link to={`/team/${e0.teamId}`} className="truncate text-[15.5px] hover:underline hover:underline-offset-4">
+                        {e0.name}
+                      </Link>
+                    ) : (
+                      <span className="truncate text-[15.5px]">{e0.name}</span>
+                    )}
+                  </div>
+                )}
+                <div className="mt-1 truncate text-xs text-ink-3">
+                  {mode === "drivers" ? (
+                    <>
+                      {e0.carNumbers.map((c) => `#${c}`).join(", ")}
+                      {e0.teamId && names?.teams[e0.teamId] ? ` · ${names.teams[e0.teamId].full_name}` : ""}
+                    </>
+                  ) : (
+                    crewLastNames(e0.driverIds, names, 6)
+                  )}
+                </div>
+                <div className="num mt-0.5 text-[11px] text-ink-3 md:hidden">
+                  {e0.wins} {e0.wins === 1 ? "win" : "wins"} · {e0.podiums} {e0.podiums === 1 ? "podium" : "podiums"}
+                </div>
+              </div>
+
+              <span className="num hidden text-right text-[15px] md:block">{e0.wins || <span className="text-ink-3">0</span>}</span>
+              <span className="num hidden text-right text-[15px] md:block">{e0.podiums || <span className="text-ink-3">0</span>}</span>
+
+              <div className="text-right">
+                <div className="num text-[17px] md:text-[18px]">{e0.totalPoints.toLocaleString()}</div>
+                <div className="ml-auto mt-1.5 hidden h-1 w-full max-w-[10rem] overflow-hidden rounded-full bg-ink/[0.06] md:block">
+                  <div className="h-full rounded-full" style={{ width: `${(e0.totalPoints / (leader || 1)) * 100}%`, backgroundColor: gi === 0 ? color : "hsl(var(--ink-3))" }} />
+                </div>
+                <div className="num text-[11px] text-ink-3 md:hidden">{gi === 0 ? "Leader" : `−${gap.toLocaleString()}`}</div>
+              </div>
+              <span className="num hidden text-right text-[13px] text-ink-2 md:block">{gi === 0 ? <span className="eyebrow">Leader</span> : `−${gap.toLocaleString()}`}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {groups.length > 12 && (
+        <button onClick={() => setAll(!all)} className="flex w-full items-center justify-center gap-2 border-t py-4 text-sm text-ink-2 transition-colors hover:bg-ink/[0.03] hover:text-ink">
+          {all ? "Show the top 12" : `Show all ${groups.length} positions`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Season strip ─────────────────────────────────────────────── */
+
+function SeasonStrip({
+  events,
+  loading,
+  season,
+  classes,
+  layouts,
+  digests,
+  names,
+}: {
+  events: EventLite[];
+  loading: boolean;
+  season?: number;
+  classes?: SeasonClass[];
+  layouts: ReturnType<typeof useLayouts>;
+  digests: ReturnType<typeof useDigests>;
+  names: Names;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const today = todayISO();
+  const by = (dir: number) => scroller.current?.scrollBy({ left: dir * Math.min(600, scroller.current.clientWidth * 0.8), behavior: "smooth" });
+  return (
+    <section aria-labelledby="season-strip">
+      <SectionHead
+        eyebrow={season ? `${season} · ${plural(events.length, "round")}` : "Rounds"}
+        title={<span id="season-strip">The season</span>}
+        action={
+          events.length > 3 ? (
+            <div className="mb-1 hidden gap-2 sm:flex">
+              <button onClick={() => by(-1)} aria-label="Scroll rounds back" className="flex h-10 w-10 items-center justify-center rounded-full border hover:bg-ink/[0.05]">
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <button onClick={() => by(1)} aria-label="Scroll rounds forward" className="flex h-10 w-10 items-center justify-center rounded-full border hover:bg-ink/[0.05]">
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
+      {loading ? (
+        <div className="flex gap-3 overflow-hidden">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[340px] w-[264px] shrink-0 rounded-3xl" />
+          ))}
+        </div>
+      ) : !events.length ? (
+        <Note title="No rounds published">This season's calendar has not been added to the record yet.</Note>
+      ) : (
+        <div ref={scroller} className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-4 pt-1 sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-10 lg:scroll-px-10 lg:px-10">
+          {events.map((ev, i) => {
+            const race = headline(digests?.[ev.id]);
+            const upcoming = (ev.start_date || "") > today;
+            const layout = layoutFor(ev, layouts);
+            return (
+              <Link
+                key={ev.id}
+                to={`/events/${ev.id}`}
+                className="group relative flex w-[264px] shrink-0 snap-start flex-col rounded-3xl border bg-sheet p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_40px_-24px_rgba(0,0,0,0.35)]"
+              >
+                <div className="flex items-start justify-between">
+                  <PosNum n={String(ev.round_number ?? i + 1).padStart(2, "0")} size="lg" />
+                  <span className="eyebrow mt-1 text-right">{dateRange(ev.start_date, ev.end_date).replace(/, \d{4}$/, "")}</span>
+                </div>
+                <div className="relative my-4 h-24">
+                  <TrackMap key={layout?.layout_image_url} src={layout?.layout_image_url} alt="" className="absolute inset-0 m-auto h-full w-full opacity-80 transition-transform duration-500 group-hover:scale-105" />
+                </div>
+                <h3 className="display text-[1.55rem] leading-[1.02]">{stripYear(ev.short_name || ev.name)}</h3>
+                <div className="mt-1 truncate text-xs text-ink-3">{ev.circuit?.name}</div>
+                <div className="mt-auto space-y-1.5 border-t pt-3 [margin-top:1rem]">
+                  {upcoming ? (
+                    <span className="inline-flex rounded-full bg-hl px-2 py-0.5 font-mono text-[10.5px] uppercase tracking-wider text-hl-ink">Upcoming</span>
+                  ) : race ? (
+                    race.winners.map((w) => (
+                      <div key={w.carNumber} className="flex items-center gap-2 text-[13px]">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: classColor(classes, w.className) }} />
+                        <span className="w-[3.4rem] shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-ink-3">{w.className || "Winner"}</span>
+                        <span className="truncate">{crewLastNames(w.driverIds, names, 3)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <span className="text-[13px] text-ink-3">Classification not on the record</span>
+                  )}
+                </div>
+                <ArrowUpRight className="absolute right-5 top-[4.6rem] h-4 w-4 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" />
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ── PDF export ──────────────────────────────────────────────── */
+
+function ExportPdf({ seriesName, year, seasonId, classes }: { seriesName: string; year: number; seasonId: string; classes: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set(classes));
+  const box = useRef<HTMLDivElement>(null);
+  const classKey = classes.join("|");
+  useEffect(() => setSel(new Set(classKey ? classKey.split("|") : [])), [classKey]);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const run = async (classNames: string[] | null) => {
+    setOpen(false);
+    setBusy(5);
+    try {
+      const { exportStandingsPdf } = await import("@/lib/standings-pdf-export");
+      await exportStandingsPdf({ seriesName, year, seasonId, classNames, onProgress: setBusy });
+    } catch (e) {
+      console.error("Standings PDF export failed:", e);
+      alert("PDF export failed: " + ((e as Error)?.message || "Unknown error"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div ref={box} className="relative">
+      <button
+        onClick={() => (busy != null ? undefined : classes.length > 1 ? setOpen(!open) : run(null))}
+        aria-expanded={classes.length > 1 ? open : undefined}
+        aria-haspopup={classes.length > 1 ? "dialog" : undefined}
+        className="inline-flex h-10 items-center gap-2 rounded-full border px-4 text-[13px] text-ink-2 transition-colors hover:bg-ink/[0.05] hover:text-ink"
+      >
+        {busy != null ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+        {busy != null ? <span className="num">{Math.round(busy)}%</span> : "Standings PDF"}
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Choose classes to export" className="absolute left-0 top-full z-30 mt-2 w-64 rounded-2xl border bg-sheet p-2 shadow-[0_24px_48px_-20px_rgba(0,0,0,0.35)]">
+          <div className="eyebrow px-2.5 pb-1.5 pt-2">Classes to include</div>
+          {classes.map((c) => {
+            const on = sel.has(c);
+            return (
+              <button
+                key={c}
+                role="checkbox"
+                aria-checked={on}
+                onClick={() =>
+                  setSel((p) => {
+                    const nx = new Set(p);
+                    if (nx.has(c)) nx.delete(c);
+                    else nx.add(c);
+                    return nx;
+                  })
+                }
+                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm hover:bg-ink/[0.05]"
+              >
+                <span className={cn("flex h-4 w-4 items-center justify-center rounded-[5px] border", on && "border-ink bg-ink text-paper")}>{on && <Check className="h-3 w-3" />}</span>
+                <span className="font-mono text-[12px] uppercase tracking-wide">{c}</span>
+              </button>
+            );
+          })}
+          <button disabled={!sel.size} onClick={() => run(sel.size === classes.length ? null : [...sel])} className="mt-2 h-10 w-full rounded-full bg-ink text-[13px] font-medium text-paper disabled:opacity-40">
+            Download {sel.size === classes.length ? "all classes" : plural(sel.size, "class", "classes")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default SeriesProfile;

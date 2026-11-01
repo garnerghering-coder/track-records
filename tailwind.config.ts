@@ -7,19 +7,44 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: { DEFAULT: "1rem", sm: "1.5rem", lg: "2rem" },
       screens: {
-        "2xl": "1400px",
+        "2xl": "1320px",
       },
     },
     extend: {
       fontFamily: {
-        display: ["Rajdhani", "sans-serif"],
-        body: ["IBM Plex Sans", "sans-serif"],
-        accent: ["ModernAge", "Rajdhani", "sans-serif"],
+        serif: ["Instrument Serif", "ui-serif", "Georgia", "serif"],
+        sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        body: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "ui-monospace", "monospace"],
+        accent: ["ModernAge", "Geist", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
+        paper: "hsl(var(--paper))",
+        sheet: "hsl(var(--sheet))",
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          2: "hsl(var(--ink-2))",
+          3: "hsl(var(--ink-3))",
+        },
+        rule: "hsl(var(--rule))",
+        hl: {
+          DEFAULT: "hsl(var(--hl))",
+          ink: "hsl(var(--hl-ink))",
+        },
+        win: "hsl(var(--win))",
+        loss: "hsl(var(--loss))",
+        signal: {
+          DEFAULT: "hsl(var(--signal))",
+          foreground: "hsl(var(--signal-foreground))",
+        },
+        fastest: "hsl(var(--fastest))",
+        pb: "hsl(var(--pb))",
+        flag: "hsl(var(--flag))",
+        dnf: "hsl(var(--dnf))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",

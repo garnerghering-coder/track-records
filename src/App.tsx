@@ -4,93 +4,70 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { ThemeProvider } from "next-themes";
+import ScrollToTop from "@/components/tr/ScrollToTop";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import Search from "./pages/Search";
-import Results from "./pages/Results";
-import EventDetail from "./pages/EventDetail";
-import DriverProfile from "./pages/DriverProfile";
+const Search = lazy(() => import("./pages/Search"));
+const Results = lazy(() => import("./pages/Results"));
+const DriverProfile = lazy(() => import("./pages/DriverProfile"));
 
-import Submit from "./pages/Submit";
-import Privacy from "./pages/Privacy";
-import NotFound from "./pages/NotFound";
-import Teams from "./pages/Teams";
-import TeamProfile from "./pages/TeamProfile";
-import Contribute from "./pages/Contribute";
-import CircuitProfile from "./pages/CircuitProfile";
-import SeriesProfile from "./pages/SeriesProfile";
-import SeriesListing from "./pages/Series";
-import Calendar from "./pages/Calendar";
-import Cars from "./pages/Cars";
-import CarProfile from "./pages/CarProfile";
-import EventPage from "./pages/EventPage";
-import Articles from "./pages/Articles";
-import ArticleDetail from "./pages/ArticleDetail";
-import ManageLayout from "./pages/manage/ManageLayout";
-import ManageEvents from "./pages/manage/ManageEvents";
-import ManageEventDetail from "./pages/manage/ManageEventDetail";
-import ManageSessionResults from "./pages/manage/ManageSessionResults";
-import ManageDrivers from "./pages/manage/ManageDrivers";
-import ManageTeams from "./pages/manage/ManageTeams";
-import ManageCars from "./pages/manage/ManageCars";
-import ManageCircuits from "./pages/manage/ManageCircuits";
-import ManageSeries from "./pages/manage/ManageSeries";
-import ManageReports from "./pages/manage/ManageReports";
-import ManagePotentialIssues from "./pages/manage/ManagePotentialIssues";
-import ManageCarLiveries from "./pages/manage/ManageCarLiveries";
-import ManageArticles from "./pages/manage/ManageArticles";
+const Privacy = lazy(() => import("./pages/Privacy"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Teams = lazy(() => import("./pages/Teams"));
+const TeamProfile = lazy(() => import("./pages/TeamProfile"));
+const CircuitProfile = lazy(() => import("./pages/CircuitProfile"));
+const SeriesProfile = lazy(() => import("./pages/SeriesProfile"));
+const SeriesListing = lazy(() => import("./pages/Series"));
+const Calendar = lazy(() => import("./pages/Calendar"));
+const Cars = lazy(() => import("./pages/Cars"));
+const Drivers = lazy(() => import("./pages/Drivers"));
+const Circuits = lazy(() => import("./pages/Circuits"));
+const Compare = lazy(() => import("./pages/Compare"));
+const CarProfile = lazy(() => import("./pages/CarProfile"));
+const EventPage = lazy(() => import("./pages/EventPage"));
+const Articles = lazy(() => import("./pages/Articles"));
+const ArticleDetail = lazy(() => import("./pages/ArticleDetail"));
 const queryClient = new QueryClient();
 
 const App = () => (
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
+        <ScrollToTop />
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>
           <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
           <Route path="/search" element={<Search />} />
           <Route path="/results" element={<Results />} />
-          <Route path="/event/:id" element={<EventDetail />} />
           <Route path="/driver/:id" element={<DriverProfile />} />
-          
-          <Route path="/submit" element={<Submit />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/team/:id" element={<TeamProfile />} />
           <Route path="/circuit/:id" element={<CircuitProfile />} />
           <Route path="/series" element={<SeriesListing />} />
           <Route path="/series/:id" element={<SeriesProfile />} />
           <Route path="/cars" element={<Cars />} />
+          <Route path="/drivers" element={<Drivers />} />
+          <Route path="/circuits" element={<Circuits />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/car/:id" element={<CarProfile />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/events/:slug" element={<EventPage />} />
           <Route path="/articles" element={<Articles />} />
           <Route path="/articles/:slug" element={<ArticleDetail />} />
-          <Route path="/contribute" element={<Contribute />} />
           <Route path="/privacy" element={<Privacy />} />
-          <Route path="/manage" element={<ManageLayout />}>
-            <Route index element={<ManageEvents />} />
-            <Route path="events" element={<ManageEvents />} />
-            <Route path="events/:id" element={<ManageEventDetail />} />
-            <Route path="events/:id/session/:sessionId" element={<ManageSessionResults />} />
-            <Route path="drivers" element={<ManageDrivers />} />
-            <Route path="teams" element={<ManageTeams />} />
-            <Route path="cars" element={<ManageCars />} />
-            <Route path="circuits" element={<ManageCircuits />} />
-            <Route path="series" element={<ManageSeries />} />
-            <Route path="reports" element={<ManageReports />} />
-            <Route path="issues" element={<ManagePotentialIssues />} />
-            <Route path="liveries" element={<ManageCarLiveries />} />
-            <Route path="articles" element={<ManageArticles />} />
-          </Route>
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

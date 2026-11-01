@@ -1,150 +1,271 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Car } from "lucide-react";
+import { useMemo } from "react";
+import { Link, useParams } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import FlagImage from "@/components/FlagImage";
-import ReportDialog from "@/components/ReportDialog";
-import { formatDateRange } from "@/lib/date-utils";
+import { classRank } from "@/lib/insights";
+import { cleanName, lastName } from "@/site/data";
+import { ClassTag, Eyebrow, Note, Page, SectionHead } from "@/site/ui";
+import { byRace, bySeason, carLabel, countBy, isPodium, isWin, plural, raceTitle, tally, useRecordBook, type Entry, type RecordBook } from "@/site/records";
+import { GhostLink, LiveryStage, NotOnRecord, RaceGroups, RecordSkeleton, RecordStrip, ResultMark, SeasonHead, ShareButton } from "@/site/record-ui";
 
-const TeamProfilePage = () => {
-  const { id } = useParams<{ id: string }>();
-  const [team, setTeam] = useState<any>(null);
-  const [raceHistory, setRaceHistory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!id) return;
-    const fetchData = async () => {
-      const { data: t } = await supabase.from("v2_teams").select("*").eq("id", id).single();
-      setTeam(t);
-
-      if (t) {
-        const { data: raceResults } = await supabase
-          .from("v2_race_results" as any)
-          .select("position, status, car_number, v2_drivers(id, full_name, nationality), v2_cars(id, model_name, manufacturer), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)))")
-          .eq("team_id", id)
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        const results = (raceResults || []).map((r: any) => ({
-          ...r,
-          event: r.v2_sessions?.v2_events,
-          session: r.v2_sessions,
-        })).sort((a: any, b: any) => {
-          const dateA = a.event?.start_date || "";
-          const dateB = b.event?.start_date || "";
-          return dateB.localeCompare(dateA);
-        });
-        setRaceHistory(results);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, [id]);
-
-  if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading team…</p></div></div>;
-  if (!team) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Team not found.</p><Link to="/teams"><Button variant="outline">Back to Teams</Button></Link></div></div>;
-
+export default function TeamProfile() {
+  const { id = "" } = useParams<{ id: string }>();
+  const book = useRecordBook();
+  const team = book?.teams[id];
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <SEOHead
-        title={team.full_name}
-        description={`Motorsport team profile for ${team.full_name}. View race history and results.`}
+        title={team ? `${team.full_name} – Team record` : "Team record"}
+        description={team ? `${team.full_name}'s record: entries, class wins, podiums, line-ups and results by season.` : undefined}
         canonical={`/team/${id}`}
       />
       <Header />
-      <section className="pt-24 pb-12" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
-        <div className="container">
-          <Link to="/teams" className="inline-flex items-center gap-1 text-sm mb-6" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-            <ArrowLeft className="h-4 w-4" /> Back to teams
-          </Link>
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-            <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/20">
-              <Car className="h-10 w-10 text-primary" />
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>
-                {team.full_name}
-              </h1>
-              <div className="mt-2 flex items-center gap-4 flex-wrap text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-                {team.nationality && <span className="inline-flex items-center gap-1"><FlagImage nationality={team.nationality} size={16} /> {team.nationality}</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div className="container py-10">
-        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Race Results</h2>
-        {raceHistory.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No race results found for this team.</p>
-        ) : (
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Session</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Driver</TableHead>
-                    <TableHead>Car</TableHead>
-                    <TableHead className="text-center">Pos</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {raceHistory.map((r: any, i: number) => (
-                    <TableRow key={r.id || i}>
-                      <TableCell>
-                        {r.event ? (
-                          <Link to={`/events/${r.event.id}`} className="text-primary hover:underline font-medium">{r.event.name}</Link>
-                        ) : "—"}
-                        <p className="text-xs text-muted-foreground">{r.event?.v2_seasons?.v2_series?.name} {r.event?.v2_seasons?.year && `· ${r.event.v2_seasons.year}`}</p>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {r.event?.start_date ? formatDateRange(r.event.start_date, r.event.end_date) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {r.v2_drivers ? (
-                          <Link to={`/driver/${r.v2_drivers.id}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                            <FlagImage nationality={r.v2_drivers.nationality} size={14} />
-                            {r.v2_drivers.full_name}
-                          </Link>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}
-                      </TableCell>
-                      <TableCell className="text-center font-accent font-bold text-card-foreground text-base">{r.position ?? "—"}</TableCell>
-                      <TableCell>
-                        {r.status && r.status !== "finished" ? (
-                          <span className="text-destructive text-sm font-medium">{r.status.toUpperCase()}</span>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
-          <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
-          <p className="text-xs text-muted-foreground mb-3">Help us improve this team profile.</p>
-          <ReportDialog reportType="team" targetId={id!} targetName={team.full_name} />
-        </div>
-      </div>
+      <Page className="pt-6 sm:pt-10">
+        {!book ? <RecordSkeleton /> : !team ? <NotOnRecord what="team" back="/teams" backLabel="All teams" /> : <TeamRecord key={id} book={book} id={id} />}
+      </Page>
       <Footer />
     </div>
   );
-};
+}
 
-export default TeamProfilePage;
+function TeamRecord({ book, id }: { book: RecordBook; id: string }) {
+  const team = book.teams[id];
+  const entries = useMemo(() => book.byTeam.get(id) || [], [book, id]);
+  const t = useMemo(() => tally(entries), [entries]);
+  const latest = t.last;
+  const seasons = bySeason(entries);
+  const cars = countBy(entries, (e) => e.carId);
+  const drivers = new Set(entries.flatMap((e) => e.driverIds));
+  const latestRace = latest ? entries.filter((e) => e.sessionId === latest.sessionId) : [];
+  const latestCar = latest?.carId ? carLabel(book.cars[latest.carId]) : "";
+  const winsByClass = countBy(entries.filter(isWin), (e) => e.className);
+
+  const lead = !t.starts ? (
+    <>{team.full_name} is on the record, but hasn't started a race yet.</>
+  ) : (
+    <>
+      {plural(t.starts, "car entry", "car entries")} across {plural(t.events, "event")} in {t.series.join(" and ")}
+      {t.wins > 0 ? (
+        <>
+          , with{" "}
+          <span className="mark">
+            {winsByClass.length === 1 ? `${plural(t.wins, `${winsByClass[0].key} class win`)}` : plural(t.wins, "class win")}
+          </span>
+          {t.podiums > t.wins ? ` and ${plural(t.podiums, "podium")}` : ""}
+        </>
+      ) : t.podiums > 0 ? (
+        <>
+          , with <span className="mark">{plural(t.podiums, "class podium")}</span>
+        </>
+      ) : t.best != null ? (
+        <>, best class finish P{t.best}</>
+      ) : null}
+      .{" "}
+      {latest && (
+        <>
+          Most recently ran {latestRace.length > 1 ? `${latestRace.length} cars` : `the #${latest.carNumber}`}
+          {latestCar ? ` ${latestCar}` : ""} at {raceTitle(latest)}.
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      <section className={latest ? "grid items-center gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-6" : "max-w-4xl"}>
+        <div className="relative z-10 min-w-0">
+          <Eyebrow>
+            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-ink-2">Team record</span>
+            {t.series.length > 0 && <span>{t.series.join(" · ")}</span>}
+            {t.years.length > 0 && (
+              <>
+                <span aria-hidden>·</span>
+                <span>{t.years.length > 1 ? `${t.years[0]}–${t.years[t.years.length - 1]}` : t.years[0]}</span>
+              </>
+            )}
+          </Eyebrow>
+          <h1 className="display mt-5 break-words text-[3.2rem] leading-[0.9] sm:text-[4.8rem] lg:text-[5.8rem]">{team.full_name}</h1>
+          {t.classes.length > 0 && (
+            <div className="mt-5 flex flex-wrap gap-1.5">
+              {t.classes.map((c) => (
+                <ClassTag key={c} name={c} color={t.classColors[c]} />
+              ))}
+            </div>
+          )}
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-2 sm:text-xl">{lead}</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <ShareButton title={`${team.full_name} – Track Records`} />
+            <GhostLink to="/teams">All teams</GhostLink>
+          </div>
+        </div>
+        {latest && (
+          <LiveryStage
+            src={latest.livery}
+            number={latest.carNumber}
+            color={latest.classColor}
+            alt={`#${latest.carNumber} ${latestCar}`}
+            className="-mx-2 sm:mx-0"
+            caption={
+              <>
+                <span className="num">#{latest.carNumber}</span>
+                {latestCar && <span>· {latestCar}</span>}
+                <span>
+                  · {raceTitle(latest)} {latest.year}
+                </span>
+              </>
+            }
+          />
+        )}
+      </section>
+
+      {!t.starts ? (
+        <Note title="No race entries yet" className="mt-14">
+          Line-ups and results appear here after the team's first race.
+        </Note>
+      ) : (
+        <>
+          <section className="mt-14 sm:mt-20" aria-label="Team record">
+            <RecordStrip
+              items={[
+                { label: "Car entries", value: t.starts, sub: plural(t.events, "event") },
+                { label: "Class wins", value: t.wins, sub: `${Math.round((t.wins / t.starts) * 100)}% of entries` },
+                { label: "Podiums", value: t.podiums, sub: `${Math.round((t.podiums / t.starts) * 100)}% of entries` },
+                { label: "Best finish", value: t.best != null ? `P${t.best}` : null, sub: t.best != null ? `${t.bestCount > 1 ? `×${t.bestCount} · ` : ""}${t.bestClass || ""}` : "No classified finish" },
+                { label: "Class poles", value: t.poles, sub: "In qualifying" },
+                { label: "Drivers", value: drivers.size, sub: "Raced for the team" },
+                { label: "Finished", value: `${Math.round((t.finishes / t.starts) * 100)}%`, sub: `${t.dnfs} DNF` },
+              ]}
+            />
+            {cars.length > 0 && (
+              <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
+                <span className="eyebrow mr-1">Ran the</span>
+                {cars.map((x) => (
+                  <Link key={x.key} to={`/car/${x.key}`} className="rounded-full border bg-sheet px-3 py-1 text-ink-2 transition-colors hover:border-ink/30 hover:text-ink">
+                    {carLabel(book.cars[x.key])} <span className="num text-xs text-ink-3">{x.n}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* line-ups */}
+          <section className="mt-24 sm:mt-32">
+            <SectionHead eyebrow="Cars and crews, season by season" title={<>The <em>line-ups</em></>} />
+            <div className="space-y-12">
+              {seasons.map((s) => (
+                <div key={s.seasonId}>
+                  <SeasonHead year={s.year} series={s.seriesName} right={seasonLine(s.rows)} />
+                  <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {lineups(s.rows).map((l) => (
+                      <LineupCard key={l.number} book={book} rows={l.rows} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* results */}
+          <section className="mt-24 sm:mt-32">
+            <SectionHead eyebrow="Every race, every car" title="Results" />
+            <div className="space-y-12">
+              {seasons.map((s) => (
+                <div key={s.seasonId}>
+                  <SeasonHead year={s.year} series={s.seriesName} />
+                  <RaceGroups
+                    races={byRace(s.rows)}
+                    line={(e) => (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <ClassTag name={e.className} color={e.classColor} />
+                          <span className="num text-xs text-ink-3">#{e.carNumber}</span>
+                        </div>
+                        <div className="mt-1 truncate text-ink-2">
+                          {e.driverIds.map((d, i) => (
+                            <span key={d}>
+                              {i > 0 && " / "}
+                              <Link to={`/driver/${d}`} className="hover:text-ink hover:underline hover:underline-offset-2">
+                                {lastName(book.drivers[d]?.full_name)}
+                              </Link>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
+function seasonLine(rows: Entry[]) {
+  const t = tally(rows);
+  return `${plural(t.starts, "entry", "entries")}${t.wins ? ` · ${plural(t.wins, "win")}` : ""}${t.podiums ? ` · ${plural(t.podiums, "podium")}` : ""}`;
+}
+
+function lineups(rows: Entry[]) {
+  const m = new Map<string, Entry[]>();
+  for (const e of rows) {
+    if (!m.has(e.carNumber)) m.set(e.carNumber, []);
+    m.get(e.carNumber)!.push(e);
+  }
+  return [...m.entries()]
+    .map(([number, rows]) => ({ number, rows }))
+    .sort((a, b) => classRank(a.rows[0].className) - classRank(b.rows[0].className) || b.rows.length - a.rows.length || a.number.localeCompare(b.number, undefined, { numeric: true }));
+}
+
+function LineupCard({ book, rows }: { book: RecordBook; rows: Entry[] }) {
+  const last = rows[rows.length - 1];
+  const drivers = new Map<string, number>();
+  for (const e of rows) for (const d of e.driverIds) drivers.set(d, (drivers.get(d) || 0) + 1);
+  const ordered = [...drivers.entries()].sort((a, b) => b[1] - a[1] || personKey(book, a[0]).localeCompare(personKey(book, b[0])));
+  const car = last.carId ? carLabel(book.cars[last.carId]) : "";
+  const wins = rows.filter(isWin).length;
+  const pods = rows.filter(isPodium).length;
+  return (
+    <div className="flex flex-col overflow-hidden rounded-3xl border bg-sheet">
+      <div className="relative h-32 overflow-hidden" style={{ background: `linear-gradient(135deg, ${last.classColor}26, transparent 70%)` }}>
+        <span className="absolute -bottom-5 -right-1 font-accent text-[6.5rem] leading-none text-ink/[0.06]">{last.carNumber}</span>
+        {last.livery && <img src={last.livery} alt={`#${last.carNumber} ${car}`} loading="lazy" className="absolute inset-x-4 bottom-2 m-auto h-24 w-[86%] object-contain" />}
+      </div>
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex items-center gap-2">
+          <span className="num text-sm font-medium">#{last.carNumber}</span>
+          <ClassTag name={last.className} color={last.classColor} />
+          {last.carId && (
+            <Link to={`/car/${last.carId}`} className="truncate text-sm text-ink-2 hover:text-ink hover:underline hover:underline-offset-2">
+              {car}
+            </Link>
+          )}
+        </div>
+        <ul className="mt-4 space-y-1">
+          {ordered.map(([d, n]) => (
+            <li key={d} className="flex items-baseline justify-between gap-3">
+              <Link to={`/driver/${d}`} className="display truncate text-[1.3rem] leading-tight hover:underline hover:decoration-1 hover:underline-offset-4">
+                {cleanName(book.drivers[d]?.full_name)}
+              </Link>
+              <span className="num shrink-0 text-xs text-ink-3">{plural(n, "race")}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="h-5 shrink-0" />
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t pt-4">
+          {rows.map((e) => (
+            <Link key={e.key} to={`/events/${e.eventId}`} title={`${raceTitle(e)}: ${e.status === "finished" ? `P${e.pic}` : e.status.toUpperCase()}`} className="rounded-full">
+              <ResultMark e={e} />
+            </Link>
+          ))}
+          <span className="ml-auto text-xs text-ink-3">{wins ? plural(wins, "win") : pods ? plural(pods, "podium") : plural(rows.length, "start")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const personKey = (book: RecordBook, id: string) => lastName(book.drivers[id]?.full_name).toLowerCase();

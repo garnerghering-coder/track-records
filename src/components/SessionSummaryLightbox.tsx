@@ -55,68 +55,65 @@ export default function SessionSummaryLightbox({ open, onClose, eventId, session
   const activeSummary = summaries.find(s => s.tab_key === activeTab);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-full max-w-2xl mx-4 max-h-[80vh] rounded-xl border border-border bg-card shadow-2xl flex flex-col"
-        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Session summary"
+        className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded border bg-card"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+        <div className="flex items-center justify-between border-b px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <h2 className="font-display text-lg font-bold text-card-foreground">Session Summary</h2>
+            <FileText className="h-4 w-4 text-primary" />
+            <h2 className="font-display text-lg font-bold uppercase tracking-wide text-card-foreground">Session summary</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={onClose} aria-label="Close" className="text-muted-foreground transition-colors hover:text-foreground">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Manila folder tabs */}
-        <div className="px-6 flex gap-0 border-b border-border overflow-x-auto">
-          {tabs.map(tab => (
+        {/* Tabs */}
+        <div className="flex overflow-x-auto border-b bg-background/40" role="tablist">
+          {tabs.map((tab) => (
             <button
               key={tab.key}
+              role="tab"
+              aria-selected={activeTab === tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-xs font-semibold whitespace-nowrap border border-b-0 rounded-t-lg transition-colors -mb-px ${
-                activeTab === tab.key
-                  ? "bg-card border-border text-foreground z-10"
-                  : "bg-muted/50 border-transparent text-muted-foreground hover:text-foreground hover:bg-muted"
+              className={`relative h-10 shrink-0 whitespace-nowrap border-r px-4 font-display text-xs font-semibold uppercase tracking-[0.1em] transition-colors ${
+                activeTab === tab.key ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab.label}
+              <span className={`absolute inset-x-0 top-0 h-0.5 ${activeTab === tab.key ? "bg-signal" : "bg-transparent"}`} />
             </button>
           ))}
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-[300px]">
+        <div className="min-h-[300px] flex-1 overflow-y-auto px-5 py-5 sm:px-6">
           {loading ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <div className="flex h-full flex-col items-center justify-center gap-3 py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Loading summary…</p>
             </div>
           ) : error ? (
-            <div className="text-center py-16">
+            <div className="py-16 text-center">
               <p className="text-sm text-destructive">{error}</p>
             </div>
           ) : activeSummary ? (
-            <div className="prose prose-sm prose-invert max-w-none">
+            <div className="max-w-none">
               <MarkdownRenderer content={activeSummary.summary_markdown} />
-              <p className="text-[10px] text-muted-foreground/50 mt-6">
-                Generated {new Date(activeSummary.generated_at).toLocaleDateString()} • AI-generated content may not be fully accurate
+              <p className="mt-6 border-t pt-3 text-[11px] text-muted-foreground">
+                Generated <span className="num">{new Date(activeSummary.generated_at).toLocaleDateString()}</span> · AI-generated content may not be fully accurate
               </p>
             </div>
           ) : summaries.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground text-sm">
-              No summaries have been generated yet. Summaries can be generated from the manage panel.
-            </div>
+            <div className="py-16 text-center text-sm text-muted-foreground">No summaries have been generated yet. Summaries can be generated from the manage panel.</div>
           ) : (
-            <div className="text-center py-16 text-muted-foreground text-sm">
-              No summary available for this session.
-            </div>
+            <div className="py-16 text-center text-sm text-muted-foreground">No summary available for this session.</div>
           )}
         </div>
       </div>
@@ -135,17 +132,17 @@ function MarkdownRenderer({ content }: { content: string }) {
         const processed = line.replace(/\*\*(.+?)\*\*/g, '<strong class="text-foreground">$1</strong>');
         // List items
         if (line.match(/^[-•]\s/)) {
-          return <p key={i} className="text-sm text-muted-foreground leading-relaxed pl-4" dangerouslySetInnerHTML={{ __html: "• " + processed.replace(/^[-•]\s/, '') }} />;
+          return <p key={i} className="relative pl-4 text-sm leading-relaxed text-muted-foreground before:absolute before:left-0 before:top-[0.6em] before:h-1 before:w-1 before:bg-primary" dangerouslySetInnerHTML={{ __html: processed.replace(/^[-•]\s/, '') }} />;
         }
         // Headers
         if (line.startsWith("### ")) {
-          return <h3 key={i} className="text-base font-bold text-foreground mt-3" dangerouslySetInnerHTML={{ __html: processed.slice(4) }} />;
+          return <h3 key={i} className="mt-4 font-display text-base font-bold uppercase tracking-wide text-foreground" dangerouslySetInnerHTML={{ __html: processed.slice(4) }} />;
         }
         if (line.startsWith("## ")) {
-          return <h2 key={i} className="text-lg font-bold text-foreground mt-4" dangerouslySetInnerHTML={{ __html: processed.slice(3) }} />;
+          return <h2 key={i} className="mt-5 font-display text-lg font-bold uppercase tracking-wide text-foreground" dangerouslySetInnerHTML={{ __html: processed.slice(3) }} />;
         }
         if (line.startsWith("# ")) {
-          return <h1 key={i} className="text-xl font-bold text-foreground mt-4" dangerouslySetInnerHTML={{ __html: processed.slice(2) }} />;
+          return <h1 key={i} className="mt-5 font-display text-xl font-bold uppercase tracking-wide text-foreground" dangerouslySetInnerHTML={{ __html: processed.slice(2) }} />;
         }
         return <p key={i} className="text-sm text-muted-foreground leading-relaxed" dangerouslySetInnerHTML={{ __html: processed }} />;
       })}

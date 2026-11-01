@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap');
 
 @font-face {
   font-family: 'ModernAge';
@@ -12,46 +12,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── "The Record" design tokens (see docs/REIMAGINE.md) ─────────
+   Day = warm paper & ink (default). Night = race at night.
+   Values are HSL triplets so Tailwind can apply alpha.            */
 @layer base {
   :root {
-    --background: 220 15% 7%;
-    --foreground: 210 10% 92%;
+    --paper: 43 22% 94%;
+    --sheet: 45 27% 98%;
+    --ink: 60 6% 7%;
+    --ink-2: 43 6% 31%;
+    --ink-3: 40 6% 52%;
+    --rule: 42 17% 83%;
+    --hl: 71 87% 62%;
+    --hl-ink: 60 6% 7%;
+    --fastest: 274 72% 50%;
+    --win: 142 60% 32%;
+    --loss: 0 68% 46%;
 
-    --card: 220 14% 10%;
-    --card-foreground: 210 10% 92%;
-
-    --popover: 220 14% 10%;
-    --popover-foreground: 210 10% 92%;
-
-    --primary: 25 95% 55%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 220 12% 14%;
-    --secondary-foreground: 210 10% 88%;
-
-    --muted: 220 12% 14%;
-    --muted-foreground: 215 10% 52%;
-
-    --accent: 220 12% 17%;
-    --accent-foreground: 210 10% 92%;
-
-    --destructive: 0 72% 50%;
+    /* shadcn bridge */
+    --background: var(--paper);
+    --foreground: var(--ink);
+    --card: var(--sheet);
+    --card-foreground: var(--ink);
+    --popover: var(--sheet);
+    --popover-foreground: var(--ink);
+    --primary: var(--ink);
+    --primary-foreground: var(--paper);
+    --secondary: 43 18% 90%;
+    --secondary-foreground: var(--ink);
+    --muted: 43 18% 90%;
+    --muted-foreground: var(--ink-2);
+    --accent: 43 18% 89%;
+    --accent-foreground: var(--ink);
+    --destructive: var(--loss);
     --destructive-foreground: 0 0% 100%;
+    --border: var(--rule);
+    --input: var(--rule);
+    --ring: var(--ink);
+    --radius: 0.875rem;
+    --signal: var(--hl);
+    --signal-foreground: var(--hl-ink);
+    --pb: var(--win);
+    --flag: 45 100% 45%;
+    --dnf: var(--loss);
+  }
 
-    --border: 220 12% 16%;
-    --input: 220 12% 16%;
-    --ring: 25 95% 55%;
-
-    --radius: 0.5rem;
-
-    --sidebar-background: 220 15% 8%;
-    --sidebar-foreground: 210 10% 85%;
-    --sidebar-primary: 25 95% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 12% 14%;
-    --sidebar-accent-foreground: 210 10% 85%;
-    --sidebar-border: 220 12% 16%;
-    --sidebar-ring: 25 95% 55%;
+  .dark {
+    --paper: 60 4% 4.5%;
+    --sheet: 60 4% 8%;
+    --ink: 43 18% 91%;
+    --ink-2: 41 6% 60%;
+    --ink-3: 39 5% 41%;
+    --rule: 45 7% 14%;
+    --fastest: 274 90% 72%;
+    --win: 142 60% 55%;
+    --loss: 0 80% 64%;
+    --secondary: 60 4% 12%;
+    --muted: 60 4% 12%;
+    --accent: 60 4% 13%;
+    --primary: var(--ink);
+    --primary-foreground: var(--paper);
   }
 }
 
@@ -59,23 +79,113 @@
   * {
     @apply border-border;
   }
-
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+  }
   body {
     @apply bg-background text-foreground;
-    font-family: 'IBM Plex Sans', sans-serif;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  ::selection {
+    background: hsl(var(--hl));
+    color: hsl(var(--hl-ink));
+  }
+  :focus-visible {
+    outline: 2px solid hsl(var(--ink));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  .display {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
     font-weight: 400;
-    font-size: 14px;
+    letter-spacing: -0.015em;
+    line-height: 0.95;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3;
   }
-
-  h1 {
-    font-weight: 700;
+  .num {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  /* Highlighter mark behind text */
+  .mark {
+    background: linear-gradient(transparent 12%, hsl(var(--hl)) 12%, hsl(var(--hl)) 88%, transparent 88%);
+    color: hsl(var(--hl-ink));
+    padding: 0 0.12em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .sheet {
+    @apply rounded-2xl border bg-sheet;
+  }
+  .link-u {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.25s ease;
+  }
+  .link-u:hover {
+    background-size: 100% 1px;
+  }
+  .logo-adapt {
+    filter: invert(1);
+  }
+  .dark .logo-adapt {
+    filter: none;
+  }
+  /* legacy helpers still used by analysis charts */
+  .label-caps {
+    @apply font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground;
+  }
+  .data-table {
+    @apply w-full text-sm;
+  }
+  .data-table thead th {
+    @apply eyebrow h-10 whitespace-nowrap border-b px-3 align-middle font-normal;
+  }
+  :where(.data-table thead th) {
+    text-align: left;
+  }
+  .data-table tbody td {
+    @apply h-12 border-b px-3 align-middle;
+  }
+  .data-table tbody tr {
+    @apply transition-colors hover:bg-accent/60;
+  }
+  .grid-bg {
+    background-image: radial-gradient(hsl(var(--rule)) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  /* Paper grain */
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .dark .grain::after {
+    mix-blend-mode: screen;
+    opacity: 0.25;
   }
 }
 
@@ -97,4 +207,12 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+/* Let grid/flex children shrink below their content width so long names
+   (e.g. event titles in cards) wrap/truncate instead of overflowing on mobile. */
+@layer base {
+  .grid > * {
+    min-width: 0;
+  }
 }
