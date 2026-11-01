@@ -29,3 +29,10 @@ export function sortClasses(a: string, b: string): number {
   const ib = CLASS_ORDER.indexOf(norm(b));
   return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
 }
+
+/** Display name for a class code ("GTDPRO" → "GTD PRO"). */
+const CLASS_LABELS: Record<string, string> = { GTDPRO: "GTD PRO" };
+export function classLabel(cls: string | null | undefined): string {
+  if (!cls) return "";
+  return CLASS_LABELS[cls.toUpperCase().replace(/[\s_-]/g, "")] || cls;
+}

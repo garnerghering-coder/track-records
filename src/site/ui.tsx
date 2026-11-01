@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getClassColor } from "@/lib/classes";
+import { classLabel, getClassColor } from "@/lib/classes";
 import FlagImage from "@/components/FlagImage";
 
 /* ── Layout ───────────────────────────────────────────────────── */
@@ -56,7 +56,7 @@ export function ClassTag({ name, color, className, solid }: { name?: string | nu
       style={solid ? { backgroundColor: c, color: "#fff" } : { backgroundColor: `${c}1f`, color: "inherit", boxShadow: `inset 0 0 0 1px ${c}55` }}
     >
       {!solid && <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: c }} />}
-      {name}
+      {classLabel(name)}
     </span>
   );
 }
