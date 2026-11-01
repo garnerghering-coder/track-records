@@ -7,19 +7,28 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: { DEFAULT: "1rem", sm: "1.5rem", lg: "2rem" },
       screens: {
-        "2xl": "1400px",
+        "2xl": "1360px",
       },
     },
     extend: {
       fontFamily: {
-        display: ["Rajdhani", "sans-serif"],
-        body: ["IBM Plex Sans", "sans-serif"],
-        accent: ["ModernAge", "Rajdhani", "sans-serif"],
+        display: ["Barlow Condensed", "Barlow", "sans-serif"],
+        body: ["Barlow", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+        accent: ["ModernAge", "Barlow Condensed", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
+        signal: {
+          DEFAULT: "hsl(var(--signal))",
+          foreground: "hsl(var(--signal-foreground))",
+        },
+        fastest: "hsl(var(--fastest))",
+        pb: "hsl(var(--pb))",
+        flag: "hsl(var(--flag))",
+        dnf: "hsl(var(--dnf))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",

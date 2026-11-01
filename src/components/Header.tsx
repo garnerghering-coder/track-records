@@ -1,228 +1,209 @@
-import { useState, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Search, X, Menu, LogOut, Shield } from "lucide-react";
-import { pgQuote } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Menu, Moon, Search, Sun, X } from "lucide-react";
+import { useTheme } from "next-themes";
+import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import logoFull from "@/assets/logo-full.png";
+import { cn } from "@/lib/utils";
+import CommandPalette from "@/components/tr/CommandPalette";
+
+const NAV = [
+  { to: "/results", label: "Results", match: (p: string, s: string) => p === "/results" || p.startsWith("/events/") },
+  { to: "/series", label: "Series", match: (p: string) => p.startsWith("/series") },
+  { to: "/search?tab=drivers", label: "Drivers", match: (p: string, s: string) => p.startsWith("/driver/") || (p === "/search" && s.includes("tab=drivers")) },
+  { to: "/teams", label: "Teams", match: (p: string) => p.startsWith("/team") },
+  { to: "/search?tab=circuits", label: "Circuits", match: (p: string, s: string) => p.startsWith("/circuit/") || (p === "/search" && s.includes("tab=circuits")) },
+  { to: "/cars", label: "Cars", match: (p: string) => p.startsWith("/car") },
+  { to: "/calendar", label: "Calendar", match: (p: string) => p === "/calendar" },
+  { to: "/articles", label: "Articles", match: (p: string) => p.startsWith("/articles") },
+];
+
+export function ThemeToggle({ className }: { className?: string }) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const dark = resolvedTheme !== "light";
+  return (
+    <button
+      onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+      className={cn("flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground", className)}
+    >
+      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  );
+}
 
 const Header = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [session, setSession] = useState<any>(null);
+  const { pathname, search } = useLocation();
+  const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
+    const checkAdmin = async (userId: string) => {
+      const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
+      setIsAdmin(!!data && data.length > 0);
+    };
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) checkAdmin(session.user.id);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) checkAdmin(session.user.id);else setIsAdmin(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      if (s) checkAdmin(s.user.id);
+      else setIsAdmin(false);
     });
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkAdmin = async (userId: string) => {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
-    setIsAdmin(!!data && data.length > 0);
-  };
+  // ⌘K / Ctrl+K / "/" opens search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
-  const handleLogout = async () => {
+  useEffect(() => setMobileOpen(false), [pathname, search]);
+
+  const logout = async () => {
     await supabase.auth.signOut();
     navigate("/");
   };
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {setSearchResults([]);return;}
-    const timer = setTimeout(async () => {
-      const lower = `%${searchQuery}%`;
-      const [drivers, teams, events, series, circuits] = await Promise.all([
-      supabase.from("v2_drivers").select("id, full_name, nationality").or(`full_name.ilike.${pgQuote(lower)},nationality.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(5),
-      supabase.from("v2_teams").select("id, full_name, nationality, short_name").or(`full_name.ilike.${pgQuote(lower)},nationality.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(5),
-      supabase.from("v2_events").select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").or(`name.ilike.${pgQuote(lower)}`).eq("status", "published" as any).limit(5),
-      supabase.from("v2_series").select("id, name, short_name").or(`name.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(4),
-      supabase.from("v2_circuits").select("id, name, country, location").or(`name.ilike.${pgQuote(lower)},country.ilike.${pgQuote(lower)},location.ilike.${pgQuote(lower)}`).limit(4)]
-      );
-      const results: any[] = [];
-      (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}` }));
-      (teams.data || []).forEach((t: any) => results.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}` }));
-      (events.data || []).forEach((e: any) => {
-        const seriesName = e.v2_seasons?.v2_series?.name || "";
-        const circuitName = e.v2_circuits?.name || "";
-        const subtitle = [seriesName, circuitName].filter(Boolean).join(" · ");
-        results.push({ type: "event", id: e.id, label: e.name, url: `/events/${e.id}`, subtitle });
-      });
-      (series.data || []).forEach((s: any) => results.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}` }));
-      (circuits.data || []).forEach((c: any) => results.push({ type: "circuit", id: c.id, label: c.country ? `${c.name}, ${c.country}` : c.name, url: `/circuit/${c.id}` }));
-      setSearchResults(results);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchOpen(false);
-      setSearchQuery("");
-    }
-  };
-
-  const navLinks = [
-  { to: "/series", label: "Series", match: "/series" },
-  { to: "/search?tab=drivers", label: "Drivers", match: "/drivers-nav" },
-  { to: "/search?tab=circuits", label: "Circuits", match: "/circuits-nav" },
-  { to: "/results", label: "Results", match: "/results" },
-  { to: "/calendar", label: "Calendar", match: "/calendar" },
-  { to: "/articles", label: "Articles", match: "/articles" }];
-
-  const isActive = (match: string) => {
-    // Special handling for driver/circuit nav links
-    if (match === "/drivers-nav") return location.pathname === "/search" && location.search.includes("tab=drivers");
-    if (match === "/circuits-nav") return location.pathname === "/search" && location.search.includes("tab=circuits");
-    return location.pathname === match || location.pathname.startsWith(match + "/");
-  };
-
-
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
-      <div className="container flex h-14 items-center justify-between">
-        <Link to="/" className="cursor-target flex items-center">
-          <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
-        </Link>
+    <>
+      <header className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
+        <div className="container flex h-14 items-center gap-6">
+          <Link to="/" className="flex shrink-0 items-center" aria-label="Track Records home">
+            <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
+          </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
-          {/* Search toggle */}
-          <div className="relative">
-            <button
-              onClick={() => {setSearchOpen(!searchOpen);setSearchQuery("");setSearchResults([]);}}
-              className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-
-              Search
-            </button>
-            {searchOpen &&
-            <div className="absolute right-0 top-full mt-2 w-96 rounded-lg border border-border bg-card shadow-xl p-2 z-50">
-                <form onSubmit={handleSearchSubmit} className="relative">
-                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                  autoFocus
-                  placeholder="Search everything…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-8 h-9 text-sm" />
-
-                  <button type="button" onClick={() => {setSearchOpen(false);setSearchQuery("");setSearchResults([]);}} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </form>
-                {searchResults.length > 0 &&
-              <div className="mt-2 max-h-72 overflow-y-auto space-y-0.5">
-                    {searchResults.map((r) =>
+          <nav className="hidden h-full items-stretch lg:flex">
+            {NAV.map((l) => {
+              const active = l.match(pathname, search);
+              return (
                 <Link
-                  key={`${r.type}-${r.id}`}
-                  to={r.url}
-                  onClick={() => {setSearchOpen(false);setSearchQuery("");}}
-                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent transition-colors">
+                  key={l.to}
+                  to={l.to}
+                  className={cn(
+                    "relative flex items-center px-3 font-display text-[13px] font-semibold uppercase tracking-[0.1em] transition-colors",
+                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {l.label}
+                  {active && <span className="absolute inset-x-3 bottom-0 h-0.5 bg-primary" />}
+                </Link>
+              );
+            })}
+          </nav>
 
-                        <span className="text-[10px] uppercase font-medium text-muted-foreground w-12 shrink-0">{r.type}</span>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-card-foreground truncate block">{r.label}</span>
-                          {r.subtitle && <span className="text-[10px] text-muted-foreground truncate block">{r.subtitle}</span>}
-                        </div>
-                      </Link>
-                )}
-                    {searchQuery.trim() &&
-                <button
-                  onClick={() => {navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);setSearchOpen(false);setSearchQuery("");}}
-                  className="w-full text-left rounded px-2 py-1.5 text-sm text-primary hover:bg-accent transition-colors">
-
-                        View all results for "{searchQuery}"
-                      </button>
-                }
-                  </div>
-              }
-                {searchQuery.trim() && searchResults.length === 0 &&
-              <p className="text-xs text-muted-foreground p-2 text-center">No results found.</p>
-              }
-              </div>
-            }
-          </div>
-
-          {navLinks.map((link) =>
-          <Link key={link.to} to={link.to} className={`cursor-target text-sm font-medium transition-colors hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
-              {link.label}
-            </Link>
-          )}
-          {isAdmin &&
-          <>
-            <Link to="/manage" className="cursor-target text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              Manage
-            </Link>
-            
-
-
-          </>
-          }
-          {session ?
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
-              Log Out
-            </Button> :
-
-          <div className="flex items-center gap-2">
-              <Link to="/auth"><Button variant="ghost" size="sm">Log In</Button></Link>
-              <Link to="/auth?signup=true"><Button size="sm">Sign Up</Button></Link>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="flex h-8 items-center gap-2 rounded border bg-card px-2.5 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground md:w-56"
+              aria-label="Search"
+            >
+              <Search className="h-4 w-4" />
+              <span className="hidden flex-1 text-left md:inline">Search…</span>
+              <kbd className="hidden rounded-sm border bg-muted px-1.5 font-mono text-[10px] md:inline">⌘K</kbd>
+            </button>
+            <ThemeToggle />
+            <div className="hidden items-center gap-1 lg:flex">
+              {isAdmin && (
+                <Link to="/manage" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
+                  Manage
+                </Link>
+              )}
+              {session ? (
+                <>
+                  <Link to="/contribute" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
+                    Contribute
+                  </Link>
+                  <button onClick={logout} className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/auth" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
+                    Log in
+                  </Link>
+                  <Link
+                    to="/auth?signup=true"
+                    className="rounded bg-signal px-3 py-1.5 font-display text-[13px] font-bold uppercase tracking-[0.1em] text-signal-foreground transition-opacity hover:opacity-90"
+                  >
+                    Sign up
+                  </Link>
+                </>
+              )}
             </div>
-          }
-        </nav>
-
-        {/* Mobile */}
-        <div className="flex items-center gap-2 md:hidden">
-          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-foreground">
-            <Menu className="h-5 w-5" />
-          </button>
+            <button
+              onClick={() => setMobileOpen((o) => !o)}
+              className="flex h-8 w-8 items-center justify-center rounded text-foreground hover:bg-accent lg:hidden"
+              aria-label="Menu"
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Mobile menu */}
-      {mobileMenuOpen &&
-      <div className="md:hidden border-t border-border bg-background p-4 space-y-2">
-          {navLinks.map((link) =>
-        <Link key={link.to} to={link.to} onClick={() => setMobileMenuOpen(false)} className={`block py-2 text-sm font-medium hover:text-foreground ${isActive(link.match) ? "text-foreground" : "text-muted-foreground"}`}>
-              {link.label}
-            </Link>
+        {mobileOpen && (
+          <div className="border-t bg-background lg:hidden">
+            <nav className="container grid grid-cols-2 gap-px py-3">
+              {NAV.map((l) => (
+                <Link
+                  key={l.to}
+                  to={l.to}
+                  className={cn(
+                    "rounded px-3 py-2.5 font-display text-sm font-semibold uppercase tracking-[0.1em]",
+                    l.match(pathname, search) ? "bg-accent text-foreground" : "text-muted-foreground",
+                  )}
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
+            <div className="container flex flex-wrap gap-2 border-t py-3">
+              {isAdmin && (
+                <Link to="/manage" className="rounded border px-3 py-2 text-sm font-medium">
+                  Manage
+                </Link>
+              )}
+              {session ? (
+                <>
+                  <Link to="/contribute" className="rounded border px-3 py-2 text-sm font-medium">
+                    Contribute
+                  </Link>
+                  <button onClick={logout} className="rounded border px-3 py-2 text-sm font-medium">
+                    Log out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link to="/auth" className="rounded border px-3 py-2 text-sm font-medium">
+                    Log in
+                  </Link>
+                  <Link to="/auth?signup=true" className="rounded bg-signal px-3 py-2 text-sm font-bold text-signal-foreground">
+                    Sign up
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
         )}
-          {session &&
-        <Link to="/contribute" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Contribute
-            </Link>
-        }
-          {isAdmin &&
-        <>
-          <Link to="/manage" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Manage
-            </Link>
-        </>
-        }
-          {session ?
-        <button onClick={() => {handleLogout();setMobileMenuOpen(false);}} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Log Out
-            </button> :
-
-        <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-primary">
-              Sign Up / Log In
-            </Link>
-        }
-        </div>
-      }
-    </header>);
-
+      </header>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </>
+  );
 };
 
 export default Header;

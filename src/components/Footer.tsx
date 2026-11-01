@@ -1,49 +1,67 @@
 import { Link } from "react-router-dom";
-import logoFull from "@/assets/logo-full.png";
 
-const Footer = () => {
-  return (
-    <footer className="border-t border-border bg-card py-12">
-      <div className="container">
-        <div className="grid gap-8 md:grid-cols-4">
-          <div>
-            <div className="flex items-center mb-3">
-              <img alt="Track Records" className="h-7 w-auto" src="/lovable-uploads/c4e44093-bdee-41b1-bde6-0e0d54bf8054.png" />
-            </div>
-            <p className="text-sm text-muted-foreground font-light">
-              The searchable motorsport database.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Discover</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/search" className="cursor-target hover:text-foreground transition-colors">Search</Link></li>
-              <li><Link to="/results" className="cursor-target hover:text-foreground transition-colors">Race Results</Link></li>
-              <li><Link to="/calendar" className="cursor-target hover:text-foreground transition-colors">Calendar</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Browse</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link to="/search?tab=drivers" className="cursor-target hover:text-foreground transition-colors">Drivers</Link></li>
-              <li><Link to="/teams" className="cursor-target hover:text-foreground transition-colors">Teams</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="font-display text-sm font-semibold mb-3 text-foreground">Platform</h4>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              
-              <li><Link to="/auth" className="cursor-target hover:text-foreground transition-colors">Sign Up</Link></li>
-              <li><Link to="/privacy" className="cursor-target hover:text-foreground transition-colors">Privacy Policy</Link></li>
-            </ul>
-          </div>
-        </div>
-        <div className="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground font-light">
-          © {new Date().getFullYear()} Track Records. All rights reserved.
-        </div>
+const COLS = [
+  {
+    title: "Results",
+    links: [
+      { to: "/results", label: "Latest results" },
+      { to: "/calendar", label: "Calendar" },
+      { to: "/series", label: "Series" },
+    ],
+  },
+  {
+    title: "Database",
+    links: [
+      { to: "/search?tab=drivers", label: "Drivers" },
+      { to: "/teams", label: "Teams" },
+      { to: "/search?tab=circuits", label: "Circuits" },
+      { to: "/cars", label: "Cars" },
+    ],
+  },
+  {
+    title: "Track Records",
+    links: [
+      { to: "/articles", label: "Articles" },
+      { to: "/contribute", label: "Contribute data" },
+      { to: "/auth?signup=true", label: "Sign up" },
+      { to: "/privacy", label: "Privacy" },
+    ],
+  },
+];
+
+const Footer = () => (
+  <footer className="mt-16 border-t bg-card/50">
+    <div className="container grid gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+      <div className="max-w-xs">
+        <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/lovable-uploads/c4e44093-bdee-41b1-bde6-0e0d54bf8054.png" />
+        <p className="mt-3 text-sm text-muted-foreground">
+          Multi-class sportscar results, timing analysis and driver records, linked together.
+        </p>
       </div>
-    </footer>);
-
-};
+      {COLS.map((c) => (
+        <div key={c.title}>
+          <div className="label-caps mb-3">{c.title}</div>
+          <ul className="space-y-2 text-sm">
+            {c.links.map((l) => (
+              <li key={l.to}>
+                <Link to={l.to} className="text-foreground/80 transition-colors hover:text-primary">
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+    <div className="border-t">
+      <div className="container flex flex-col justify-between gap-2 py-4 text-xs text-muted-foreground sm:flex-row">
+        <span>© {new Date().getFullYear()} Track Records</span>
+        <span>
+          Press <kbd className="rounded-sm border bg-muted px-1 font-mono text-[10px]">/</kbd> anywhere to search
+        </span>
+      </div>
+    </div>
+  </footer>
+);
 
 export default Footer;
