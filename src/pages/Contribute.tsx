@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { pgQuote } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,7 +201,7 @@ const ContributePage = () => {
   // Autocomplete fetchers
   const fetchDriverSuggestions = async (q: string): Promise<string[]> => {
     const lower = `%${q}%`;
-    const { data } = await supabase.from("driver_profiles").select("first_name, last_name").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(8);
+    const { data } = await supabase.from("driver_profiles").select("first_name, last_name").or(`first_name.ilike.${pgQuote(lower)},last_name.ilike.${pgQuote(lower)}`).limit(8);
     return (data || []).map((d: any) => `${d.first_name} ${d.last_name}`);
   };
 
@@ -347,9 +348,9 @@ const ContributePage = () => {
     const lower = `%${editSearch}%`;
 
     const [drivers, teams, events] = await Promise.all([
-      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category, bio, social_website, social_instagram, social_twitter, social_linkedin").or(`first_name.ilike.${lower},last_name.ilike.${lower}`).limit(10),
+      supabase.from("driver_profiles").select("id, first_name, last_name, nationality, primary_category, bio, social_website, social_instagram, social_twitter, social_linkedin").or(`first_name.ilike.${pgQuote(lower)},last_name.ilike.${pgQuote(lower)}`).limit(10),
       supabase.from("team_profiles" as any).select("id, name, nationality, primary_category, bio, website").ilike("name", lower).limit(10) as any,
-      supabase.from("race_events").select("id, event_name, series_name, season_year, category, location").or(`event_name.ilike.${lower},series_name.ilike.${lower}`).limit(10),
+      supabase.from("race_events").select("id, event_name, series_name, season_year, category, location").or(`event_name.ilike.${pgQuote(lower)},series_name.ilike.${pgQuote(lower)}`).limit(10),
     ]);
 
     const results: any[] = [];

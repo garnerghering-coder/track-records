@@ -96,7 +96,7 @@ const EventDetailPage = () => {
 
       const entryIds = (rawEntries || []).map((e: any) => e.id);
 
-      let driverMap: Record<string, DriverInfo[]> = {};
+      const driverMap: Record<string, DriverInfo[]> = {};
       if (entryIds.length > 0) {
         const { data: junctions } = await supabase
           .from("race_entry_drivers")
@@ -210,9 +210,9 @@ const EventDetailPage = () => {
           </div>
           <div className="mt-4 sm:mt-0 flex items-center gap-2">
             {isAdmin && (
-              <Link to={`/admin?edit=${event.id}`}>
+              <Link to="/manage/events">
                 <Button size="sm" variant="secondary" className="gap-1.5">
-                  <Pencil className="h-3.5 w-3.5" /> Edit in Admin
+                  <Pencil className="h-3.5 w-3.5" /> Edit in Manage
                 </Button>
               </Link>
             )}

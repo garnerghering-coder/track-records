@@ -240,7 +240,7 @@ export async function exportEventPdf(params: EventExportParams) {
 
     const bottomY = Math.max(topY + 13, rightLineY);
 
-    let tableStartY = bottomY + 4;
+    const tableStartY = bottomY + 4;
 
     // Table
     const { head, body } = buildSessionTable(s);

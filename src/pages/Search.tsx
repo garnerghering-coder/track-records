@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { pgQuote } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -96,7 +97,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_drivers").select("id, full_name, nationality, short_name")
-              .or(`full_name.ilike.%${term}%,nationality.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
+              .or(`full_name.ilike.${pgQuote(`%${term}%`)},nationality.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`).limit(20);
             (data || []).forEach((d: any) => {
               if (!existing.has(d.id)) {
                 items.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}`, nationality: d.nationality });
@@ -112,7 +113,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_teams").select("id, full_name, nationality, short_name")
-              .or(`full_name.ilike.%${term}%,nationality.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
+              .or(`full_name.ilike.${pgQuote(`%${term}%`)},nationality.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`).limit(20);
             (data || []).forEach((t: any) => {
               if (!existing.has(t.id)) {
                 items.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}`, nationality: t.nationality });
@@ -129,12 +130,12 @@ const SearchPage = () => {
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_events")
               .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
-              .or(`name.ilike.%${term}%`)
+              .or(`name.ilike.${pgQuote(`%${term}%`)}`)
               .eq("status", "published" as any).limit(30);
             // Also search by circuit name/country
             const { data: data2 } = await supabase.from("v2_events")
               .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits!inner(name, country)")
-              .or(`name.ilike.%${term}%,country.ilike.%${term}%`, { referencedTable: "v2_circuits" })
+              .or(`name.ilike.${pgQuote(`%${term}%`)},country.ilike.${pgQuote(`%${term}%`)}`, { referencedTable: "v2_circuits" })
               .eq("status", "published" as any).limit(20);
             for (const e of [...(data || []), ...(data2 || [])]) {
               if (!existing.has(e.id)) {
@@ -155,7 +156,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_series").select("id, name, short_name")
-              .or(`name.ilike.%${term}%,short_name.ilike.%${term}%`).limit(20);
+              .or(`name.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`).limit(20);
             (data || []).forEach((s: any) => {
               if (!existing.has(s.id)) {
                 items.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}`, subtitle: s.short_name });
@@ -171,7 +172,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_circuits").select("id, name, country, location")
-              .or(`name.ilike.%${term}%,country.ilike.%${term}%,location.ilike.%${term}%`).limit(20);
+              .or(`name.ilike.${pgQuote(`%${term}%`)},country.ilike.${pgQuote(`%${term}%`)},location.ilike.${pgQuote(`%${term}%`)}`).limit(20);
             if (!data) continue;
             const circuitIds = data.map((c: any) => c.id);
             const { data: layoutData } = circuitIds.length > 0
@@ -183,7 +184,7 @@ const SearchPage = () => {
             data.forEach((c: any) => {
               if (!existing.has(c.id)) {
                 const l = layoutMap[c.id];
-                let tags: { label: string; color: string }[] = [];
+                const tags: { label: string; color: string }[] = [];
                 if (l) {
                   const m = computeTrackMetrics(
                     l.length_km ? Number(l.length_km) : null, l.turns,
@@ -209,7 +210,7 @@ const SearchPage = () => {
           const existing = new Set<string>();
           for (const term of searchTerms) {
             const { data } = await supabase.from("v2_cars").select("id, model_name, manufacturer")
-              .or(`model_name.ilike.%${term}%,manufacturer.ilike.%${term}%`).limit(20);
+              .or(`model_name.ilike.${pgQuote(`%${term}%`)},manufacturer.ilike.${pgQuote(`%${term}%`)}`).limit(20);
             (data || []).forEach((c: any) => {
               if (!existing.has(c.id)) {
                 items.push({ type: "car", id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" "), url: `/car/${c.id}`, subtitle: c.manufacturer });

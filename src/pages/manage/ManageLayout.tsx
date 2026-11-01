@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Outlet, useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar, Users, Car, Flag, MapPin, Trophy, Menu, AlertTriangle, ShieldAlert, Image, FileText } from "lucide-react";
@@ -72,7 +72,7 @@ export default function ManageLayout() {
         )}
       </aside>
       <main className="flex-1 overflow-auto">
-        <Outlet />
+        <Suspense fallback={null}><Outlet /></Suspense>
       </main>
     </div>
   );

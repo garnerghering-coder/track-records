@@ -76,7 +76,7 @@ const CircuitProfile = () => {
 
             // For endurance races, use the last hour sub-session instead of the parent
             const enduranceParentIds = raceSessions.filter(rs => rs.session_type === "endurance_race").map(rs => rs.id);
-            let lastHourSessionMap: Record<string, string> = {};
+            const lastHourSessionMap: Record<string, string> = {};
 
             if (enduranceParentIds.length > 0) {
               const { data: childSessions } = await supabase

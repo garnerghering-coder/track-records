@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, X, Menu, LogOut, Shield } from "lucide-react";
+import { pgQuote } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import logoFull from "@/assets/logo-full.png";
 
@@ -43,11 +44,11 @@ const Header = () => {
     const timer = setTimeout(async () => {
       const lower = `%${searchQuery}%`;
       const [drivers, teams, events, series, circuits] = await Promise.all([
-      supabase.from("v2_drivers").select("id, full_name, nationality").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
-      supabase.from("v2_teams").select("id, full_name, nationality, short_name").or(`full_name.ilike.${lower},nationality.ilike.${lower},short_name.ilike.${lower}`).limit(5),
-      supabase.from("v2_events").select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").or(`name.ilike.${lower}`).eq("status", "published" as any).limit(5),
-      supabase.from("v2_series").select("id, name, short_name").or(`name.ilike.${lower},short_name.ilike.${lower}`).limit(4),
-      supabase.from("v2_circuits").select("id, name, country, location").or(`name.ilike.${lower},country.ilike.${lower},location.ilike.${lower}`).limit(4)]
+      supabase.from("v2_drivers").select("id, full_name, nationality").or(`full_name.ilike.${pgQuote(lower)},nationality.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(5),
+      supabase.from("v2_teams").select("id, full_name, nationality, short_name").or(`full_name.ilike.${pgQuote(lower)},nationality.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(5),
+      supabase.from("v2_events").select("id, name, start_date, v2_seasons(year, v2_series(name)), v2_circuits(name, country)").or(`name.ilike.${pgQuote(lower)}`).eq("status", "published" as any).limit(5),
+      supabase.from("v2_series").select("id, name, short_name").or(`name.ilike.${pgQuote(lower)},short_name.ilike.${pgQuote(lower)}`).limit(4),
+      supabase.from("v2_circuits").select("id, name, country, location").or(`name.ilike.${pgQuote(lower)},country.ilike.${pgQuote(lower)},location.ilike.${pgQuote(lower)}`).limit(4)]
       );
       const results: any[] = [];
       (drivers.data || []).forEach((d: any) => results.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}` }));
@@ -206,9 +207,6 @@ const Header = () => {
         <>
           <Link to="/manage" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
               Manage
-            </Link>
-          <Link to="/admin" onClick={() => setMobileMenuOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Admin
             </Link>
         </>
         }

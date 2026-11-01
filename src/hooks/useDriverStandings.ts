@@ -152,7 +152,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
 
           // Fetch classes for multiclass seasons
           const multiclassIds = seasonsData.filter((s: any) => s.is_multiclass).map((s: any) => s.id);
-          let classMap: Record<string, { id: string; name: string }[]> = {};
+          const classMap: Record<string, { id: string; name: string }[]> = {};
           if (multiclassIds.length > 0) {
             const { data: classes } = await supabase
               .from("v2_season_classes")

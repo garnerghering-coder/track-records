@@ -165,7 +165,7 @@ export default function ManageEventDetail() {
     // Parse base date parts (avoid Date object timezone issues)
     const dateParts = baseDate.split("-").map(Number); // [YYYY, MM, DD]
     if (dateParts.length !== 3 || dateParts.some(isNaN)) return;
-    let [baseYear, baseMonth, baseDay] = dateParts;
+    const [baseYear, baseMonth, baseDay] = dateParts;
 
     // Helper to add days and return YYYY-MM-DD string without timezone issues
     const addDaysToDate = (y: number, m: number, d: number, offset: number): string => {

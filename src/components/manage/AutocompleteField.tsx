@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
+import { cn, pgQuote } from "@/lib/utils";
 import QuickCreateModal from "./QuickCreateModal";
 
 export type EntityType = "driver" | "team" | "car" | "series" | "circuit" | "season";
@@ -60,24 +60,24 @@ export default function AutocompleteField({ entityType, value, onChange, classNa
 
       if (entityType === "driver") {
         const res = await supabase.from("v2_drivers").select("id, full_name, nationality")
-          .or(`full_name.ilike.${q},nationality.ilike.${q},short_name.ilike.${q}`).limit(10);
+          .or(`full_name.ilike.${pgQuote(q)},nationality.ilike.${pgQuote(q)},short_name.ilike.${pgQuote(q)}`).limit(10);
         data = (res.data || []).map(d => ({ id: d.id, label: d.nationality ? `${d.full_name} (${d.nationality})` : d.full_name }));
       } else if (entityType === "team") {
         const res = await supabase.from("v2_teams").select("id, full_name, short_name, nationality")
-          .or(`full_name.ilike.${q},short_name.ilike.${q},nationality.ilike.${q}`).limit(10);
+          .or(`full_name.ilike.${pgQuote(q)},short_name.ilike.${pgQuote(q)},nationality.ilike.${pgQuote(q)}`).limit(10);
         data = (res.data || []).map(d => ({ id: d.id, label: d.full_name }));
       } else if (entityType === "car") {
         // Search by model_name OR manufacturer
         const res = await supabase.from("v2_cars").select("id, model_name, manufacturer")
-          .or(`model_name.ilike.${q},manufacturer.ilike.${q}`).limit(10);
+          .or(`model_name.ilike.${pgQuote(q)},manufacturer.ilike.${pgQuote(q)}`).limit(10);
         data = (res.data || []).map(d => ({ id: d.id, label: [d.manufacturer, d.model_name].filter(Boolean).join(" ") }));
       } else if (entityType === "series") {
         const res = await supabase.from("v2_series").select("id, name, short_name")
-          .or(`name.ilike.${q},short_name.ilike.${q}`).order("name").limit(10);
+          .or(`name.ilike.${pgQuote(q)},short_name.ilike.${pgQuote(q)}`).order("name").limit(10);
         data = (res.data || []).map(s => ({ id: s.id, label: s.name }));
       } else if (entityType === "circuit") {
         const res = await supabase.from("v2_circuits").select("id, name, country, location")
-          .or(`name.ilike.${q},country.ilike.${q},location.ilike.${q}`).order("name").limit(10);
+          .or(`name.ilike.${pgQuote(q)},country.ilike.${pgQuote(q)},location.ilike.${pgQuote(q)}`).order("name").limit(10);
         data = (res.data || []).map(c => ({ id: c.id, label: [c.name, c.location, c.country].filter(Boolean).join(", ") }));
       } else if (entityType === "season") {
         if (!filterSeriesId) { setResults([]); return; }

@@ -15,7 +15,7 @@ const CarsPage = () => {
   useEffect(() => {
     const fetchCars = async () => {
       setLoading(true);
-      let query = supabase.from("v2_cars").select("*").order("model_name");
+      const query = supabase.from("v2_cars").select("*").order("model_name");
       const { data } = await query;
       let filtered = data ?? [];
       if (search.trim()) {

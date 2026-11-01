@@ -4,41 +4,42 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import Search from "./pages/Search";
-import Results from "./pages/Results";
-import EventDetail from "./pages/EventDetail";
-import DriverProfile from "./pages/DriverProfile";
+const Auth = lazy(() => import("./pages/Auth"));
+const Search = lazy(() => import("./pages/Search"));
+const Results = lazy(() => import("./pages/Results"));
+const EventDetail = lazy(() => import("./pages/EventDetail"));
+const DriverProfile = lazy(() => import("./pages/DriverProfile"));
 
-import Submit from "./pages/Submit";
-import Privacy from "./pages/Privacy";
-import NotFound from "./pages/NotFound";
-import Teams from "./pages/Teams";
-import TeamProfile from "./pages/TeamProfile";
-import Contribute from "./pages/Contribute";
-import CircuitProfile from "./pages/CircuitProfile";
-import SeriesProfile from "./pages/SeriesProfile";
-import SeriesListing from "./pages/Series";
-import Calendar from "./pages/Calendar";
-import Cars from "./pages/Cars";
-import CarProfile from "./pages/CarProfile";
-import EventPage from "./pages/EventPage";
-import Articles from "./pages/Articles";
-import ArticleDetail from "./pages/ArticleDetail";
-import ManageLayout from "./pages/manage/ManageLayout";
-import ManageEvents from "./pages/manage/ManageEvents";
-import ManageEventDetail from "./pages/manage/ManageEventDetail";
-import ManageSessionResults from "./pages/manage/ManageSessionResults";
-import ManageDrivers from "./pages/manage/ManageDrivers";
-import ManageTeams from "./pages/manage/ManageTeams";
-import ManageCars from "./pages/manage/ManageCars";
-import ManageCircuits from "./pages/manage/ManageCircuits";
-import ManageSeries from "./pages/manage/ManageSeries";
-import ManageReports from "./pages/manage/ManageReports";
-import ManagePotentialIssues from "./pages/manage/ManagePotentialIssues";
-import ManageCarLiveries from "./pages/manage/ManageCarLiveries";
-import ManageArticles from "./pages/manage/ManageArticles";
+const Submit = lazy(() => import("./pages/Submit"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Teams = lazy(() => import("./pages/Teams"));
+const TeamProfile = lazy(() => import("./pages/TeamProfile"));
+const Contribute = lazy(() => import("./pages/Contribute"));
+const CircuitProfile = lazy(() => import("./pages/CircuitProfile"));
+const SeriesProfile = lazy(() => import("./pages/SeriesProfile"));
+const SeriesListing = lazy(() => import("./pages/Series"));
+const Calendar = lazy(() => import("./pages/Calendar"));
+const Cars = lazy(() => import("./pages/Cars"));
+const CarProfile = lazy(() => import("./pages/CarProfile"));
+const EventPage = lazy(() => import("./pages/EventPage"));
+const Articles = lazy(() => import("./pages/Articles"));
+const ArticleDetail = lazy(() => import("./pages/ArticleDetail"));
+const ManageLayout = lazy(() => import("./pages/manage/ManageLayout"));
+const ManageEvents = lazy(() => import("./pages/manage/ManageEvents"));
+const ManageEventDetail = lazy(() => import("./pages/manage/ManageEventDetail"));
+const ManageSessionResults = lazy(() => import("./pages/manage/ManageSessionResults"));
+const ManageDrivers = lazy(() => import("./pages/manage/ManageDrivers"));
+const ManageTeams = lazy(() => import("./pages/manage/ManageTeams"));
+const ManageCars = lazy(() => import("./pages/manage/ManageCars"));
+const ManageCircuits = lazy(() => import("./pages/manage/ManageCircuits"));
+const ManageSeries = lazy(() => import("./pages/manage/ManageSeries"));
+const ManageReports = lazy(() => import("./pages/manage/ManageReports"));
+const ManagePotentialIssues = lazy(() => import("./pages/manage/ManagePotentialIssues"));
+const ManageCarLiveries = lazy(() => import("./pages/manage/ManageCarLiveries"));
+const ManageArticles = lazy(() => import("./pages/manage/ManageArticles"));
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -48,6 +49,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
@@ -88,6 +90,7 @@ const App = () => (
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

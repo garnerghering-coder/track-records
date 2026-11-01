@@ -98,3 +98,11 @@
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
 }
+
+/* Let grid/flex children shrink below their content width so long names
+   (e.g. event titles in cards) wrap/truncate instead of overflowing on mobile. */
+@layer base {
+  .grid > * {
+    min-width: 0;
+  }
+}
