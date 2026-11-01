@@ -4,6 +4,7 @@
 {"id":"1a6e000f-6e77-4bcc-8bae-452914f8aa2d","model_name":"Artura GT4","manufacturer":"McLaren","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:24.952196+00:00"}
 {"id":"1ad4a6f1-7839-4ed9-a379-56008f986ca9","model_name":"SC63","manufacturer":"Lamborghini","created_at":"2026-02-22T17:00:36.597728+00:00","updated_at":"2026-02-24T20:28:18.528985+00:00"}
 {"id":"1f7a21c7-29a2-410c-bd5c-4ed463f16e85","model_name":"Leon VZ TCR","manufacturer":"Cupra","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:52.015928+00:00"}
+{"model_name":"RS3 LMS SEQ","manufacturer":"Audi","id":"233ac3a3-ab2d-424d-a9ae-0af0897b750a","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"model_name":"Vantage GT4","manufacturer":"Aston Martin","id":"323ad665-4800-4009-b896-eb5136092fa4","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
 {"id":"37e4b7f1-9199-46a6-8e52-c3c33c80a43f","model_name":"Mustang GT3","manufacturer":"Ford","created_at":"2026-02-22T12:42:28.474547+00:00","updated_at":"2026-02-22T14:59:52.087068+00:00"}
 {"id":"39b3b17e-f521-4e09-ada3-0ffa8c43ee07","model_name":"720S GT3 EVO","manufacturer":"McLaren","created_at":"2026-02-22T12:42:27.573032+00:00","updated_at":"2026-02-22T15:00:09.144795+00:00"}
@@ -17,13 +18,16 @@
 {"id":"7b541dcd-de3d-466e-948e-45ee7c1e9743","model_name":"718 GT4 RS CS","manufacturer":"Porsche","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:29:05.902554+00:00"}
 {"id":"7c4d46b9-b9a6-41e8-b240-47b11228694c","model_name":"MX-5","manufacturer":"Mazda","created_at":"2026-03-02T12:35:47.434956+00:00","updated_at":"2026-03-02T13:26:33.93639+00:00"}
 {"model_name":"Temerario GT3","manufacturer":"Lamborghini","id":"938e9115-8590-4629-8a8d-1c5e2d09a646","created_at":"2026-11-01T15:13:07.079Z","updated_at":"2026-11-01T15:13:07.079Z"}
+{"model_name":"Civic FK7 TCR","manufacturer":"Honda","id":"a430eda5-e2a5-430c-b97f-2e61b298729f","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"abcb1d5d-09e8-47e4-a42d-2294c596c87c","model_name":"LMP2 07","manufacturer":"ORECA ","created_at":"2026-02-22T12:42:24.204741+00:00","updated_at":"2026-02-24T20:28:58.865433+00:00"}
 {"id":"abe2225b-dc90-4841-8cb7-fbdb1732abb9","model_name":"M4 GT3 EVO","manufacturer":"BMW","created_at":"2026-02-22T12:42:32.789785+00:00","updated_at":"2026-02-22T14:59:31.644672+00:00"}
 {"id":"adc5486e-ab1e-4db8-96fc-4cb9085ad344","model_name":"Civic FL5 TCR","manufacturer":"Honda","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:04.469519+00:00"}
+{"model_name":"Giulietta Veloce TCR","manufacturer":"Alfa Romeo","id":"ba6638b2-94cb-4f80-9159-bd08d48a74c5","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"bd1d02f9-bc1e-4ba0-b729-ecba25cc9a1f","model_name":"M Hybrid V8","manufacturer":"BMW","created_at":"2026-02-22T12:42:22.945144+00:00","updated_at":"2026-02-22T14:59:25.102888+00:00"}
 {"id":"bd208e10-8e9c-4846-b550-f8eb9d1e5bbc","model_name":"Vantage GT3 Evo","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:27.03198+00:00","updated_at":"2026-02-22T14:59:18.875022+00:00"}
 {"model_name":"JS P217","manufacturer":"Ligier","id":"c42b4659-c5e5-41da-b4ef-67db3819909b","created_at":"2026-11-01T15:12:15.039Z","updated_at":"2026-11-01T15:12:15.039Z"}
 {"id":"c46636a9-40ca-4d4b-907b-8683ef505406","model_name":"ARX-06","manufacturer":"Acura","created_at":"2026-02-22T12:42:21.911637+00:00","updated_at":"2026-02-22T14:59:05.283096+00:00"}
+{"model_name":"GR Supra GT4 EVO1","manufacturer":"Toyota","id":"cd5f87df-65b5-4ec0-bcd9-cefca7338672","created_at":"2026-11-01T15:27:42.190Z","updated_at":"2026-11-01T15:27:42.190Z"}
 {"model_name":"911 GT3 R (992)","manufacturer":"Porsche","id":"d13e71d8-bd46-4738-adc7-c09aa906f540","created_at":"2026-11-01T14:46:09.036Z","updated_at":"2026-11-01T14:46:09.036Z"}
 {"id":"d24bf956-5fba-4157-9283-6481ea7739a4","model_name":"Mustang GT4","manufacturer":"Ford","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:57.318821+00:00"}
 {"id":"e332ac91-5565-497f-8535-2f5eaef75b1d","model_name":"Vantage AMR GT4 Evo","manufacturer":"Aston Martin","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:14.508212+00:00"}

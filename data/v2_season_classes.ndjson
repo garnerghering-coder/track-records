@@ -4,6 +4,7 @@
 {"season_id":"598a8dc4-3c9e-49ef-8536-14a58635cb9d","class_name":"GTDPRO","sort_order":2,"color":"#f73b3b","cdm":0.74,"id":"20a326ac-a55c-4ba3-b088-0fb064f63ff9","created_at":"2026-11-01T15:09:37.173Z"}
 {"id":"292cdba8-caa5-4fa6-aed5-a40bd48dabdf","season_id":"c9991d6f-9437-4b23-b5d7-001a36316865","class_name":"GTDPRO","cdm":0.74,"sort_order":2,"created_at":"2026-02-23T18:54:56.672037+00:00","color":"#f73b3b"}
 {"id":"39b84ddf-9633-433b-a287-b0f4bcced95e","season_id":"25f35343-8108-42ce-899b-d69c8475f777","class_name":"GS","cdm":null,"sort_order":0,"created_at":"2026-02-27T09:54:21.183748+00:00","color":"#3b82f6"}
+{"season_id":"c1ae164e-460f-4450-a823-9b17db646f59","class_name":"TCR","sort_order":1,"color":"#f7ce3b","cdm":null,"id":"6b610e85-2557-448c-abcb-4b3357f90310","created_at":"2026-11-01T15:26:47.955Z"}
 {"id":"749750a0-928d-4566-8f9a-c258637230b5","season_id":"d7684cd2-dce1-4080-a592-b73ad50d298e","class_name":"GTDPRO","cdm":0.745,"sort_order":2,"created_at":"2026-02-23T18:54:35.820658+00:00","color":"#f73b3b"}
 {"season_id":"598a8dc4-3c9e-49ef-8536-14a58635cb9d","class_name":"LMP2","sort_order":1,"color":"#3b82f6","cdm":0.8,"id":"756ff6cf-c16e-4e03-b6dd-55dd017bd0d6","created_at":"2026-11-01T15:09:37.173Z"}
 {"id":"79107648-9d0b-45ff-bb75-55e60b2a99d5","season_id":"d7684cd2-dce1-4080-a592-b73ad50d298e","class_name":"GTD","cdm":0.69,"sort_order":3,"created_at":"2026-02-23T19:26:39.781328+00:00","color":"#3dd232"}
@@ -14,3 +15,4 @@
 {"id":"daa3694f-6274-4ae1-bdfb-e4cfcf50dc2c","season_id":"c724aff5-4566-48db-a9d0-4eded52dcb59","class_name":"TCR","cdm":null,"sort_order":1,"created_at":"2026-02-24T18:34:36.699366+00:00","color":"#f7ce3b"}
 {"id":"f12b250d-f0d4-4432-ba03-d65ec7ab129a","season_id":"d7684cd2-dce1-4080-a592-b73ad50d298e","class_name":"GTP","cdm":0.905,"sort_order":0,"created_at":"2026-02-23T18:54:35.641104+00:00","color":"#676767"}
 {"id":"fbe84bd8-5142-4178-8d2c-00a140f43daa","season_id":"d7684cd2-dce1-4080-a592-b73ad50d298e","class_name":"LMP2","cdm":0.805,"sort_order":1,"created_at":"2026-02-23T18:54:35.73652+00:00","color":"#3b82f6"}
+{"season_id":"c1ae164e-460f-4450-a823-9b17db646f59","class_name":"GS","sort_order":0,"color":"#3b82f6","cdm":null,"id":"fcf969ba-1f30-4d37-ae5c-0f7e8ffa3499","created_at":"2026-11-01T15:26:47.954Z"}
