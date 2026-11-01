@@ -6,8 +6,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 import { classRank, parseTime, type ClassifiedCar, type EventDigest, type RaceDigest } from "@/lib/insights";
-import { computeDriverStandings, computeTeamStandings, type DriverStanding, type TeamStanding } from "@/lib/standings";
-import { fetchSeasonStandingsInput } from "@/lib/standings-data";
+import { loadChampionship, type ChampEntry } from "@/lib/standings-data";
 import { computeTrackMetrics, type TrackMetrics } from "@/lib/track-calculations";
 import { getClassColor } from "@/lib/classes";
 import { cleanName, lastName, useLoad } from "@/site/data";
@@ -89,85 +88,10 @@ export function classColor(seasonClasses: SeasonClass[] | undefined, name: strin
 
 /* ── Championship (drivers + teams with cumulative points per round) ── */
 
-export interface ChampEntry {
-  key: string;
-  position: number;
-  totalPoints: number;
-  wins: number;
-  podiums: number;
-  /** One per round, cumulative. */
-  cumulative: number[];
-  /** Points scored in each round. */
-  perRound: number[];
-  /** drivers: one id; teams: the car's drivers. */
-  driverIds: string[];
-  teamId: string | null;
-  carNumbers: string[];
-  name: string;
-  nationality: string | null;
-}
+export type { ChampEntry, Championship } from "@/lib/standings-data";
 
-export interface Championship {
-  /** Event ids of the scored rounds, in order. */
-  rounds: string[];
-  classes: string[];
-  drivers: Record<string, ChampEntry[]>;
-  teams: Record<string, ChampEntry[]>;
-  teamNames: Record<string, string>;
-  driverMeta: Record<string, { name: string; nationality: string | null }>;
-}
-
-export async function fetchChampionship(seasonId: string): Promise<Championship> {
-  const input = await fetchSeasonStandingsInput(seasonId);
-  const rounds = [...new Set(input.sessions.map((s) => s.eventId))];
-  const sessionEvent = new Map(input.sessions.map((s) => [s.id, s.eventId]));
-  const teamNames = Object.fromEntries(input.teams);
-  const driverMeta = Object.fromEntries([...input.drivers.values()].map((d) => [d.id, { name: d.name, nationality: d.nationality }]));
-
-  const per = (results: DriverStanding["results"]) => {
-    const perRound = rounds.map((ev) => results.filter((r) => sessionEvent.get(r.sessionId) === ev).reduce((n, r) => n + r.points, 0));
-    let acc = 0;
-    return { perRound, cumulative: perRound.map((p) => (acc += p)) };
-  };
-
-  const drivers: Record<string, ChampEntry[]> = {};
-  for (const s of computeDriverStandings(input.sessions, input.rows)) {
-    const meta = input.drivers.get(s.driverId);
-    (drivers[s.className] ??= []).push({
-      key: s.key,
-      position: s.position,
-      totalPoints: s.totalPoints,
-      wins: s.wins,
-      podiums: s.podiums,
-      ...per(s.results),
-      driverIds: [s.driverId],
-      teamId: s.teamId,
-      carNumbers: s.carNumbers,
-      name: meta?.name || "Unknown",
-      nationality: meta?.nationality ?? null,
-    });
-  }
-  const teams: Record<string, ChampEntry[]> = {};
-  for (const t of computeTeamStandings(input.sessions, input.rows) as TeamStanding[]) {
-    (teams[t.className] ??= []).push({
-      key: t.key,
-      position: t.position,
-      totalPoints: t.totalPoints,
-      wins: t.wins,
-      podiums: t.podiums,
-      ...per(t.results),
-      driverIds: t.driverIds,
-      teamId: t.teamId,
-      carNumbers: [t.carNumber],
-      name: (t.teamId && input.teams.get(t.teamId)) || `#${t.carNumber}`,
-      nationality: null,
-    });
-  }
-  for (const k of Object.keys(drivers)) drivers[k].sort((a, b) => a.position - b.position);
-  for (const k of Object.keys(teams)) teams[k].sort((a, b) => a.position - b.position);
-  const classes = [...new Set([...Object.keys(drivers), ...Object.keys(teams)])].sort((a, b) => classRank(a) - classRank(b) || a.localeCompare(b));
-  return { rounds, classes, drivers, teams, teamNames, driverMeta };
-}
+/** Precomputed at build time (public/data/derived/standings), computed here only if that file is missing. */
+export const fetchChampionship = (seasonId: string) => loadChampionship(seasonId);
 export const useChampionship = (seasonId: string | null | undefined) => useLoad(seasonId ? `champ:${seasonId}` : null, () => fetchChampionship(seasonId!));
 
 /** Group entries that share a position (co-drivers on identical records). */

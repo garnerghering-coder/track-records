@@ -2,6 +2,8 @@
 /**
  * Derived data computed from data/ at build time:
  *   public/data/derived/digests.json  — per-event race digests (winners, podiums, insights, stats)
+ *   public/data/derived/standings/<seasonId>.json — each season's championship (drivers + teams per
+ *     class, points per round), so pages need not download the full results tables
  * Run after build-data.mjs (npm scripts do this automatically).
  * Requires: node --experimental-strip-types
  */
@@ -9,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { openStore, ROOT } from "./lib/local-store.mjs";
 import { digestEvent } from "../src/lib/insights.ts";
+import { buildChampionship, loadSeasonStandingsInput } from "../src/lib/season-standings.ts";
 
 const store = openStore();
 const all = async (t) => (await store.from(t).select("*")).data || [];
@@ -51,3 +54,16 @@ fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, "digests.json"), JSON.stringify(out));
 const n = Object.values(out).reduce((a, d) => a + d.races.length, 0);
 console.log(`derived: ${Object.keys(out).length} event digests, ${n} races`);
+
+const standingsDir = path.join(dir, "standings");
+fs.rmSync(standingsDir, { recursive: true, force: true });
+fs.mkdirSync(standingsDir, { recursive: true });
+const seasons = await all("v2_seasons");
+let bytes = 0;
+for (const season of seasons) {
+  const champ = buildChampionship(await loadSeasonStandingsInput(store, season.id));
+  const json = JSON.stringify(champ);
+  bytes += json.length;
+  fs.writeFileSync(path.join(standingsDir, `${season.id}.json`), json);
+}
+console.log(`derived: ${seasons.length} season standings (${Math.round(bytes / 1024)} KB)`);

@@ -2,8 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { EventDigest } from "@/lib/insights";
-import { computeDriverStandings, type DriverStanding } from "@/lib/standings";
-import { fetchSeasonStandingsInput } from "@/lib/standings-data";
+import { loadChampionship } from "@/lib/standings-data";
 
 const BASE = `${import.meta.env.BASE_URL || "/"}data/`.replace(/\/{2,}/g, "/");
 
@@ -134,29 +133,49 @@ export async function fetchSeasons(): Promise<SeasonLite[]> {
 }
 export const useSeasons = () => useLoad("seasons", fetchSeasons).data;
 
+export interface SeasonStandingRow {
+  key: string;
+  driverId: string;
+  className: string;
+  carNumbers: string[];
+  teamId: string | null;
+  totalPoints: number;
+  position: number;
+  wins: number;
+  podiums: number;
+  name: string;
+  nationality: string | null;
+  /** Cumulative points after each round. */
+  cumulative: number[];
+}
+
 export interface SeasonStandings {
-  byClass: { className: string; rows: (DriverStanding & { name: string; nationality: string | null; cumulative: number[] })[] }[];
+  byClass: { className: string; rows: SeasonStandingRow[] }[];
   rounds: number;
 }
 
+/** Drivers' standings per class, from the season's (precomputed) championship. */
 export async function fetchSeasonStandings(seasonId: string): Promise<SeasonStandings> {
-  const input = await fetchSeasonStandingsInput(seasonId);
-  const standings = computeDriverStandings(input.sessions, input.rows);
-  const order = [...new Set(input.sessions.map((s) => s.eventId))];
-  const sessionEvent = new Map(input.sessions.map((s) => [s.id, s.eventId]));
-  const byClass = new Map<string, SeasonStandings["byClass"][number]["rows"]>();
-  for (const s of standings) {
-    const meta = input.drivers.get(s.driverId);
-    const perEvent = order.map((ev) => s.results.filter((r) => sessionEvent.get(r.sessionId) === ev).reduce((n, r) => n + r.points, 0));
-    let acc = 0;
-    const cumulative = perEvent.map((p) => (acc += p));
-    const row = { ...s, name: meta?.name || "Unknown", nationality: meta?.nationality ?? null, cumulative };
-    if (!byClass.has(s.className)) byClass.set(s.className, []);
-    byClass.get(s.className)!.push(row);
-  }
+  const ch = await loadChampionship(seasonId);
   return {
-    rounds: order.length,
-    byClass: [...byClass.entries()].map(([className, rows]) => ({ className, rows: rows.sort((a, b) => a.position - b.position) })),
+    rounds: ch.rounds.length,
+    byClass: Object.entries(ch.drivers).map(([className, list]) => ({
+      className,
+      rows: list.map((e) => ({
+        key: e.key,
+        driverId: e.driverIds[0],
+        className,
+        carNumbers: e.carNumbers,
+        teamId: e.teamId,
+        totalPoints: e.totalPoints,
+        position: e.position,
+        wins: e.wins,
+        podiums: e.podiums,
+        name: e.name,
+        nationality: e.nationality,
+        cumulative: e.cumulative,
+      })),
+    })),
   };
 }
 export const useSeasonStandings = (seasonId: string | null | undefined) =>
