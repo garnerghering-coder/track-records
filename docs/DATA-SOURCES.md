@@ -191,6 +191,29 @@ penalties. The importer now picks the Official file. Sessions already in the dat
 changed, because the importer skips sessions by name. To correct them, re-import the event with
 `scripts/import-event.mjs --replace`, then compare.
 
+`--replace` deletes the event's sessions, so anything attached to them by hand (session
+summaries, `column_order`, `highlights_url`) has to be re-attached to the new sessions by name.
+
+### What the feeds look like (learned importing WeatherTech and MPC 2024–2026)
+
+- **Points**: every 2024 event page carries IMSA's end-of-season POINTS DATA, not the file as it
+  stood after that round. The importer finds the round being imported in the file by name (the
+  event name, the Al Kamel event folder and the circuit name: "Sebring", "CTMP",
+  "Michelin Raceway" = Road Atlanta) or, failing that, by round number, so events need correct
+  round numbers. A round found by name is trusted even where IMSA's figures differ from the
+  position-based scale (penalties: 2024 Sebring GT qualifying, 2026 Long Beach GTD qualifying,
+  2026 Indianapolis GT qualifying scored 0).
+- **Hour results**: 2024 Daytona publishes the hourly classification as PDF/CSV only (just Hour 24
+  has JSON), so that event has Race + Hour 24 and no other hours. 2024 Daytona also has no
+  Qualifying: it was run at the Roar, which is CSV/PDF only.
+- **Start times**: `session_date` in the results JSON uses a 12-hour clock without AM/PM. Session
+  start times come from the session folder name (`202503151010_Race` = 10:10 local).
+- **Name variants**: Al Kamel spells the same car or team differently between years
+  ("Mercedes AMG GT3" / "Mercedes-AMG GT3", "Cadillac VSeries.R", "Ligier  LMP2" for the
+  JS P217, "VasserSullivan", "TeamTGM", "Turner Motorpsort") and marks MX-5 Cup drivers "(R)" or
+  "(V)". The importer ignores spacing, punctuation and the markers; for typos add a
+  `search_aliases` row (entity_type `driver`, `team` or `car`, canonical = the row id).
+
 ## Full catalog
 
 Columns: Sessions (races) is the number of session folders and how many are races. Time cards

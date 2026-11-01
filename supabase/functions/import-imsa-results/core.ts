@@ -31,6 +31,7 @@ import {
   mergeOfficialPoints,
   normaliseName,
   parseOfficialPointsFile,
+  type PointsEventHint,
   pickPointsFiles,
   type PointsRules,
 } from "../_shared/imsa-points.ts";
@@ -180,7 +181,9 @@ function matchTeam(
   teamName: string,
   existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
   seasonAliases: Array<{ team_id: string; display_name: string }>,
-  aliasMap: Map<string, string>
+  aliasMap: Map<string, string>,
+  carNumbers: Set<string> = new Set(),
+  carHistory: Map<string, Set<string>> = new Map(),
 ): string | null {
   const normalized = teamName.toLowerCase().trim();
   const aliasId = aliasMap.get(normalized);
@@ -199,10 +202,28 @@ function matchTeam(
     if (a.display_name.toLowerCase() === normalized) return a.team_id;
     if (a.display_name.toLowerCase().includes(normalized) || normalized.includes(a.display_name.toLowerCase())) return a.team_id;
   }
+  // Partial matches: one name contains the other ("AF Corse" / "AF Corse USA"), also on the
+  // spacing-free key for long names ("VasserSullivan" / "Vasser Sullivan Racing"). Several teams
+  // can qualify ("Riley" is in "Myers Riley Motorsports" and "Kellymoss with Riley"), so rank them:
+  // a team that already ran one of this entry's car numbers first, then a name that starts with
+  // the other, then the shortest name.
+  const candidates: Array<{ id: string; ranCar: boolean; prefix: boolean; len: number }> = [];
   for (const t of existingTeams) {
-    if (t.full_name.toLowerCase().includes(normalized) || normalized.includes(t.full_name.toLowerCase())) return t.id;
+    const full = t.full_name.toLowerCase().trim();
+    const k = teamKey(t.full_name);
+    const raw = full.includes(normalized) || normalized.includes(full);
+    const keyed = key.length >= 8 && k.length >= 8 && (k.includes(key) || key.includes(k));
+    if (!raw && !keyed) continue;
+    const ran = carHistory.get(t.id);
+    candidates.push({
+      id: t.id,
+      ranCar: !!ran && [...carNumbers].some((n) => ran.has(n)),
+      prefix: full.startsWith(normalized) || normalized.startsWith(full) || k.startsWith(key) || key.startsWith(k),
+      len: full.length,
+    });
   }
-  return null;
+  candidates.sort((a, b) => Number(b.ranCar) - Number(a.ranCar) || Number(b.prefix) - Number(a.prefix) || a.len - b.len);
+  return candidates[0]?.id ?? null;
 }
 
 /**
@@ -218,12 +239,18 @@ function matchCar(
   existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }>,
   manufacturer: string | null = null
 ): string | null {
-  const norm = (x: string | null | undefined) => (x || "").toLowerCase().replace(/\s+/g, " ").trim();
+  // Hyphens count as spaces: Al Kamel's 2024 feeds say "Mercedes AMG GT3", later ones "Mercedes-AMG GT3".
+  const norm = (x: string | null | undefined) => (x || "").toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
   const normalized = norm(vehicleName);
   const make = norm(manufacturer);
   const fullName = (c: { model_name: string; manufacturer: string | null }) => norm(`${c.manufacturer || ""} ${c.model_name}`);
   for (const c of existingCars) {
     if (norm(c.model_name) === normalized || fullName(c) === normalized) return c.id;
+  }
+  // Same name without spaces and punctuation: "Cadillac VSeries.R" = "Cadillac V-Series.R"
+  const compact = (x: string) => x.replace(/[^a-z0-9]/g, "");
+  for (const c of existingCars) {
+    if (compact(norm(c.model_name)) === compact(normalized) || compact(fullName(c)) === compact(normalized)) return c.id;
   }
   const model = make && normalized.startsWith(make + " ") ? normalized.slice(make.length + 1) : normalized;
   const candidates = existingCars.filter((c) => !make || !norm(c.manufacturer) || norm(c.manufacturer) === make);
@@ -810,7 +837,7 @@ async function replaceStrategyRowsForSession(
 // Pre-scan all JSON data to collect unique drivers/teams/cars, then resolve/create them all at once
 
 interface DriverInfo { name: string; country3: string | null; }
-interface TeamInfo { name: string; }
+interface TeamInfo { name: string; carNumbers: Set<string>; }
 interface CarInfo { vehicle: string; manufacturer: string | null; }
 
 function collectUniqueEntities(allSessionData: Array<{ entries: any[] }>) {
@@ -833,7 +860,8 @@ function collectUniqueEntities(allSessionData: Array<{ entries: any[] }>) {
       const teamName = entry.team;
       if (teamName) {
         const key = teamName.toLowerCase().trim();
-        if (!teams.has(key)) teams.set(key, { name: teamName.trim() });
+        if (!teams.has(key)) teams.set(key, { name: teamName.trim(), carNumbers: new Set() });
+        if (entry.number != null && entry.number !== "") teams.get(key)!.carNumbers.add(String(entry.number));
       }
       const vehicle = entry.vehicle || entry.car;
       if (vehicle) {
@@ -898,14 +926,15 @@ async function bulkResolveTeams(
   existingTeams: Array<{ id: string; full_name: string; short_name: string | null }>,
   seasonAliases: Array<{ team_id: string; display_name: string }>,
   aliasMap: Map<string, string>,
-  summary: any
+  summary: any,
+  carHistory: Map<string, Set<string>> = new Map(),
 ): Promise<Map<string, string>> {
   const resolved = new Map<string, string>();
   const toCreate: Array<{ full_name: string }> = [];
   const toCreateKeys: string[] = [];
 
   for (const [key, info] of uniqueTeams) {
-    const id = matchTeam(info.name, existingTeams, seasonAliases, aliasMap);
+    const id = matchTeam(info.name, existingTeams, seasonAliases, aliasMap, info.carNumbers, carHistory);
     if (id) {
       resolved.set(key, id);
       summary.teams_matched++;
@@ -934,14 +963,16 @@ async function bulkResolveCars(
   adminClient: any,
   uniqueCars: Map<string, CarInfo>,
   existingCars: Array<{ id: string; model_name: string; manufacturer: string | null }>,
-  summary: any
+  summary: any,
+  aliasMap: Map<string, string> = new Map(),
 ): Promise<Map<string, string>> {
   const resolved = new Map<string, string>();
   const toCreate: Array<{ model_name: string; manufacturer?: string }> = [];
   const toCreateKeys: string[] = [];
 
   for (const [key, info] of uniqueCars) {
-    const id = matchCar(info.vehicle, existingCars, info.manufacturer);
+    const aliasId = aliasMap.get(info.vehicle.toLowerCase().replace(/\s+/g, " ").trim());
+    const id = (aliasId && existingCars.some((c) => c.id === aliasId) ? aliasId : null) ?? matchCar(info.vehicle, existingCars, info.manufacturer);
     if (id) {
       resolved.set(key, id);
       summary.cars_matched = (summary.cars_matched || 0) + 1;
@@ -971,6 +1002,33 @@ async function bulkResolveCars(
   return resolved;
 }
 
+/** Car numbers each team has raced in this series (team_id -> numbers), to break ties between partial team-name matches. */
+async function loadCarHistory(adminClient: any, seriesId: string | null | undefined): Promise<Map<string, Set<string>>> {
+  const history = new Map<string, Set<string>>();
+  if (!seriesId) return history;
+  try {
+    const { data: seasons } = await adminClient.from("v2_seasons").select("id").eq("series_id", seriesId);
+    const seasonIds = (seasons || []).map((s: any) => s.id);
+    if (!seasonIds.length) return history;
+    const { data: events } = await adminClient.from("v2_events").select("id").in("season_id", seasonIds);
+    const eventIds = (events || []).map((e: any) => e.id);
+    if (!eventIds.length) return history;
+    const { data: sessions } = await adminClient.from("v2_sessions").select("id").in("event_id", eventIds).is("parent_session_id", null);
+    const sessionIds = (sessions || []).map((s: any) => s.id);
+    for (let i = 0; i < sessionIds.length; i += 200) {
+      const { data: rows } = await adminClient.from("v2_race_results").select("team_id, car_number").in("session_id", sessionIds.slice(i, i + 200));
+      for (const r of rows || []) {
+        if (!r.team_id || r.car_number == null) continue;
+        if (!history.has(r.team_id)) history.set(r.team_id, new Set());
+        history.get(r.team_id)!.add(String(r.car_number));
+      }
+    }
+  } catch {
+    /* no history: fall back to name ranking */
+  }
+  return history;
+}
+
 // ── IMSA Points calculation ──────────────────────────────────────────
 // Scale, eligibility and scheme rules live in the pure, dependency-free
 // module ../_shared/imsa-points.ts (also imported by the web app's tests and
@@ -991,6 +1049,7 @@ async function fetchOfficialPoints(
   belongsToSeries: (url: string) => boolean,
   baseUrl: string,
   rules: PointsRules,
+  hint?: PointsEventHint,
 ): Promise<OfficialPointsCandidates | null> {
   if (!rules.officialPoints) return null;
   const files = pickPointsFiles(links.filter(belongsToSeries));
@@ -1001,7 +1060,7 @@ async function fetchOfficialPoints(
         const res = await fetchWithRetry(ctx, new URL(f, baseUrl).href);
         if (!res.ok) return null;
         const text = (await res.text()).replace(/^\uFEFF/, "");
-        return parseOfficialPointsFile(JSON.parse(text), decodeURIComponent(f).split("/").pop() || "");
+        return parseOfficialPointsFile(JSON.parse(text), decodeURIComponent(f).split("/").pop() || "", hint);
       } catch {
         return null;
       }
@@ -1020,11 +1079,13 @@ function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: Po
   const placements = assignClassPositions(entries);
   const computed = placements.map((p) => computedPointsFor(p, kind, rules));
   const candidates = official?.[kind] || [];
-  const byCar = candidates.filter((c) => c.keyType === "car").map((c) => c.points);
-  const byDriver = candidates.filter((c) => c.keyType === "driver").map((c) => c.points);
+  const carCands = candidates.filter((c) => c.keyType === "car");
+  const driverCands = candidates.filter((c) => c.keyType === "driver");
+  const byCar = carCands.map((c) => c.points);
+  const byDriver = driverCands.map((c) => c.points);
   if (byCar.length > 0) {
     const keys = placements.map((p) => p.carNumber || "");
-    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byCar);
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byCar, carCands.map((c) => c.byName));
     if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
   } else if (byDriver.length > 0) {
     // Single-driver series (MX-5 Cup): official points are keyed by driver name
@@ -1032,7 +1093,7 @@ function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: Po
       const d = (e.drivers || [])[0] || {};
       return normaliseName(`${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`);
     });
-    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byDriver);
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byDriver, driverCands.map((c) => c.byName));
     if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
   }
   return computed;
@@ -1244,7 +1305,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
   // Verify event exists
   const { data: event, error: eventErr } = await adminClient
     .from("v2_events")
-    .select("id, name, season_id, circuit_id, v2_seasons(year, series_id, v2_series(name, v2_series_aliases(alias)))")
+    .select("id, name, season_id, circuit_id, round_number, v2_seasons(year, series_id, v2_series(name, v2_series_aliases(alias)))")
     .eq("id", event_id)
     .single();
   if (eventErr || !event) {
@@ -1348,7 +1409,19 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
   // Championship points rules for this series, plus IMSA's own per-car
   // points for this event when its POINTS DATA files are published.
   const pointsRules = getPointsRules(resolvePointsScheme(seriesName, seriesAliasesList));
-  const officialPoints = await fetchOfficialPoints(ctx, allJsonLinks, matchesSeriesFolder, baseUrl, pointsRules);
+  // Which round this is, to find it in season-long points files: event name, Al Kamel event folder, circuit.
+  const { data: circuitRow } = event.circuit_id
+    ? await adminClient.from("v2_circuits").select("name").eq("id", event.circuit_id).maybeSingle()
+    : { data: null };
+  const eventFolder = (() => {
+    try {
+      return (new URL(url).searchParams.get("evvent") || "").replace(/^\d+_/, "");
+    } catch {
+      return "";
+    }
+  })();
+  const pointsHint: PointsEventHint = { round: Number(event.round_number) || null, names: [event.name, eventFolder, circuitRow?.name].filter(Boolean) };
+  const officialPoints = await fetchOfficialPoints(ctx, allJsonLinks, matchesSeriesFolder, baseUrl, pointsRules, pointsHint);
   log(`Points scheme: ${pointsRules.scheme}; official points data: ${officialPoints ? `${officialPoints.race.length} race / ${officialPoints.qualifying.length} qualifying session(s)` : "none"}`);
 
   if (resultsJsonLinks.length === 0) {
@@ -1414,7 +1487,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
 
   // ── Step 2.5: Load reference data (parallel with JSON fetch wasn't possible, but do it now) ──
   const seasonId = event.season_id;
-  const [driversRes, teamsRes, carsRes, existingSessionsRes, aliasesRes, seasonCarsRes, driverAliasesRes, teamAliasesRes] = await Promise.all([
+  const [driversRes, teamsRes, carsRes, existingSessionsRes, aliasesRes, seasonCarsRes, driverAliasesRes, teamAliasesRes, carAliasesRes] = await Promise.all([
     adminClient.from("v2_drivers").select("id, full_name"),
     adminClient.from("v2_teams").select("id, full_name, short_name"),
     adminClient.from("v2_cars").select("id, model_name, manufacturer"),
@@ -1423,6 +1496,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
     adminClient.from("v2_team_season_cars").select("team_id, car_id").eq("season_id", seasonId),
     adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "driver"),
     adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "team"),
+    adminClient.from("search_aliases").select("alias, canonical, entity_type").eq("entity_type", "car"),
   ]);
 
   const existingDrivers = driversRes.data || [];
@@ -1438,6 +1512,8 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
   for (const a of (driverAliasesRes.data || []) as any[]) driverAliasMap.set(a.alias.toLowerCase(), a.canonical);
   const teamAliasMap = new Map<string, string>();
   for (const a of (teamAliasesRes.data || []) as any[]) teamAliasMap.set(a.alias.toLowerCase(), a.canonical);
+  const carAliasMap = new Map<string, string>();
+  for (const a of (carAliasesRes.data || []) as any[]) carAliasMap.set(a.alias.toLowerCase().replace(/\s+/g, " ").trim(), a.canonical);
 
   // ── Step 3: BULK resolve all entities ──
   const allSessionEntries = fetchedResults.map(f => ({ entries: f.data.classification || [] }));
@@ -1474,8 +1550,8 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
 
   const [driverMap, teamMap, carMap] = await Promise.all([
     bulkResolveDrivers(adminClient, uniqueDrivers, existingDrivers, driverAliasMap, summary),
-    bulkResolveTeams(adminClient, uniqueTeams, existingTeams, seasonAliases, teamAliasMap, summary),
-    bulkResolveCars(adminClient, uniqueCars, existingCars, summary),
+    bulkResolveTeams(adminClient, uniqueTeams, existingTeams, seasonAliases, teamAliasMap, summary, await loadCarHistory(adminClient, season?.series_id)),
+    bulkResolveCars(adminClient, uniqueCars, existingCars, summary, carAliasMap),
   ]);
 
   log(`Entity resolution complete. Creating sessions and inserting results...`);
