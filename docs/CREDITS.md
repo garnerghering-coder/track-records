@@ -14,6 +14,7 @@ Recoloured to a single-colour outline on a transparent background (white; the si
 | Markham Street Circuit — Street Circuit | [File:Streets of Markham Track Map.png](https://commons.wikimedia.org/wiki/File:Streets_of_Markham_Track_Map.png) | WL2392 | CC BY-SA 4.0 |
 | Nashville Superspeedway — Oval | [File:Nashville Superspeedway 2024.svg](https://commons.wikimedia.org/wiki/File:Nashville_Superspeedway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
 | Phoenix Raceway — Oval | [File:Phoenix Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:Phoenix_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+| World Wide Technology Raceway — Oval | [File:World Wide Technology Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:World_Wide_Technology_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
 
 ## Car liveries (NTT INDYCAR SERIES)
 

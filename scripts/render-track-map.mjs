@@ -78,7 +78,7 @@ const png = await page.evaluate(
       let keep = al / 255;
       if (drop.some(([R, G, B]) => Math.abs(R - r) + Math.abs(G - gg) + Math.abs(B - b) < dropTol)) keep = 0;
       const dark = 1 - (0.299 * r + 0.587 * gg + 0.114 * b) / 255;
-      keep *= Math.max(0, Math.min(1, (dark - minDark * 0.5) / Math.max(0.01, minDark)));
+      keep *= Math.max(0, Math.min(1, (dark - (minDark - 0.1)) / 0.1));
       d[i] = d[i + 1] = d[i + 2] = 255;
       d[i + 3] = Math.round(255 * keep);
       if (d[i + 3] > 24) {
