@@ -164,7 +164,6 @@ function CarRecord({ book, id }: { book: RecordBook; id: string }) {
                     <div className="relative h-24 overflow-hidden sm:h-36" style={{ background: `linear-gradient(135deg, ${e.classColor}26, transparent 70%)` }}>
                       <span className="absolute -bottom-4 -right-2 font-accent text-[4.5rem] leading-none text-ink/[0.06] sm:-bottom-6 sm:text-[7rem]">{e.carNumber}</span>
                       <Livery src={e.livery} alt={`#${e.carNumber}`} className="absolute inset-x-2 bottom-1 m-auto h-20 w-[90%] transition-transform duration-500 group-hover:-translate-x-2 sm:inset-x-4 sm:bottom-2 sm:h-28 sm:w-[88%]" />
-                      {!e.livery && <span className="eyebrow absolute bottom-4 left-5">No livery on file</span>}
                     </div>
                     <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-end sm:justify-between sm:gap-3 sm:p-5">
                       <div className="min-w-0">

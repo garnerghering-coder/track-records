@@ -102,7 +102,9 @@ const SeriesProfile = () => {
     const today = new Date().toISOString().slice(0, 10);
     const dates = seasonEvents.map((e) => e.end_date || e.start_date || "").filter(Boolean).sort();
     const last = dates[dates.length - 1];
-    return !!last && last < today && Number(last.slice(5, 7)) >= 9;
+    // the last round must be in the autumn finale window and at least three weeks old
+    const threeWeeksAgo = new Date(Date.now() - 21 * 864e5).toISOString().slice(0, 10);
+    return !!last && last < today && last <= threeWeeksAgo && Number(last.slice(5, 7)) >= 9;
   }, [season, seasonEvents]);
   const winnersCount = useMemo(() => {
     const set = new Set<string>();
@@ -267,6 +269,12 @@ const SeriesProfile = () => {
           <p className="mt-4 max-w-2xl text-xs leading-relaxed text-ink-3">
             Points as published with the official results{ch.tiebreak === "countback" ? " (stage, sprint and bonus points included)" : ""}; ties are split by countback (most wins, then seconds, and so
             on{ch.tiebreak === "imsa" || !ch.tiebreak ? ", qualifying included, as IMSA does" : ", in main races"}), and {mode === "drivers" ? "drivers" : "entries"} on identical records share a position.
+            {/nascar/i.test(info?.name || "") && (
+              <>
+                NASCAR decides its champion through the playoffs, resetting points for playoff drivers and settling the title in the final race; this table
+                adds up the points earned on track, so its order differs from NASCAR&rsquo;s official standings.{" "}
+              </>
+            )}
             Wins and podiums count main races only{perTeam ? `; the ${teamLabel.toLowerCase()}' table adds up every car of a team` : mode === "teams" ? `; the ${teamLabel.toLowerCase()}' table is kept per car number` : ""}.
           </p>
         </Page>

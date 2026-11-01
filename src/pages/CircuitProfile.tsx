@@ -38,6 +38,8 @@ export default function CircuitProfile() {
   const recentLayout = races.find((e) => e.layout_id && myLayouts.some((l) => l.id === e.layout_id))?.layout_id;
   const layout = myLayouts.find((l) => l.id === layoutId) || myLayouts.find((l) => l.id === recentLayout) || myLayouts[0];
   const multiLayout = myLayouts.length > 1;
+  // Races on the layout on show (an oval and a road course at one venue are counted separately).
+  const layoutRaces = multiLayout ? races.filter((e) => e.layout_id === layout?.id) : races;
   const layoutName = (lid: string | null | undefined) => myLayouts.find((l) => l.id === lid)?.name || null;
   const recKey = events ? `laprec:${id}` : null;
   const records = useLoad(recKey, () => fetchLapRecords(id, races, myLayouts[0]?.id ?? null));
@@ -155,8 +157,8 @@ export default function CircuitProfile() {
             { label: "Turns", value: layout?.turns ?? "—" },
             { label: "Elevation change", value: num(layout?.total_elevation_change_m) != null ? `${num(layout?.total_elevation_change_m)} m` : "—" },
             { label: "Straights", value: num(layout?.total_straight_length_km) != null ? `${num(layout?.total_straight_length_km)!.toFixed(2)} km` : "—" },
-            { label: "Races held", value: events ? races.length : "…" },
-            { label: "Since", value: first?.year ?? (events ? "—" : "…") },
+            { label: multiLayout ? "Races on this layout" : "Races held", value: events ? layoutRaces.length : "…" },
+            { label: "Since", value: (multiLayout ? layoutRaces[layoutRaces.length - 1]?.year : first?.year) ?? (events ? "—" : "…") },
           ].map((s) => (
             <div key={s.label} className="bg-sheet px-5 py-5">
               <div className="eyebrow">{s.label}</div>
