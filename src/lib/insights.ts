@@ -38,13 +38,15 @@ export interface ClassifiedCar {
 }
 
 export interface Insight {
-  kind: "closest_finish" | "biggest_climb" | "laps_led" | "fastest_lap" | "longest_stint" | "caution" | "quickest_stop" | "margin";
+  kind: "closest_finish" | "biggest_climb" | "laps_led" | "fastest_lap" | "longest_stint" | "caution" | "quickest_stop" | "margin" | "stages" | "red_flag";
   title: string; // short label
   value: string; // the headline number
   detail: string; // one sentence
   carNumber?: string;
   className?: string | null;
   driverIds?: string[];
+  /** the detail already names the drivers (lists need not repeat them) */
+  named?: boolean;
   weight: number; // for ordering (higher = more interesting)
 }
 
@@ -73,7 +75,28 @@ export interface RaceDigest {
 
 export interface EventDigest {
   eventId: string;
+  /** light digest (lists): see liteDigest */
+  lite?: boolean;
   races: RaceDigest[]; // in running order; the last one is the headline
+}
+
+/**
+ * The light digest used by lists (public/data/derived/digests.json): winners,
+ * classes and stats; only the fastest-lap insight; podiums only for races
+ * without classes (where the "winners" row is the podium). Race pages load the
+ * full digest (derived/digests/<eventId>.json).
+ */
+export function liteDigest(d: EventDigest): EventDigest {
+  return {
+    eventId: d.eventId,
+    lite: true,
+    races: d.races.map((r) => ({
+      ...r,
+      insights: r.insights.filter((i) => i.kind === "fastest_lap"),
+      podiums: r.classes.length > 1 ? {} : r.podiums,
+      lapsLed: [],
+    })),
+  };
 }
 
 /* ── parsing ─────────────────────────────────────────────────── */
@@ -214,7 +237,41 @@ export function mergeFlags(flags: Row[]): Row[] {
   return out;
 }
 
-export const isCaution = (state: string) => /YELLOW|FCY|SC|SAFETY/i.test(state || "") && !/GREEN/i.test(state || "");
+export const isCaution = (state: string) => /YELLOW|FCY|SC|SAFETY|CAUTION|CODE ?60|SLOW/i.test(state || "") && !/GREEN/i.test(state || "");
+export const isRedFlag = (state: string) => /RED/i.test(state || "");
+
+/** What a neutralisation is called: "virtual safety car", "safety car", "full-course yellow", "caution". */
+export function cautionKind(state: string): string {
+  const s = (state || "").toUpperCase();
+  if (/VSC|VIRTUAL/.test(s)) return "virtual safety car";
+  if (/\bSC\b|SAFETY/.test(s)) return "safety car";
+  if (/FCY|FULL/.test(s)) return "full-course yellow";
+  if (/CODE ?60/.test(s)) return "Code 60";
+  return "caution";
+}
+
+/** "1 safety car and 2 virtual safety car periods" */
+export function describeCautions(states: string[]): string {
+  const m = new Map<string, number>();
+  for (const st of states) m.set(cautionKind(st), (m.get(cautionKind(st)) || 0) + 1);
+  const parts = [...m.entries()].sort((a, b) => b[1] - a[1]);
+  const total = states.length;
+  if (parts.length === 1) return `${total} ${parts[0][0]} ${total === 1 ? "period" : "periods"}`;
+  const list = parts.map(([k, n]) => `${n} ${k}`);
+  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]} periods`;
+}
+
+/** Stage finishing positions from a result's extra_data ("Stage 1", "stage_2", "S1", "Stage1Pos": 1 = stage win). */
+export function stagePositions(extra: unknown): Map<number, number> {
+  const out = new Map<number, number>();
+  if (!extra || typeof extra !== "object") return out;
+  for (const [k, v] of Object.entries(extra as Record<string, unknown>)) {
+    const m = k.match(/^(?:stage[\s_-]?|s)(\d)(?:[\s_-]?(?:pos|position|finish))?$/i);
+    const n = Number(v);
+    if (m && Number.isFinite(n) && n > 0) out.set(Number(m[1]), n);
+  }
+  return out;
+}
 
 /* ── digest ──────────────────────────────────────────────────── */
 
@@ -225,7 +282,15 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
   const laps = input.laps(session.id);
   const cars = classify(results, laps, input.liveries);
   const name = (id: string) => input.names.drivers[id] || "Unknown";
-  const carLabel = (c: ClassifiedCar) => `#${c.carNumber}`;
+  const surname = (id: string) => {
+    const parts = name(id).replace(/\s*\(R\)\s*$/i, "").trim().split(/\s+/);
+    return parts.length > 1 ? parts.slice(1).join(" ") : parts[0];
+  };
+  // Solo drivers are named ("Norris"); shared cars go by number ("#7").
+  const carLabel = (c: ClassifiedCar) => (c.driverIds.length === 1 ? surname(c.driverIds[0]) : `#${c.carNumber}`);
+  const isNamed = (...cs: (ClassifiedCar | undefined)[]) => cs.every((c) => !c || c.driverIds.length === 1);
+  const sprint = session.session_type === "sprint_race" || /sprint/i.test(session.name || "");
+  const winWord = sprint ? "sprint win" : "win";
 
   // classes
   const classNames = [...new Set(cars.map((c) => c.className).filter(Boolean) as string[])].sort((a, b) => classRank(a) - classRank(b) || a.localeCompare(b));
@@ -259,10 +324,11 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
       kind: "closest_finish",
       title: "Closest finish",
       value: fmtGap(closest.gap),
-      detail: `${carLabel(closest.a)} held off ${carLabel(closest.b)}${closest.cls && multi ? ` for the ${closest.cls} win` : " for the win"} after ${closest.a.laps} laps.`,
+      detail: `${carLabel(closest.a)} held off ${carLabel(closest.b)}${closest.cls && multi ? ` for the ${closest.cls} ${winWord}` : ` for the ${winWord}`} after ${closest.a.laps} laps.`,
       carNumber: closest.a.carNumber,
       className: closest.cls,
       driverIds: closest.a.driverIds,
+      named: isNamed(closest.a),
       weight: closest.gap < 1 ? 100 : closest.gap < 5 ? 80 : 40,
     });
 
@@ -275,10 +341,11 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
         kind: "margin",
         title: "Winning margin",
         value: fmtGap(m),
-        detail: `${carLabel(overall[0])} beat ${carLabel(overall[1])} to the overall win.`,
+        detail: `${carLabel(overall[0])} beat ${carLabel(overall[1])} to the ${multi ? "overall " : ""}${winWord}.`,
         carNumber: overall[0].carNumber,
         className: overall[0].className,
         driverIds: overall[0].driverIds,
+        named: isNamed(overall[0]),
         weight: m < 2 ? 70 : 25,
       });
   }
@@ -315,10 +382,11 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
         kind: "biggest_climb",
         title: "Biggest climb",
         value: `+${best.from - best.to}`,
-        detail: `${carLabel(best.c)} qualified P${best.from}${best.c.className && multi ? ` in ${best.c.className}` : ""} and finished P${best.to}.`,
+        detail: `${carLabel(best.c)} ${sprint ? "started" : "qualified"} P${best.from}${best.c.className && multi ? ` in ${best.c.className}` : ""} and finished P${best.to}.`,
         carNumber: best.c.carNumber,
         className: best.c.className,
         driverIds: best.c.driverIds,
+        named: isNamed(best.c),
         weight: 60 + (best.from - best.to) * 2,
       });
   }
@@ -341,6 +409,7 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
         carNumber: top.carNumber,
         className: c?.className,
         driverIds: c?.driverIds,
+        named: !!c && isNamed(c),
         weight: 45 + Math.min(leadChanges, 40),
       });
     }
@@ -353,10 +422,11 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
       kind: "fastest_lap",
       title: "Fastest lap",
       value: fmtLap(fl.fastestLap),
-      detail: `${carLabel(fl)}${fl.className && multi ? ` (${fl.className})` : ""} set the fastest lap of the race.`,
+      detail: `${carLabel(fl)}${fl.className && multi ? ` (${fl.className})` : ""} set the fastest lap of the ${sprint ? "sprint" : "race"}.`,
       carNumber: fl.carNumber,
       className: fl.className,
       driverIds: fl.driverIds,
+      named: isNamed(fl),
       weight: 50,
     });
 
@@ -382,14 +452,55 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
   const cautions = flags.filter((f) => isCaution(f.flag_state));
   const cautionS = cautions.reduce((n, f) => n + Math.max(0, f.end_elapsed - f.start_elapsed), 0);
   const durationS = laps.length ? Math.max(...laps.map((l) => l.elapsed)) : null;
-  if (cautions.length && durationS)
+  if (cautions.length && durationS) {
+    const kinds = new Set(cautions.map((f) => cautionKind(f.flag_state)));
     insights.push({
       kind: "caution",
-      title: "Under caution",
+      title: kinds.size === 1 && kinds.has("safety car") ? "Behind the safety car" : "Under caution",
       value: `${Math.round((cautionS / durationS) * 100)}%`,
-      detail: `${cautions.length} caution ${cautions.length === 1 ? "period" : "periods"} neutralised ${fmtDuration(cautionS)} of racing.`,
+      detail: `${describeCautions(cautions.map((f) => f.flag_state))} neutralised ${fmtDuration(cautionS)} of racing.`,
       weight: 20 + cautions.length,
     });
+  }
+  const reds = flags.filter((f) => isRedFlag(f.flag_state));
+  if (reds.length) {
+    const redS = reds.reduce((n, f) => n + Math.max(0, f.end_elapsed - f.start_elapsed), 0);
+    insights.push({
+      kind: "red_flag",
+      title: "Red flag",
+      value: reds.length === 1 ? fmtDuration(redS) : `×${reds.length}`,
+      detail: `The race was stopped ${reds.length === 1 ? "once" : reds.length === 2 ? "twice" : `${reds.length} times`}${redS > 0 ? `, for ${fmtDuration(redS)} in all` : ""}.`,
+      weight: 55 + reds.length * 5,
+    });
+  }
+
+  // stages (NASCAR-style): extra_data stage positions on the race results
+  const stageWins = new Map<number, ClassifiedCar>();
+  for (const r of results) {
+    for (const [n, pos] of stagePositions(r.extra_data)) {
+      if (pos !== 1) continue;
+      const c = cars.find((x) => x.carNumber === String(r.car_number));
+      if (c && !stageWins.has(n)) stageWins.set(n, c);
+    }
+  }
+  if (stageWins.size) {
+    const list = [...stageWins.entries()].sort((a, b) => a[0] - b[0]);
+    const winner = overall[0];
+    const distinct = new Set(list.map(([, c]) => c.carNumber));
+    const sweep = winner && distinct.size === 1 && distinct.has(winner.carNumber);
+    insights.push({
+      kind: "stages",
+      title: sweep ? "Stage sweep" : "Stage winners",
+      value: sweep ? `${list.length}/${list.length}` : String(distinct.size),
+      detail: sweep
+        ? `${carLabel(winner)} won every stage and the race.`
+        : `${list.map(([n, c]) => `Stage ${n} to ${carLabel(c)}`).join(", ")}${winner ? `; ${carLabel(winner)} won the race` : ""}.`,
+      carNumber: list[0][1].carNumber,
+      driverIds: sweep ? winner.driverIds : undefined,
+      named: true,
+      weight: sweep ? 75 : 50 + distinct.size * 3,
+    });
+  }
 
   // pit stops
   const stops = new Map<string, Row>();

@@ -1,3 +1,4 @@
+import { normalizeFlag } from "@/lib/flags";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { createPortal } from "react-dom";
@@ -63,6 +64,9 @@ const FLAG_COLORS: Record<string, { bg: string; strip: string }> = {
   FCY: { bg: "rgba(251, 146, 60, 0.10)", strip: "#fb923c" },
   RED: { bg: "rgba(239, 68, 68, 0.10)", strip: "#ef4444" },
   SC: { bg: "rgba(251, 146, 60, 0.10)", strip: "#fb923c" },
+  VSC: { bg: "rgba(251, 191, 36, 0.10)", strip: "#fbbf24" },
+  CAUTION: { bg: "rgba(234, 179, 8, 0.10)", strip: "#eab308" },
+  CODE60: { bg: "rgba(124, 58, 237, 0.08)", strip: "#7c3aed" },
 };
 
 const DEFAULT_CARS_PER_CLASS = 5;
@@ -457,7 +461,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       if (e <= viewRange[0] || s >= viewRange[1]) continue;
       const x1 = Math.max(elapsed2x(s), labelW);
       const x2 = Math.min(elapsed2x(e), labelW + chartWidth);
-      const color = FLAG_COLORS[seg.flag_state]?.strip || "#9ca3af";
+      const color = FLAG_COLORS[normalizeFlag(seg.flag_state)]?.strip || "#9ca3af";
       ctx.fillStyle = color;
       ctx.fillRect(x1, stripY, Math.max(x2 - x1, 1), STRIP_HEIGHT);
     }
@@ -505,7 +509,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       if (seg.flag_state === "GREEN") continue;
       const x1 = Math.max(elapsed2x(s), labelW);
       const x2 = Math.min(elapsed2x(e), labelW + chartWidth);
-      const color = FLAG_COLORS[seg.flag_state]?.bg || "rgba(107, 114, 128, 0.05)";
+      const color = FLAG_COLORS[normalizeFlag(seg.flag_state)]?.bg || "rgba(107, 114, 128, 0.05)";
       ctx.fillStyle = color;
       ctx.fillRect(x1, rowsTop, Math.max(x2 - x1, 1), rowsBottom - rowsTop);
     }
@@ -1121,6 +1125,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
               { k: "GREEN", label: "Green" },
               { k: "YELLOW", label: "Yellow" },
               { k: "FCY", label: "FCY / SC" },
+              { k: "VSC", label: "VSC" },
               { k: "RED", label: "Red" },
             ].map((f) => (
               <span key={f.k} className="flex items-center gap-1.5">

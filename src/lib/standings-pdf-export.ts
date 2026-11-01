@@ -138,7 +138,7 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
   }
 
   // 4. One row per car (car number + class)
-  const carRows: CarRow[] = computeTeamStandings(input.sessions, input.rows).map((t) => ({
+  const carRows: CarRow[] = computeTeamStandings(input.sessions, input.rows, input.rules).map((t) => ({
     carNumber: t.carNumber,
     driverNames: t.driverIds.map((d) => input.drivers.get(d)?.name).filter((n): n is string => !!n),
     teamName: (t.teamId ? teamAliasMap.get(t.teamId) || input.teams.get(t.teamId) : null) || null,

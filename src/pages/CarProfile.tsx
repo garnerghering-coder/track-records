@@ -5,19 +5,19 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { lastName } from "@/site/data";
 import { ClassTag, Eyebrow, Livery, Note, Page, SectionHead } from "@/site/ui";
-import { byRace, bySeason, carLabel, countBy, isWin, plural, raceTitle, tally, useRecordBook, type Entry, type RecordBook } from "@/site/records";
+import { byRace, bySeason, carLabel, countBy, isWin, plural, raceTitle, tally, useRecord, type Entry, type RecordBook } from "@/site/records";
 import { GhostLink, LiveryStage, NotOnRecord, RaceGroups, RecordSkeleton, RecordStrip, SeasonHead, ShareButton } from "@/site/record-ui";
 
 export default function CarProfile() {
   const { id = "" } = useParams<{ id: string }>();
-  const book = useRecordBook();
+  const book = useRecord("cars", id);
   const car = book?.cars[id];
   const label = carLabel(car);
   return (
     <div className="min-h-screen">
       <SEOHead
         title={car ? `${label} – Car record` : "Car record"}
-        description={car ? `The ${label} on the record: entries, class wins, the teams that ran it and every livery.` : undefined}
+        description={car ? `The ${label} on the record: entries, wins, the teams that ran it and every livery.` : undefined}
         canonical={`/car/${id}`}
       />
       <Header />
@@ -34,6 +34,7 @@ function CarRecord({ book, id }: { book: RecordBook; id: string }) {
   const label = carLabel(car);
   const entries = useMemo(() => book.byCar.get(id) || [], [book, id]);
   const t = useMemo(() => tally(entries), [entries]);
+  const cw = t.classed && !t.outright;
   const teams = countBy(entries, (e) => e.teamId);
   const drivers = new Set(entries.flatMap((e) => e.driverIds));
   const seasons = bySeason(entries);
@@ -61,12 +62,12 @@ function CarRecord({ book, id }: { book: RecordBook; id: string }) {
       {t.classes.length ? ` in ${t.classes.join(" and ")}` : ""}
       {t.wins > 0 ? (
         <>
-          , with <span className="mark">{plural(t.wins, "class win")}</span>
+          , with <span className="mark">{plural(t.wins, cw ? "class win" : "win")}</span>
           {t.podiums > t.wins ? ` and ${plural(t.podiums, "podium")}` : ""}
         </>
       ) : t.podiums > 0 ? (
         <>
-          , with <span className="mark">{plural(t.podiums, "class podium")}</span>
+          , with <span className="mark">{plural(t.podiums, cw ? "class podium" : "podium")}</span>
         </>
       ) : null}
       . {plural(drivers.size, "driver")} have raced it.
@@ -141,10 +142,10 @@ function CarRecord({ book, id }: { book: RecordBook; id: string }) {
             <RecordStrip
               items={[
                 { label: "Starts", value: t.starts, sub: plural(t.events, "event") },
-                { label: "Class wins", value: t.wins, sub: `${Math.round((t.wins / t.starts) * 100)}% of starts` },
+                { label: cw ? "Class wins" : "Wins", value: t.wins, sub: `${Math.round((t.wins / t.starts) * 100)}% of starts` },
                 { label: "Podiums", value: t.podiums, sub: `${Math.round((t.podiums / t.starts) * 100)}% of starts` },
                 { label: "Best finish", value: t.best != null ? `P${t.best}` : null, sub: t.best != null ? `${t.bestCount > 1 ? `×${t.bestCount} · ` : ""}${t.bestClass || ""}` : "No classified finish" },
-                { label: "Class poles", value: t.poles, sub: "In qualifying" },
+                { label: cw ? "Class poles" : "Poles", value: t.poles, sub: "In qualifying" },
                 { label: "Teams", value: teams.length },
                 { label: "Drivers", value: drivers.size },
               ]}

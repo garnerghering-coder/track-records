@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { getClassColor } from "@/lib/classes";
 import { classify, type ClassifiedCar, type RaceDigest } from "@/lib/insights";
 import { InsightGrid, StatsRibbon } from "@/pages/Index";
-import { lastName, layoutFor, useDigests, useLayouts, useLoad, useNames } from "@/site/data";
+import { lastName, layoutFor, useDigest, useLayouts, useLoad, useNames } from "@/site/data";
 import { ClassTag, Eyebrow, Livery, Note, Page, PosNum, Skeleton, Tabs, TrackMap, dateRange } from "@/site/ui";
 import Classification from "@/site/race/Classification";
 import Markdown from "@/site/race/Markdown";
@@ -85,12 +85,12 @@ export default function EventPage() {
   const [params, setParams] = useSearchParams();
   const bundle = useLoad(id ? `event:${id}` : null, () => loadEvent(id!));
   const b = bundle.data;
-  const digests = useDigests();
+  const digestQ = useDigest(id);
   const names = useNames();
   const layouts = useLayouts();
 
   const races = useMemo(() => (b?.sessions || []).filter((s) => isRace(s.session_type) && !s.parent_session_id), [b]);
-  const digest = id ? digests?.[id] : undefined;
+  const digest = digestQ.data;
   const raceId = params.get("race") || races[races.length - 1]?.id;
   const race = races.find((r) => r.id === raceId);
   const raceDigest: RaceDigest | undefined = digest?.races.find((r) => r.sessionId === raceId);
@@ -128,7 +128,8 @@ export default function EventPage() {
   }
 
   const ev = b.event;
-  const layout = layoutFor(ev, layouts);
+  // The race's own layout (a venue may run an oval and a road course), else the event's.
+  const layout = layoutFor({ layout_id: race?.layout_id || ev.layout_id, circuit_id: ev.circuit_id }, layouts);
   const raceWeather = b.weather.find((w) => w.session_id === raceId);
   const hasReplay = !!raceDigest?.hasLaps;
   const multi = (raceDigest?.classes.length || 0) > 1;

@@ -19,7 +19,10 @@ import {
   classPositionFromRow,
   computeDriverStandings,
   computeTeamStandings,
+  IMSA_RULES,
   standingsKindForSessionType,
+  standingsRulesFor,
+  type StandingsRules,
   type DriverStanding,
   type StandingsRow,
   type StandingsSession,
@@ -36,6 +39,8 @@ export interface SeasonStandingsInput {
   rows: StandingsRow[];
   drivers: Map<string, StandingsDriverMeta>;
   teams: Map<string, string>;
+  /** Series rules (tie-break, teams' table); IMSA when absent. */
+  rules?: StandingsRules;
 }
 
 /** Anything with supabase-js's `from(table)` query builder. */
@@ -69,7 +74,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
  *   (2025 WeatherTech has 1040 race rows), which used to drop results silently.
  */
 export async function loadSeasonStandingsInput(db: QueryClient, seasonId: string): Promise<SeasonStandingsInput> {
-  const empty: SeasonStandingsInput = { sessions: [], rows: [], drivers: new Map(), teams: new Map() };
+  const { data: seasonRow } = await db.from("v2_seasons").select("id, v2_series(name, short_name)").eq("id", seasonId).maybeSingle();
+  const rules = standingsRulesFor((seasonRow as any)?.v2_series);
+  const empty: SeasonStandingsInput = { sessions: [], rows: [], drivers: new Map(), teams: new Map(), rules };
 
   const { data: events } = await db.from("v2_events").select("id, start_date, round_number").eq("season_id", seasonId).eq("status", "published");
   if (!events?.length) return empty;
@@ -152,7 +159,7 @@ export async function loadSeasonStandingsInput(db: QueryClient, seasonId: string
       status: r.status ?? null,
     };
   });
-  return { sessions, rows, drivers, teams };
+  return { sessions, rows, drivers, teams, rules };
 }
 
 /* ── Championship (drivers + teams with cumulative points per round) ── */
@@ -178,12 +185,19 @@ export interface ChampEntry {
 export interface Championship {
   /** Event ids of the scored rounds, in order. */
   rounds: string[];
+  /** What the series calls the teams' table ("Teams", "Constructors", "Owners", "Entrants"). */
+  teamLabel?: string;
+  /** "car": one entry per car number; "team": one per team, all its cars. */
+  teamKey?: "car" | "team";
+  /** "imsa": IMSA countback; "countback": wins, then seconds, ... in main races. */
+  tiebreak?: "imsa" | "countback";
   classes: string[];
   drivers: Record<string, ChampEntry[]>;
   teams: Record<string, ChampEntry[]>;
 }
 
 export function buildChampionship(input: SeasonStandingsInput): Championship {
+  const rules = input.rules ?? IMSA_RULES;
   const rounds = [...new Set(input.sessions.map((s) => s.eventId))];
   const sessionEvent = new Map(input.sessions.map((s) => [s.id, s.eventId]));
 
@@ -194,7 +208,7 @@ export function buildChampionship(input: SeasonStandingsInput): Championship {
   };
 
   const drivers: Record<string, ChampEntry[]> = {};
-  for (const s of computeDriverStandings(input.sessions, input.rows)) {
+  for (const s of computeDriverStandings(input.sessions, input.rows, rules)) {
     const meta = input.drivers.get(s.driverId);
     (drivers[s.className] ??= []).push({
       key: s.key,
@@ -211,7 +225,7 @@ export function buildChampionship(input: SeasonStandingsInput): Championship {
     });
   }
   const teams: Record<string, ChampEntry[]> = {};
-  for (const t of computeTeamStandings(input.sessions, input.rows)) {
+  for (const t of computeTeamStandings(input.sessions, input.rows, rules)) {
     (teams[t.className] ??= []).push({
       key: t.key,
       position: t.position,
@@ -221,7 +235,7 @@ export function buildChampionship(input: SeasonStandingsInput): Championship {
       ...per(t.results),
       driverIds: t.driverIds,
       teamId: t.teamId,
-      carNumbers: [t.carNumber],
+      carNumbers: t.carNumbers,
       name: (t.teamId && input.teams.get(t.teamId)) || `#${t.carNumber}`,
       nationality: null,
     });
@@ -229,7 +243,7 @@ export function buildChampionship(input: SeasonStandingsInput): Championship {
   for (const k of Object.keys(drivers)) drivers[k].sort((a, b) => a.position - b.position);
   for (const k of Object.keys(teams)) teams[k].sort((a, b) => a.position - b.position);
   const classes = [...new Set([...Object.keys(drivers), ...Object.keys(teams)])].sort((a, b) => classRank(a) - classRank(b) || a.localeCompare(b));
-  return { rounds, classes, drivers, teams };
+  return { rounds, teamLabel: rules.teamLabel, teamKey: rules.teamKey, tiebreak: rules.tiebreak, classes, drivers, teams };
 }
 
 /** Path of a season's precomputed championship, relative to the data root. */

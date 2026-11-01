@@ -44,15 +44,17 @@ const T = (s) => `${s} | Track Records`;
 
 const routes = [];
 for (const [r, t, d] of [
-  ["/results", "Race results", "Every sportscar race on the record, with class winners, replays and analysis."],
-  ["/series", "Championships", "IMSA championships season by season: points races and standings."],
+  ["/results", "Race results", "Every race on the record, in every series, with winners, replays and analysis."],
+  ["/series", "Championships", "Every championship season by season: points races and standings."],
   ["/drivers", "Drivers", "Career records for every driver on the record."],
   ["/teams", "Teams", "Team records, line-ups and results."],
   ["/cars", "Cars", "Every car on the record and how it fared."],
   ["/circuits", "Circuits", "Circuit records: character, lap records and winners by year."],
-  ["/calendar", "Calendar", "The sportscar racing calendar."],
+  ["/calendar", "Calendar", "The racing calendar, every series on one page."],
   ["/compare", "Compare drivers", "Put any two drivers head to head."],
   ["/articles", "Articles", "Analysis and features from Track Records."],
+  ["/credits", "Sources and credits", "Where the results come from, and who made the maps and images."],
+  ["/search", "Search", "Search every driver, team, car, circuit, series and race."],
   ["/privacy", "Privacy policy", "How Track Records handles data."],
 ])
   routes.push(page(r, T(t), d));

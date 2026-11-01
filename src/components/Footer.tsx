@@ -11,6 +11,7 @@ const LINKS = [
   { to: "/calendar", label: "Calendar" },
   { to: "/compare", label: "Compare" },
   { to: "/articles", label: "Articles" },
+  { to: "/credits", label: "Credits" },
   { to: "/privacy", label: "Privacy" },
 ];
 
@@ -20,7 +21,7 @@ const Footer = () => (
       <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr]">
         <div>
           <p className="display max-w-xl text-4xl leading-[1.05] sm:text-5xl">
-            The record of sportscar racing, <em className="text-ink-2">lap by lap.</em>
+            The record of motorsport, <em className="text-ink-2">lap by lap.</em>
           </p>
           <button onClick={openSearch} className="mt-6 inline-flex h-11 items-center gap-3 rounded-full border px-5 text-sm hover:bg-ink/[0.05]">
             Search the record <kbd className="rounded-md border bg-sheet px-1.5 font-mono text-[10px] text-ink-3">/</kbd>
@@ -37,7 +38,11 @@ const Footer = () => (
       <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t pt-6 sm:flex-row sm:items-center">
         <img alt="Track Records" className="logo-adapt h-5 w-auto" src="/brand/logo.png" />
         <p className="text-xs text-ink-3">
-          Results from official timing and scoring. © {new Date().getFullYear()} Track Records.
+          Results from official timing and scoring.{" "}
+          <Link to="/credits" className="underline underline-offset-2 hover:text-ink">
+            Sources and credits
+          </Link>
+          . © {new Date().getFullYear()} Track Records.
         </p>
       </div>
     </div>

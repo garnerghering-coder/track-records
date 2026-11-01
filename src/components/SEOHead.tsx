@@ -10,7 +10,7 @@ interface SEOHeadProps {
 }
 
 const BASE_URL = "https://track-records.com";
-const DEFAULT_DESCRIPTION = "The verified motorsport driver profile platform. Search drivers, teams, series, circuits, and race results.";
+const DEFAULT_DESCRIPTION = "The record of motorsport, lap by lap: race results, replays, championships and career records for every driver, team, car and circuit.";
 const DEFAULT_OG_IMAGE = `${BASE_URL}/og-default.png`;
 
 const SEOHead = ({

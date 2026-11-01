@@ -65,7 +65,7 @@ export default function Results() {
 
   return (
     <div className="min-h-screen">
-      <SEOHead title="Race results" description="Every race on the record: winners in every class, the closest finishes and a replay of how each one unfolded." canonical="/results" />
+      <SEOHead title="Race results" description="Every race on the record, in every series: the winners, the closest finishes and a replay of how each one unfolded." canonical="/results" />
       <Header />
 
       <Page className="pt-8 sm:pt-14">

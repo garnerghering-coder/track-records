@@ -32,12 +32,17 @@ export default function CircuitProfile() {
   const circuit = circuits?.find((c) => c.id === id);
   const myLayouts = useMemo(() => (id ? layoutsOf(id, layouts) : []), [id, layouts]);
   const [layoutId, setLayoutId] = useState<string | null>(null);
-  const layout = myLayouts.find((l) => l.id === layoutId) || myLayouts[0];
 
   const races = useMemo(() => (events || []).filter((e) => e.circuit_id === id).sort((a, b) => (b.start_date || "").localeCompare(a.start_date || "")), [events, id]);
-  const years = useMemo(() => Object.fromEntries(races.map((e) => [e.id, e.year])), [races]);
-  const recKey = events ? `laprec:${id}:${races.map((r) => r.id).join(",")}` : null;
-  const records = useLoad(recKey, () => fetchLapRecords(races.map((r) => r.id), years));
+  // Default to the layout of the most recent race (an oval and a road course share a venue).
+  const recentLayout = races.find((e) => e.layout_id && myLayouts.some((l) => l.id === e.layout_id))?.layout_id;
+  const layout = myLayouts.find((l) => l.id === layoutId) || myLayouts.find((l) => l.id === recentLayout) || myLayouts[0];
+  const multiLayout = myLayouts.length > 1;
+  const layoutName = (lid: string | null | undefined) => myLayouts.find((l) => l.id === lid)?.name || null;
+  const recKey = events ? `laprec:${id}` : null;
+  const records = useLoad(recKey, () => fetchLapRecords(id, races, myLayouts[0]?.id ?? null));
+  // Records of the layout on show (all of them when the circuit has a single layout).
+  const shownRecords = useMemo(() => (records.data ? (multiLayout ? records.data.filter((r) => !r.layoutId || r.layoutId === layout?.id) : records.data) : undefined), [records.data, multiLayout, layout]);
 
   const winnerSet = useMemo(() => {
     const s = new Set<string>();
@@ -64,10 +69,10 @@ export default function CircuitProfile() {
   const words = characterWords(layout);
   const latest = races[0];
   const first = races[races.length - 1];
-  const fastest = records.data?.slice().sort((a, b) => a.seconds - b.seconds)[0];
+  const fastest = shownRecords?.slice().sort((a, b) => a.seconds - b.seconds)[0];
 
   return (
-    <Shell title={circuit ? `${circuit.name} – Circuit record` : "Circuit"} canonical={`/circuit/${id}`} description={circuit ? `${circuit.name}: layout, character, winners by year and lap records per class.` : undefined}>
+    <Shell title={circuit ? `${circuit.name} – Circuit record` : "Circuit"} canonical={`/circuit/${id}`} description={circuit ? `${circuit.name}: layouts, character, winners by year and lap records.` : undefined}>
       {/* ── Hero ─────────────────────────────────────────────── */}
       <Page className="pt-6 sm:pt-10">
         <Link to="/circuits" className="group inline-flex items-center gap-1.5 text-sm text-ink-2 hover:text-ink">
@@ -169,8 +174,16 @@ export default function CircuitProfile() {
 
       {/* ── Lap records ─────────────────────────────────────── */}
       <Page className="mt-24 sm:mt-32">
-        <SectionHead eyebrow="Fastest race lap per class" title="Lap records" />
-        {!records.data ? (
+        <SectionHead
+          eyebrow={`Fastest race lap per class or series${multiLayout && layout?.name ? ` · ${layout.name}` : ""}`}
+          title="Lap records"
+          action={
+            multiLayout ? (
+              <Tabs value={layout?.id || ""} onChange={setLayoutId} items={myLayouts.map((l) => ({ value: l.id, label: l.name || "Layout" }))} className="mb-2" />
+            ) : undefined
+          }
+        />
+        {!shownRecords ? (
           events && !races.length ? (
             <Note title="No lap records yet">Lap records appear once a race here is on the record.</Note>
           ) : (
@@ -180,20 +193,22 @@ export default function CircuitProfile() {
               ))}
             </div>
           )
-        ) : records.data.length === 0 ? (
-          <Note title="No lap times on the record">The races held here were published without fastest-lap data.</Note>
+        ) : shownRecords.length === 0 ? (
+          <Note title="No lap times on the record">
+            {multiLayout && records.data?.length ? `No race on the ${layout?.name || "this layout"} has fastest-lap data yet; pick another layout above.` : "The races held here were published without fastest-lap data."}
+          </Note>
         ) : (
-          <div className={cn("grid gap-4 sm:grid-cols-2", records.data.length >= 4 ? "lg:grid-cols-4" : records.data.length === 3 ? "lg:grid-cols-3" : "")}>
-            {records.data.map((r) => {
+          <div className={cn("grid gap-4 sm:grid-cols-2", shownRecords.length >= 4 ? "lg:grid-cols-4" : shownRecords.length === 3 ? "lg:grid-cols-3" : "")}>
+            {shownRecords.map((r) => {
               const col = colorFromDigests(digests, races, r.className);
               const isOutright = fastest && r.className === fastest.className;
               const ev = races.find((e) => e.id === r.eventId);
               return (
-                <div key={r.className} className="sheet relative flex flex-col overflow-hidden p-6">
+                <div key={`${r.layoutId}|${r.className}`} className="sheet relative flex flex-col overflow-hidden p-6">
                   <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: col }} />
                   <div className="flex items-center justify-between">
-                    {r.className === "Overall" ? <span className="eyebrow">Overall</span> : <ClassTag name={r.className} color={col} />}
-                    {isOutright && records.data!.length > 1 && <span className="rounded-full bg-hl px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-hl-ink">Outright</span>}
+                    {r.className === "Overall" || r.bySeries ? <span className="eyebrow">{r.className}</span> : <ClassTag name={r.className} color={col} />}
+                    {isOutright && shownRecords.length > 1 && <span className="rounded-full bg-hl px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-hl-ink">Outright</span>}
                   </div>
                   <div className="num mt-6 text-[2.6rem] leading-none tracking-[-0.04em]">{fmtLap(r.seconds)}</div>
                   {len != null && <div className="num mt-2 text-[12px] text-ink-3">{((len / r.seconds) * 3600).toFixed(1)} km/h average</div>}
@@ -232,7 +247,7 @@ export default function CircuitProfile() {
         ) : (
           <ol className="overflow-hidden rounded-3xl border bg-sheet">
             {races.map((ev) => (
-              <WinnerRow key={ev.id} ev={ev} race={lastRace(digests?.[ev.id]?.races)} names={names} loading={!digests} />
+              <WinnerRow key={ev.id} ev={ev} race={lastRace(digests?.[ev.id]?.races)} names={names} loading={!digests} layout={multiLayout ? layoutName(ev.layout_id) : null} />
             ))}
           </ol>
         )}
@@ -310,7 +325,7 @@ function Fingerprint({ layout, loading }: { layout?: LayoutRow; loading: boolean
 
 /* ── Winners row ───────────────────────────────────────────────── */
 
-function WinnerRow({ ev, race, names, loading }: { ev: EventLite; race?: RaceDigest; names: Names; loading: boolean }) {
+function WinnerRow({ ev, race, names, loading, layout }: { ev: EventLite; race?: RaceDigest; names: Names; loading: boolean; layout?: string | null }) {
   const winners = race ? [...race.winners].sort((a, b) => classRank(a.className) - classRank(b.className)) : [];
   return (
     <li className="grid gap-5 border-b px-5 py-6 last:border-b-0 sm:px-7 lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-8">
@@ -320,7 +335,10 @@ function WinnerRow({ ev, race, names, loading }: { ev: EventLite; race?: RaceDig
           <span className="eyebrow">{ev.series?.short_name || ev.series?.name}</span>
         </div>
         <div className="display mt-2 text-[1.5rem] leading-[1.05] group-hover:underline group-hover:decoration-1 group-hover:underline-offset-4">{stripYear(ev.name)}</div>
-        <div className="mt-1 text-xs text-ink-3">{dateRange(ev.start_date, ev.end_date)}</div>
+        <div className="mt-1 text-xs text-ink-3">
+          {dateRange(ev.start_date, ev.end_date)}
+          {layout ? ` · ${layout}` : ""}
+        </div>
       </Link>
       {loading ? (
         <Skeleton className="h-20" />

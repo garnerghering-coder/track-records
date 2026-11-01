@@ -1,25 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeFlag } from "@/lib/flags";
 import { getClassColor } from "@/lib/classes";
 import { classRank, fmtLap } from "@/lib/insights";
 import { Livery, Tabs } from "@/site/ui";
 import { lastName } from "@/site/data";
 import { clock, flagAt, messagesUntil, towerAt, type ReplayModel, type TowerRow } from "./replay";
 
-const ROW = 44;
-const SPEEDS = [10, 60, 300, 1200];
+/** Tower row height: compact for big fields (40-car ovals). */
+const rowHeight = (n: number) => (n > 30 ? 36 : 44);
+const SPEEDS = [10, 30, 60, 300, 1200];
 
-const FLAG_STYLE: Record<string, { label: string; bg: string; fg: string }> = {
+/** Flag states across series: IMSA (FCY), F1 (SC, VSC), NASCAR/INDYCAR (caution), WEC (Code 60). */
+const STRIPES = (a: string, b: string) => `repeating-linear-gradient(135deg, ${a} 0 6px, ${b} 6px 12px)`;
+const FLAG_STYLE: Record<string, { label: string; bg: string; fg: string; fill?: string }> = {
   GREEN: { label: "Green flag", bg: "#16a34a", fg: "#fff" },
   YELLOW: { label: "Yellow", bg: "#facc15", fg: "#111" },
+  CAUTION: { label: "Caution", bg: "#facc15", fg: "#111" },
   FCY: { label: "Full course yellow", bg: "#f59e0b", fg: "#111" },
   SC: { label: "Safety car", bg: "#f59e0b", fg: "#111" },
+  VSC: { label: "Virtual safety car", bg: "#fbbf24", fg: "#111", fill: STRIPES("#fbbf24", "#f59e0b") },
+  CODE60: { label: "Code 60", bg: "#7c3aed", fg: "#fff" },
   RED: { label: "Red flag", bg: "#dc2626", fg: "#fff" },
-  CHEQUERED: { label: "Chequered flag", bg: "#111", fg: "#fff" },
+  CHEQUERED: { label: "Chequered flag", bg: "#111", fg: "#fff", fill: "repeating-conic-gradient(#111 0 25%, #fff 0 50%) 0 0 / 8px 8px" },
   PRE: { label: "Pre-race", bg: "transparent", fg: "inherit" },
 };
-const flagStyle = (s: string) => FLAG_STYLE[s.toUpperCase()] || (/YELLOW|FCY/i.test(s) ? FLAG_STYLE.FCY : FLAG_STYLE.GREEN);
+export const flagStyle = (s: string) => (s === "PRE" ? FLAG_STYLE.PRE : FLAG_STYLE[normalizeFlag(s)]);
 
 export default function Replay({
   model,
@@ -63,12 +70,13 @@ export default function Replay({
   }, [playing, speed, model.duration]);
 
   const rows = useMemo(() => towerAt(model, t, multi && cls ? cls : null), [model, t, cls, multi]);
+  const rowH = rowHeight(model.cars.length);
   const flag = flagAt(model, t);
   const fs = flagStyle(flag);
   const msgs = useMemo(() => messagesUntil(model, t, 6), [model, t]);
   const leaderLaps = rows.length ? Math.max(...rows.map((r) => r.laps)) : 0;
   const totalLaps = model.leaderCrossings.length;
-  const followed = follow ? towerAt(model, t, null).find((r) => r.car.carNumber === follow) : undefined;
+  const followed = follow ? (rows.find((r) => r.car.carNumber === follow) ?? towerAt(model, t, null).find((r) => r.car.carNumber === follow)) : undefined;
 
   const jump = useCallback((d: number) => setT((x) => Math.max(0, Math.min(model.duration, x + d))), [model.duration]);
   useEffect(() => {
@@ -114,7 +122,7 @@ export default function Replay({
             style={{ backgroundColor: fs.bg, color: fs.fg, boxShadow: fs.bg === "transparent" ? "inset 0 0 0 1px hsl(var(--rule))" : undefined }}
             aria-live="polite"
           >
-            <span className={cn("h-2 w-2 rounded-full bg-current", playing && "animate-pulse")} />
+            <span className={cn("h-2 w-2 rounded-full bg-current", playing && "animate-pulse")} style={fs.fill ? { background: fs.fill } : undefined} />
             {fs.label}
           </span>
           <div className="ml-auto flex items-center gap-1.5">
@@ -156,7 +164,7 @@ export default function Replay({
                   key={i}
                   className="absolute inset-y-0"
                   title={`${flagStyle(f.state).label} ${clock(f.start)}–${clock(f.end)}`}
-                  style={{ left: `${(f.start / model.duration) * 100}%`, width: `${Math.max(0.15, ((f.end - f.start) / model.duration) * 100)}%`, backgroundColor: flagStyle(f.state).bg, opacity: 0.85 }}
+                  style={{ left: `${(f.start / model.duration) * 100}%`, width: `${Math.max(0.15, ((f.end - f.start) / model.duration) * 100)}%`, background: flagStyle(f.state).fill || flagStyle(f.state).bg, opacity: 0.85 }}
                 />
               ))}
             <span className="absolute inset-y-0 left-0 bg-ink/15" style={{ width: `${(t / model.duration) * 100}%` }} />
@@ -206,12 +214,13 @@ export default function Replay({
             <span className="hidden text-right sm:block">Last lap</span>
             <span className="text-right">Gap</span>
           </div>
-          <div className="relative" style={{ height: rows.length * ROW }}>
+          <div className="relative" style={{ height: rows.length * rowH }}>
             {rows.map((r, i) => (
               <TowerLine
                 key={r.car.carNumber}
                 r={r}
                 index={i}
+                rowH={rowH}
                 showClassPos={!!cls || !multi}
                 color={color(r.car.className)}
                 driver={driverName(r.driverId)}
@@ -269,6 +278,7 @@ export default function Replay({
 function TowerLine({
   r,
   index,
+  rowH,
   showClassPos,
   color,
   driver,
@@ -278,6 +288,7 @@ function TowerLine({
 }: {
   r: TowerRow;
   index: number;
+  rowH: number;
   showClassPos: boolean;
   color: string;
   driver: string;
@@ -290,11 +301,11 @@ function TowerLine({
       onClick={onFollow}
       aria-pressed={followed}
       className={cn(
-        "absolute inset-x-0 grid h-[44px] grid-cols-[2.6rem_3.2rem_1fr_4.5rem] items-center gap-2 px-4 text-left transition-[transform,background-color] duration-700 ease-[cubic-bezier(.2,.8,.2,1)] sm:grid-cols-[2.8rem_3.4rem_6.5rem_1fr_4rem_5.5rem_5.5rem] sm:px-6",
+        "absolute inset-x-0 grid grid-cols-[2.6rem_3.2rem_1fr_4.5rem] items-center gap-2 px-4 text-left transition-[transform,background-color] duration-700 ease-[cubic-bezier(.2,.8,.2,1)] sm:grid-cols-[2.8rem_3.4rem_6.5rem_1fr_4rem_5.5rem_5.5rem] sm:px-6",
         followed ? "z-10 bg-hl text-hl-ink" : "hover:bg-ink/[0.04]",
         r.out && "opacity-40",
       )}
-      style={{ transform: `translateY(${index * ROW}px)` }}
+      style={{ transform: `translateY(${index * rowH}px)`, height: rowH }}
     >
       <span className="font-accent text-lg tabular-nums">{showClassPos ? r.classPosition : r.position}</span>
       <span className="num inline-flex h-6 w-11 items-center justify-center rounded-md text-xs font-semibold text-white" style={{ backgroundColor: color }}>
