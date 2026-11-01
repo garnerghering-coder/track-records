@@ -220,6 +220,57 @@ summaries, `column_order`, `highlights_url`) has to be re-attached to the new se
 - **VP Racing classes** are `P3`, `GSX` and, in 2025 only, `GTDX`. The VPRC rounds at Daytona are
   on the ROAR event pages. 2025 VIR also holds the "CTMP Race 2 Makeup" race.
 
+## NTT INDYCAR SERIES (indycar.com) — imported 2024–2026
+
+INDYCAR is not on Al Kamel. `scripts/import-indycar.mjs` reads INDYCAR's own results:
+
+- **indycar.com results API** (the JSON behind https://www.indycar.com/Results, no key needed):
+  `/api/results/SeasonDropDown?id=b856a4f1-e85c-4fac-8c36-fd58d962227a` lists every season, event and
+  session id; `/api/results/EventsSessionDetails?id=<session>` gives the classification (positions, laps,
+  elapsed, gaps, laps led, pit stops, status, **points earned including pole, laps-led, most-laps-led and
+  Indianapolis 500 qualifying points**) and links to the session's PDF reports;
+  `/api/results/YearPointSummary?year=<y>&id=<series>` is the official championship table (used to verify).
+- **Official timing PDFs** (Indy Racing Information System), linked from the API as `http://www.imscdn.com/<Url>`
+  and fetched over HTTPS from the same S3 bucket (`https://s3.amazonaws.com/www.imscdn.com/<Url>`), converted with
+  `pdftotext -layout` (poppler-utils): the race **Results** PDF (chassis/engine per car, caution summary with
+  laps and reasons, penalty summary) and **Section Results** (every lap of every car with pit-lane SF→PI and
+  PI→PO times).
+
+```bash
+node --experimental-strip-types scripts/import-indycar.mjs --year 2025 --list          # events and EventIDs
+node --experimental-strip-types scripts/import-indycar.mjs --year 2024,2025,2026 --cache /tmp/indycar-cache
+node --experimental-strip-types scripts/import-indycar.mjs --year 2025 --event 5502 --replace   # one event again
+node --experimental-strip-types scripts/indycar-liveries.mjs --year 2026 --teams       # car illustrations
+node --experimental-strip-types scripts/render-track-map.mjs --in map.svg --layout <layoutId> --min-dark 0.7
+node --experimental-strip-types scripts/recompute-fingerprints.mjs
+```
+
+How the data is shaped:
+
+- One v2_event per points race (the Iowa and Milwaukee doubleheaders are two events each; the 2024
+  "$1 Million Challenge" exhibition at Thermal is skipped). Round = order of the races in the season.
+  Event names are `<year> <official name>` except `<year> Indianapolis 500`.
+- Sessions: every practice (Group 1/2 splits only when there is no "All Cars" report), warm-up, one
+  **Qualifying** session (the "Combined Qualifications" order; ovals: the single qualifying session; the 2024
+  Indianapolis 500, which has no combined report, is rebuilt from its segments in starting-grid order), and the
+  race. Oval qualifying `best_time` is the official 2- or 4-lap total (laps and average speed in extra_data).
+- `points` on race rows are INDYCAR's points as awarded; qualifying rows carry none (pole and Indianapolis 500
+  qualifying points are already in the race points). Standings computed by the site match the official tables
+  for 2024–2026 (top 10 and every driver's total).
+- No classes (extra_data.Class unset). Teams are organisations (`Andretti Global w/ Curb-Agajanian` → Andretti
+  Global); the entrant name per car is in `extra_data.entrant`. Cars are `Dallara IR-18 Honda` / `IR-18 Chevrolet`.
+- Lap times: elapsed = cumulative Section Results lap times, plus the car's start offset behind the leader
+  (official elapsed − sum of laps for finishers; nearest finisher on the grid for others). Since mid-2025 the
+  report also times the lap after the chequered flag; laps beyond the car's completed laps are dropped. A single
+  missing lap is filled from the official elapsed time. INDYCAR's elapsed times exclude red-flag stoppages; the
+  replay keeps short stoppages in real time as RED periods (from the winner's stopped lap), and takes a
+  suspension longer than two hours (2026 Milwaukee race 1, finished the next day) out of the timeline.
+- Flags: CAUTION periods from the results PDF's caution summary (laps → leader's lap times), RED from stopped
+  laps, CHEQUERED from the leader's finish to the last finisher. Race control notes: green, cautions with
+  reasons, penalties, red flags, chequered flag (`[Lap n] (+h:mm:ss.sss) text`).
+- Pit stops: one row per pit-lane passage in Section Results (includes drive-throughs), `stop_duration` = pit-in
+  to pit-out time.
+
 ## Full catalog
 
 Columns: Sessions (races) is the number of session folders and how many are races. Time cards
