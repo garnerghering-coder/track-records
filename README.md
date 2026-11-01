@@ -34,6 +34,26 @@ node --experimental-strip-types scripts/recompute-fingerprints.mjs       # recom
 node scripts/export-from-supabase.mjs                                    # one-time export from the old Supabase backend
 ```
 
+### Import an event from official timing (Al Kamel)
+
+The IMSA / Al Kamel importer (`supabase/functions/import-imsa-results/core.ts`, also used by the
+edge function) runs locally against `data/`. Event URLs are listed in `docs/DATA-SOURCES.md`.
+
+```bash
+# 1. find or create the series, season, classes, circuit and event; prints the event id
+node --experimental-strip-types scripts/add-event.mjs --series "IMSA WeatherTech SportsCar Championship" \
+  --year 2025 --event "2025 Acura Grand Prix of Long Beach" --round 3 --start 2025-04-11 --end 2025-04-12 \
+  --circuit "Long Beach Street Circuit" --classes GTP,GTD
+
+# 2. import results, lap times, stints, pit stops, flags and weather (--preview writes nothing;
+#    --replace first deletes the event's existing sessions; --weather fills missing weather from Open-Meteo)
+node --experimental-strip-types scripts/import-event.mjs --event <id> \
+  --url "https://imsa.results.alkamelcloud.com/?season=25_2025&evvent=07_Long%20Beach%20Street%20Circuit"
+
+# 3. always recompute driver fingerprints afterwards, then review `git diff --stat data/` and commit
+node --experimental-strip-types scripts/recompute-fingerprints.mjs
+```
+
 ## Deploy
 
 Pushing to `main` runs `.github/workflows/deploy.yml`: tests, build, publish to GitHub Pages. For a custom domain, set it in **Settings → Pages** and point DNS at GitHub Pages.

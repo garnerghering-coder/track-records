@@ -5,6 +5,7 @@
 {"id":"1e579e71-b1a7-4ce3-a9ac-f507a6557579","alias":"Bathurst","canonical":"Mount Panorama Circuit","entity_type":"circuit"}
 {"id":"2baca0e7-0206-46e0-9247-25f92f5e5333","alias":"Monza","canonical":"Autodromo Nazionale Monza","entity_type":"circuit"}
 {"id":"36e7d0c1-a565-49cf-84df-df9754bdc5f2","alias":"AlphaTauri RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
+{"id":"37413705-0b29-42ad-8bcc-15d9efc7fd58","alias":"Albert Costa Balboa","canonical":"891152ec-034b-4475-a176-0735543bebe5","entity_type":"driver"}
 {"id":"381197f6-c90f-47f2-aeb5-40c20bba5ca6","alias":"Spa","canonical":"Circuit de Spa-Francorchamps","entity_type":"circuit"}
 {"id":"3b142a8e-db04-42ff-a1b2-c66a13bd261d","alias":"Red Bull Racing RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
 {"id":"3fd75071-4b88-47fd-b8c3-3554316e2e63","alias":"IndyCar","canonical":"IndyCar Series","entity_type":"series"}
@@ -15,6 +16,8 @@
 {"id":"5f5340e5-25d2-47bb-8ca1-818ec1259db0","alias":"Indy 500","canonical":"Indianapolis 500","entity_type":"event"}
 {"id":"6804167e-1dc0-48d6-bde8-38272b2fc5f8","alias":"Alfa Romeo Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
 {"id":"762c6cf2-3487-46c0-9392-84bf7448cb2f","alias":"IMSA","canonical":"IMSA SportsCar Championship","entity_type":"series"}
+{"id":"7cb083f3-aa9b-4c75-a4de-0091256948b8","alias":"Ligier LMP2","canonical":"c42b4659-c5e5-41da-b4ef-67db3819909b","entity_type":"car"}
+{"id":"7f17a8da-eae6-4c8f-8589-020098ce02ff","alias":"Turner Motorpsort","canonical":"fad258bc-ecd9-4e1c-ad1f-6168c0297564","entity_type":"team"}
 {"id":"82c20884-91f8-4d24-aa9c-d3a92be5297e","alias":"Kimi Antonelli","canonical":"17f22941-9dee-4d47-92d4-48904435d66a","entity_type":"driver"}
 {"id":"8aa3902a-cd6a-43ac-8d5c-c3ee77c87913","alias":"F1","canonical":"Formula 1","entity_type":"series"}
 {"id":"9027c00f-edaa-4645-a1bd-468aa3ec263e","alias":"F2","canonical":"Formula 2","entity_type":"series"}
@@ -22,6 +25,7 @@
 {"id":"b17ef47e-b4a1-4d4f-8edc-70d0d86a7865","alias":"LMH","canonical":"Le Mans Hypercar","entity_type":"car"}
 {"id":"b2626590-29f2-4a71-b199-1dd536031e96","alias":"Alfa Romeo Racing Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
 {"id":"c1f9e1e6-37fb-4a64-9a2b-0c80eed80cd5","alias":"Daytona","canonical":"Rolex 24 At Daytona","entity_type":"event"}
+{"id":"c4cff68f-d0fd-4c4d-8558-daa230631663","alias":"Ferdinand Habsburg-Lothringen","canonical":"a4b20873-9572-4f83-bbbf-65b994c77592","entity_type":"driver"}
 {"id":"c57147e2-80a5-4fbf-a30b-77698ed1417d","alias":"WEC","canonical":"World Endurance Championship","entity_type":"series"}
 {"id":"d0aa2d5c-672e-41f8-a505-7dcd76b0cb8f","alias":"Nurburgring","canonical":"Nürburgring","entity_type":"circuit"}
 {"id":"d161534d-da1e-44fa-b70c-10f43d14c644","alias":"F3","canonical":"Formula 3","entity_type":"series"}

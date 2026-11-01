@@ -409,7 +409,8 @@ export default function EventHeroDashboard({
     enabled: !!resultsSessionId,
   });
 
-  const enduranceDriverSessionId = isEndurance ? activeRaceSession?.id : null;
+  // Final classification of any race stores one row per driver of each car (sprint races too)
+  const enduranceDriverSessionId = activeRaceSession?.id ?? null;
   const { data: enduranceDrivers = [] } = useQuery({
     queryKey: ["hero_endurance_drivers", enduranceDriverSessionId],
     queryFn: async () => {
@@ -458,8 +459,15 @@ export default function EventHeroDashboard({
   const winners = useMemo(() => {
     if (raceResults.length === 0) return [];
     const classBuckets: Record<string, any[]> = {};
+    const seenCars = new Set<string>();
     for (const r of raceResults) {
       const cls = (r.extra_data as any)?.Class || "Overall";
+      // One entry per car: a race classification has a row for each of the car's drivers
+      if (r.car_number) {
+        const carKey = `${cls}|${r.car_number}`;
+        if (seenCars.has(carKey)) continue;
+        seenCars.add(carKey);
+      }
       if (!classBuckets[cls]) classBuckets[cls] = [];
       classBuckets[cls].push(r);
     }

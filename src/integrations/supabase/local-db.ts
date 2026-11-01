@@ -9,7 +9,8 @@
  *   select("a, b, alias:c, rel(x, nested(*)), rel!inner(*)", { count, head })
  *   eq neq gt gte lt lte like ilike in is not(col, op, val) or("a.eq.1,b.ilike.%x%", { referencedTable })
  *   order(col, { ascending, nullsFirst }) limit range single maybeSingle
- *   insert update upsert delete (only when the loader allows writes)
+ *   insert update upsert delete (only when the loader allows writes; writes to
+ *   one table are applied in call order, also when started concurrently)
  *   JSON paths in filters: extra_data->>PIC
  */
 
@@ -265,8 +266,24 @@ export class LocalDB {
   }
 
   /* writes (Node) */
-  async mutate(table: string, fn: (rows: Row[]) => Row[]): Promise<void> {
-    if (!this.writable) throw new Error("read-only");
+  private writeQueues = new Map<string, Promise<void>>();
+
+  /**
+   * Apply a change to a table. Writes to the same table run one after another
+   * (in call order), so concurrent writes — e.g. several inserts started with
+   * Promise.all — never overwrite each other.
+   */
+  mutate(table: string, fn: (rows: Row[]) => Row[]): Promise<void> {
+    if (!this.writable) return Promise.reject(new Error("read-only"));
+    const run = (this.writeQueues.get(table) ?? Promise.resolve()).then(() => this.applyMutation(table, fn));
+    this.writeQueues.set(
+      table,
+      run.catch(() => {}),
+    );
+    return run;
+  }
+
+  private async applyMutation(table: string, fn: (rows: Row[]) => Row[]): Promise<void> {
     const schema = await this.schema();
     if (!schema.tables[table]) {
       schema.tables[table] = {};
@@ -279,9 +296,15 @@ export class LocalDB {
     for (const k of [...this.parts.keys()]) if (k.startsWith(table + "/")) this.parts.delete(k);
     const meta = schema.tables[table];
     if (meta.partitionKey) {
-      const keys = new Set(next.map((r) => String(r[meta.partitionKey!] ?? "_none")));
-      meta.partitions = [...keys].sort();
-      for (const p of meta.partitions) this.parts.set(`${table}/${p}`, Promise.resolve(next.filter((r) => String(r[meta.partitionKey!] ?? "_none") === p)));
+      const groups = new Map<string, Row[]>();
+      for (const r of next) {
+        const k = String(r[meta.partitionKey] ?? "_none");
+        const g = groups.get(k);
+        if (g) g.push(r);
+        else groups.set(k, [r]);
+      }
+      meta.partitions = [...groups.keys()].sort();
+      for (const [p, list] of groups) this.parts.set(`${table}/${p}`, Promise.resolve(list));
     }
     this.dirty.add(table);
   }
@@ -289,6 +312,7 @@ export class LocalDB {
 
   async flush() {
     if (!this.loader.save) throw new Error("loader cannot save");
+    await Promise.all(this.writeQueues.values());
     const schema = await this.schema();
     for (const t of this.dirty) await this.loader.save(t, await this.rows(t), schema);
     this.dirty.clear();
@@ -559,7 +583,7 @@ class QueryBuilder implements PromiseLike<Result> {
   private async executeWrite(): Promise<Result> {
     if (!this.db.writable) return this.result(null, null, { message: "Track Records data is read-only in the browser.", code: "READ_ONLY" });
     const now = new Date().toISOString();
-    let affected: Row[] = [];
+    const affected: Row[] = [];
     if (this.op === "insert" || this.op === "upsert") {
       const keyCols = (this.onConflict || "id").split(",").map((s) => s.trim());
       await this.db.mutate(this.table, (rows) => {
@@ -568,6 +592,7 @@ class QueryBuilder implements PromiseLike<Result> {
           const row: Row = { ...p };
           if (row.id == null && (rows.length === 0 || "id" in rows[0] || keyCols.includes("id"))) row.id = uuid();
           if (row.created_at === undefined && (rows.length === 0 || "created_at" in rows[0])) row.created_at = now;
+          if (row.updated_at === undefined && rows.length > 0 && "updated_at" in rows[0]) row.updated_at = now;
           if (this.op === "upsert") {
             const i = next.findIndex((r) => keyCols.every((k) => eqLoose(r[k], row[k])));
             if (i !== -1) {

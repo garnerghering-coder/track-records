@@ -273,6 +273,8 @@ export interface OfficialSessionPoints {
 
 export interface OfficialEventPoints {
   eventName: string;
+  /** The event was identified by name from the import's hint (so it is not a stale round). */
+  byName?: boolean;
   keyType: "car" | "driver";
   sessions: OfficialSessionPoints[];
 }
@@ -300,7 +302,40 @@ interface RawPointsJson {
  * The file is cumulative for the season; the event it was published for is
  * the last one that has any scores. Returns null when nothing is usable.
  */
-export function parseOfficialPointsFile(json: unknown, fileName = ""): OfficialEventPoints | null {
+/** Which round of the season an import is for, to find it in a season-long points file. */
+export interface PointsEventHint {
+  /** Round number of the event in the season (1-based), used when no name matches. */
+  round?: number | null;
+  /** Names to match against the file's event names: event name, Al Kamel event folder, circuit name. */
+  names?: string[];
+}
+
+/**
+ * The file's event (event_name) that the hint refers to: the one event whose name occurs in
+ * one of the hint names ("Sebring" in "Sebring International Raceway"; "CTMP" as the initials
+ * of "Canadian Tire Motorsport Park"), else the round-th event of the file, else null.
+ */
+export function pickPointsEvent(eventNames: string[], hint?: PointsEventHint): string | null {
+  return pickPointsEventHow(eventNames, hint)?.name ?? null;
+}
+
+/** pickPointsEvent, plus whether the event was identified by name (true) or only by round number. */
+export function pickPointsEventHow(eventNames: string[], hint?: PointsEventHint): { name: string; byName: boolean } | null {
+  if (!hint) return null;
+  const names = (hint.names || []).map(normaliseName).filter(Boolean);
+  const initials = (n: string) => n.split(" ").map((w) => w[0]).join("");
+  const matches = eventNames.filter((ev) => {
+    const e = normaliseName(ev);
+    if (!e) return false;
+    return names.some((n) => ` ${n} `.includes(` ${e} `) || new RegExp(`(^| )${e.replace(/[^a-z0-9 ]/g, "")}`).test(n) || (e.length <= 5 && !e.includes(" ") && initials(n) === e));
+  });
+  if (matches.length === 1) return { name: matches[0], byName: true };
+  const r = Number(hint.round);
+  if (Number.isInteger(r) && r >= 1 && r <= eventNames.length) return { name: eventNames[r - 1], byName: false };
+  return null;
+}
+
+export function parseOfficialPointsFile(json: unknown, fileName = "", hint?: PointsEventHint): OfficialEventPoints | null {
   const data = json as RawPointsJson;
   const sessions = data?.championship?.sessions;
   const rows = data?.classification;
@@ -312,7 +347,17 @@ export function parseOfficialPointsFile(json: unknown, fileName = ""): OfficialE
       if ((p.total_points ?? 0) !== 0 || (p.status && p.status !== "did_not_race")) hasData.add(p.session_index);
   const withData = sessions.filter((s) => hasData.has(s.session_index));
   if (withData.length === 0) return null;
-  const last = withData.reduce((a, b) => (b.session_index > a.session_index ? b : a));
+  // Files are cumulative, and some event pages (all of 2024) carry the final season file, so the
+  // last event with scores is not always the one being imported: prefer the hinted round.
+  const eventOrder = [...new Set([...sessions].sort((a, b) => a.session_index - b.session_index).map((s) => s.event_name))];
+  const picked = pickPointsEventHow(eventOrder, hint);
+  const hinted = picked?.name ?? null;
+  const useHint = !!hinted && withData.some((s) => s.event_name === hinted);
+  // The round was found by name but this class has no scores there: it did not race (LMP2 at Long Beach).
+  if (picked?.byName && !useHint) return null;
+  const last = useHint
+    ? withData.filter((s) => s.event_name === hinted).reduce((a, b) => (b.session_index > a.session_index ? b : a))
+    : withData.reduce((a, b) => (b.session_index > a.session_index ? b : a));
   const eventSessions = sessions.filter((s) => s.event_name === last.event_name).sort((a, b) => a.session_index - b.session_index);
 
   const title = `${data.championship?.name || ""} ${fileName}`.toLowerCase();
@@ -333,7 +378,7 @@ export function parseOfficialPointsFile(json: unknown, fileName = ""): OfficialE
       out[slot].points.set(key, Number(p.total_points ?? 0));
     }
   }
-  return { eventName: last.event_name, keyType, sessions: out.filter((s) => s.points.size > 0) };
+  return { eventName: last.event_name, keyType, byName: useHint && !!picked?.byName, sessions: out.filter((s) => s.points.size > 0) };
 }
 
 /**
@@ -342,24 +387,27 @@ export function parseOfficialPointsFile(json: unknown, fileName = ""): OfficialE
  * files are only used for a kind no Teams file covers (single-driver series).
  */
 export function mergeOfficialPoints(files: Array<OfficialEventPoints | null>): {
-  race: Array<{ keyType: "car" | "driver"; points: Map<string, number> }>;
-  qualifying: Array<{ keyType: "car" | "driver"; points: Map<string, number> }>;
+  race: Array<{ keyType: "car" | "driver"; points: Map<string, number>; byName: boolean }>;
+  qualifying: Array<{ keyType: "car" | "driver"; points: Map<string, number>; byName: boolean }>;
 } {
-  const result = { race: [] as Array<{ keyType: "car" | "driver"; points: Map<string, number> }>, qualifying: [] as Array<{ keyType: "car" | "driver"; points: Map<string, number> }> };
+  type Cand = { keyType: "car" | "driver"; points: Map<string, number>; byName: boolean };
+  const result = { race: [] as Cand[], qualifying: [] as Cand[] };
   for (const keyType of ["car", "driver"] as const) {
     const parsed = files.filter((f): f is OfficialEventPoints => !!f && f.keyType === keyType);
     for (const kind of ["race", "qualifying"] as const) {
       if (result[kind].length > 0) continue;
-      const slots: Map<string, number>[] = [];
+      const slots: Cand[] = [];
       for (const f of parsed) {
         f.sessions
           .filter((s) => s.kind === kind)
           .forEach((s, i) => {
-            if (!slots[i]) slots[i] = new Map();
-            for (const [k, v] of s.points) slots[i].set(k, v);
+            // a slot is trusted only when every file that contributes to it found its round by name
+            if (!slots[i]) slots[i] = { keyType, points: new Map(), byName: true };
+            slots[i].byName = slots[i].byName && !!f.byName;
+            for (const [k, v] of s.points) slots[i].points.set(k, v);
           });
       }
-      result[kind] = slots.filter(Boolean).map((points) => ({ keyType, points }));
+      result[kind] = slots.filter(Boolean);
     }
   }
   return result;
@@ -372,21 +420,24 @@ export function mergeOfficialPoints(files: Array<OfficialEventPoints | null>): {
  * do not compute this series). An official candidate is accepted when it
  * covers most of the session's entries and, if we computed points, agrees
  * with at least half of them, which guards against a stale points file from
- * a previous event.
+ * a previous event. A candidate whose round was identified by name (`trusted`)
+ * skips the agreement test: IMSA's own figures then win even where penalties
+ * moved many cars (2024 Sebring qualifying: 27 of 58 agree with positions).
  */
 export function chooseOfficialSession(
   keys: string[],
   computed: Map<string, number | null>,
   candidates: Array<Map<string, number>>,
+  trusted: boolean[] = [],
 ): Map<string, number> | null {
   if (keys.length === 0 || candidates.length === 0) return null;
   let best: { map: Map<string, number>; score: number } | null = null;
-  for (const cand of candidates) {
+  for (const [i, cand] of candidates.entries()) {
     const covered = keys.filter((k) => cand.has(k)).length;
     if (covered / keys.length < 0.6) continue;
     const comparable = keys.filter((k) => cand.has(k) && computed.get(k) != null);
     const agree = comparable.filter((k) => Math.abs((computed.get(k) as number) - (cand.get(k) as number)) < 0.01).length;
-    if (comparable.length > 0 && agree / comparable.length < 0.5) continue;
+    if (!trusted[i] && comparable.length > 0 && agree / comparable.length < 0.5) continue;
     const score = covered + agree;
     if (!best || score > best.score) best = { map: cand, score };
   }
