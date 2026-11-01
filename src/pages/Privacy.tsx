@@ -5,13 +5,12 @@ import SEOHead from "@/components/SEOHead";
 import { Eyebrow, Page } from "@/site/ui";
 
 const SECTIONS = [
-  { id: "data-we-collect", title: "What data we collect" },
-  { id: "how-data-is-gathered", title: "How data is gathered" },
-  { id: "how-data-is-used", title: "How data is used" },
-  { id: "how-data-is-protected", title: "How data is protected" },
+  { id: "summary", title: "In short" },
+  { id: "data-we-publish", title: "What we publish" },
+  { id: "data-from-visitors", title: "What we collect from visitors" },
   { id: "third-party-services", title: "Third-party services" },
-  { id: "cookies", title: "Cookies" },
-  { id: "your-rights", title: "Your rights" },
+  { id: "advertising", title: "Advertising and cookies" },
+  { id: "your-rights", title: "Corrections, removal and your rights" },
   { id: "changes", title: "Changes to this policy" },
 ];
 
@@ -34,11 +33,11 @@ function Section({ index, children }: { index: number; children: ReactNode }) {
 const Privacy = () => {
   return (
     <div className="min-h-screen">
-      <SEOHead title="Privacy Policy" description="Learn how Track Records collects, uses, and protects your data." canonical="/privacy" />
+      <SEOHead title="Privacy Policy" description="Track Records has no accounts and collects no personal details. How we publish race data, and how Google advertising uses cookies." canonical="/privacy" />
       <Header />
 
       <Page className="pt-8 sm:pt-14">
-        <Eyebrow>Legal · Last updated <span className="num text-ink">February 2026</span></Eyebrow>
+        <Eyebrow>Legal · Last updated <span className="num text-ink">November 2026</span></Eyebrow>
         <h1 className="display mt-4 text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
           Privacy <em>policy.</em>
         </h1>
@@ -62,78 +61,115 @@ const Privacy = () => {
 
           <article className="min-w-0 max-w-[40rem] space-y-14">
             <Section index={0}>
-              <ul>
-                <li><strong>Account information</strong> — email address, name, and nationality when you sign up.</li>
-                <li><strong>Driver profile data</strong> — date of birth, racing category, license details, bio, photo, and social links you choose to provide.</li>
-                <li><strong>Race results</strong> — series, season, event names, finishing positions, championship standings, and related metadata.</li>
-                <li><strong>Community submissions</strong> — raw result data pasted by users for admin review.</li>
-                <li><strong>Usage data</strong> — basic analytics such as page views and session duration to improve the platform (no tracking cookies).</li>
-              </ul>
+              <p>
+                Track Records is a free, public archive of motorsport results. There are <strong>no accounts</strong>: we don&apos;t ask you to sign up,
+                and we don&apos;t collect your name, email address or any other personal details through the site. The site shows advertising served by Google,
+                which may use cookies. We <strong>never sell</strong> personal data.
+              </p>
             </Section>
 
             <Section index={1}>
               <ul>
-                <li><strong>User-submitted</strong> — drivers and teams create profiles and add results directly.</li>
-                <li><strong>Admin imports</strong> — administrators import official results from publicly available sources (e.g., timing sheets, federation websites).</li>
-                <li><strong>AI-powered scraping</strong> — we use AI to parse and structure publicly available race results from official series websites. Only publicly accessible data is collected.</li>
-                <li><strong>Community contributions</strong> — users can submit raw results data, which is reviewed and verified by administrators before being added to the platform.</li>
+                <li>
+                  <strong>Race data</strong>: results, lap times, pit stops, flags, weather and standings, taken from official timing and scoring published by the
+                  series organisers.
+                </li>
+                <li>
+                  <strong>Competitor information</strong>: the names, nationalities and teams of drivers as published in those official results. For some drivers we
+                  also show a date of birth or hometown, taken from publicly available sources.
+                </li>
+                <li>
+                  <strong>Derived statistics</strong>: records, standings and the driver &quot;fingerprint&quot; scores are calculated by us from the published results.
+                </li>
               </ul>
             </Section>
 
             <Section index={2}>
               <ul>
-                <li>Building comprehensive, verified driver profiles.</li>
-                <li>Enabling teams and sponsors to search and discover drivers by category, nationality, and performance.</li>
-                <li>Verification of race results by administrators.</li>
-                <li>Improving the platform experience based on usage patterns.</li>
+                <li>
+                  <strong>Nothing you type is stored by us.</strong> Search happens in your browser, and the site has no forms that send data to us.
+                </li>
+                <li>
+                  <strong>Your preferences</strong>: your choice of day or night mode is kept in your browser&apos;s local storage. It never leaves your device.
+                </li>
+                <li>
+                  <strong>We don&apos;t run our own analytics</strong> or tracking scripts.
+                </li>
               </ul>
-              <p>
-                We <strong>never sell</strong> your personal data to third parties.
-              </p>
             </Section>
 
             <Section index={3}>
+              <p>Loading the site involves these providers, each of which receives your IP address as part of normal web requests:</p>
               <ul>
-                <li><strong>Authentication</strong> — all accounts are protected with secure email-based authentication.</li>
-                <li><strong>Row-Level Security (RLS)</strong> — database policies ensure users can only access and modify data they are authorised to.</li>
-                <li><strong>Encrypted connections</strong> — all data in transit is encrypted via HTTPS/TLS.</li>
-                <li><strong>Access control</strong> — admin-only actions (verification, imports, user management) are restricted by role-based permissions.</li>
+                <li>
+                  <strong>GitHub Pages</strong> hosts the site and may log requests for security and reliability (see{" "}
+                  <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
+                    GitHub&apos;s privacy statement
+                  </a>
+                  ).
+                </li>
+                <li>
+                  <strong>Google Fonts</strong> serves the typefaces.
+                </li>
+                <li>
+                  <strong>flagcdn.com</strong> serves the national flag images.
+                </li>
+                <li>
+                  <strong>Google AdSense</strong> serves advertising (see below).
+                </li>
               </ul>
             </Section>
 
             <Section index={4}>
-              <p>We use the following third-party services to operate the platform:</p>
+              <p>
+                Advertising on Track Records is provided by Google AdSense. Google and its partners may use cookies or similar technologies to show ads, limit how
+                often you see them and measure their performance, including ads based on your visits to this and other websites.
+              </p>
               <ul>
-                <li><strong>Authentication provider</strong> — secure login and account management.</li>
-                <li><strong>AI processing</strong> — used to parse and structure race result data from public sources. No personal data is shared with AI providers beyond what is publicly available.</li>
+                <li>
+                  Learn how Google uses this information in{" "}
+                  <a href="https://policies.google.com/technologies/partner-sites" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
+                    How Google uses information from sites that use its services
+                  </a>
+                  .
+                </li>
+                <li>
+                  You can turn off personalised ads at{" "}
+                  <a href="https://adssettings.google.com" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
+                    Google Ads Settings
+                  </a>{" "}
+                  or opt out of third-party vendors at{" "}
+                  <a href="https://www.aboutads.info/choices" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
+                    aboutads.info
+                  </a>
+                  .
+                </li>
+                <li>You can also block or delete cookies in your browser settings; the site works without them.</li>
               </ul>
             </Section>
 
             <Section index={5}>
-              <p>
-                We use <strong>minimal cookies</strong> — only what is necessary for session authentication. We do not use tracking cookies, advertising cookies, or third-party analytics cookies.
-              </p>
-            </Section>
-
-            <Section index={6}>
               <ul>
-                <li>Request edits or corrections to your driver profile.</li>
-                <li>Request deletion of your account and associated data.</li>
-                <li>Ask what personal data we hold about you.</li>
-                <li>Withdraw consent for data processing at any time.</li>
+                <li>Spotted a wrong result or name? Tell us and we&apos;ll correct it against the official records.</li>
+                <li>
+                  If you are a driver or team listed here, you can ask us to correct or remove personal details that aren&apos;t part of the official results,
+                  such as a date of birth or hometown.
+                </li>
+                <li>Depending on where you live, you may have further rights over personal data; contact us and we&apos;ll help.</li>
               </ul>
               <p>
-                To exercise any of these rights, contact us at{" "}
-                <a href="mailto:privacy@trackrecord.com" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
-                  privacy@trackrecord.com
+                Contact:{" "}
+                <a href="mailto:privacy@track-records.com" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
+                  privacy@track-records.com
                 </a>
                 .
               </p>
             </Section>
 
-            <Section index={7}>
+            <Section index={6}>
               <p>
-                We may update this privacy policy from time to time. Any changes will be reflected on this page with an updated revision date. Continued use of the platform after changes constitutes acceptance of the revised policy.
+                If we change how the site handles data, we&apos;ll update this page and the date at the top. The data itself is kept in a public repository, so every
+                change to it is on the record too.
               </p>
             </Section>
           </article>
