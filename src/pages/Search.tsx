@@ -1,616 +1,401 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
-import { pgQuote, cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { ArrowUpRight, Search as SearchIcon, X } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import FlagImage from "@/components/FlagImage";
 import SEOHead from "@/components/SEOHead";
-import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
-import { Count, Segmented } from "@/components/browse/Segmented";
-import { formatDateRange } from "@/lib/date-utils";
-import { computeTrackMetrics, categoryHexColor } from "@/lib/track-calculations";
-import { getCountryCode } from "@/lib/countries";
+import FlagImage from "@/components/FlagImage";
+import { cn } from "@/lib/utils";
+import { useDigests, useEvents, useLayouts, useNames, layoutFor, cleanName } from "@/site/data";
+import { Eyebrow, Initials, Livery, Note, Page, Skeleton, Tabs, TrackMap, dateRange } from "@/site/ui";
+import { crewLastNames, fold, headline, layoutsOf, num, overallWinner, plural, stripYear, useAliases, useCircuits, useSeries, winsByDriver } from "@/site/archive";
 
-type ResultType = "driver" | "team" | "event" | "series" | "circuit" | "car";
-type FilterVal = "all" | ResultType;
+type Kind = "all" | "drivers" | "teams" | "races" | "circuits" | "cars" | "series";
+const REDIRECT: Record<string, string> = { drivers: "/drivers", circuits: "/circuits", teams: "/teams", cars: "/cars", series: "/series", events: "/results", results: "/results" };
+const KIND_LABEL: Record<Exclude<Kind, "all">, string> = { drivers: "Drivers", teams: "Teams", races: "Races", circuits: "Circuits", cars: "Cars", series: "Championships" };
+const SUGGEST = ["Porsche", "Daytona", "Nasr", "Cadillac", "Sebring", "GTD"];
 
-type ResultItem = {
-  type: ResultType;
-  id: string;
-  label: string;
-  url: string;
-  subtitle?: string;
-  nationality?: string | null;
-  tags?: { label: string; color: string }[];
-};
+/** Score a candidate: 0 = no match; higher is better. All query tokens must appear. */
+function score(q: string, fields: (string | null | undefined)[], aliasHit = false) {
+  if (!q) return 0;
+  const toks = q.split(/\s+/).filter(Boolean);
+  const hay = fields.map(fold);
+  const joined = hay.join(" ");
+  if (!aliasHit && !toks.every((t) => joined.includes(t))) return 0;
+  let s = aliasHit ? 40 : 10;
+  if (hay[0] === q) s += 100;
+  else if (hay[0]?.startsWith(q)) s += 60;
+  else if (hay[0]?.split(/\s+/).some((w) => w.startsWith(toks[0]))) s += 30;
+  return s;
+}
 
-type CircuitRow = {
-  id: string;
-  name: string;
-  location: string | null;
-  country: string | null;
-  lengthKm: number | null;
-  turns: number | null;
-  character: string | null;
-  events: number;
-};
+function Hl({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>;
+  const f = fold(text);
+  const tok = q.split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length)[0];
+  const i = tok ? f.indexOf(tok) : -1;
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="underline decoration-hl decoration-[3px] underline-offset-[3px]">{text.slice(i, i + tok.length)}</span>
+      {text.slice(i + tok.length)}
+    </>
+  );
+}
 
-const typeFilter: { value: FilterVal; label: string; plural: string; tab?: string }[] = [
-  { value: "all", label: "All", plural: "Results" },
-  { value: "driver", label: "Drivers", plural: "Drivers", tab: "drivers" },
-  { value: "team", label: "Teams", plural: "Teams", tab: "teams" },
-  { value: "event", label: "Events", plural: "Events", tab: "events" },
-  { value: "series", label: "Series", plural: "Series", tab: "series" },
-  { value: "circuit", label: "Circuits", plural: "Circuits", tab: "circuits" },
-  { value: "car", label: "Cars", plural: "Cars", tab: "cars" },
-];
-const tabToType = (tab: string | null): FilterVal => typeFilter.find((t) => t.tab && t.tab === tab)?.value ?? "all";
+export default function SearchPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab");
+  const qParam = params.get("q") || "";
+  const [input, setInput] = useState(qParam);
+  const kind = ((params.get("type") as Kind) || "all") as Kind;
+  const inputRef = useRef<HTMLInputElement>(null);
 
-const surname = (full: string) => {
-  const parts = full.trim().split(/\s+/);
-  // Keep particles with the surname: "van der Zande", "De Angelis"
-  let i = parts.length - 1;
-  while (i > 1 && /^(van|von|der|de|da|di|del|le|la)$/i.test(parts[i - 1])) i--;
-  return parts.slice(i).join(" ");
-};
-const sortKey = (full: string) => surname(full).toLowerCase();
+  const names = useNames();
+  const events = useEvents();
+  const digests = useDigests();
+  const circuits = useCircuits();
+  const layouts = useLayouts();
+  const series = useSeries();
+  const aliases = useAliases();
 
-const SearchPage = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab");
-  const typeFilterVal = tabToType(tab);
-  const [search, setSearch] = useState(searchParams.get("q") || "");
-  const [results, setResults] = useState<ResultItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [drivers, setDrivers] = useState<ResultItem[] | null>(null);
-  const [circuits, setCircuits] = useState<CircuitRow[] | null>(null);
-  const letterRefs = useRef<Record<string, HTMLElement | null>>({});
+  // keep the URL in step with typing (debounced)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (input === qParam) return;
+      const n = new URLSearchParams(params);
+      if (input) n.set("q", input);
+      else n.delete("q");
+      setParams(n, { replace: true });
+    }, 180);
+    return () => clearTimeout(t);
+  }, [input]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setInput(qParam), [qParam]);
+  useEffect(() => {
+    if (!qParam) inputRef.current?.focus();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const updateParams = (next: { q?: string; type?: FilterVal }) => {
-    const q = next.q ?? search;
-    const type = next.type ?? typeFilterVal;
-    const p: Record<string, string> = {};
-    const t = typeFilter.find((x) => x.value === type)?.tab;
-    if (t) p.tab = t;
-    if (q) p.q = q;
-    setSearchParams(p, { replace: next.q !== undefined });
+  const q = fold(qParam);
+  const ready = !!(names && events && circuits && series && layouts);
+  const wins = useMemo(() => winsByDriver(digests), [digests]);
+
+  const results = useMemo(() => {
+    if (!ready || !q) return null;
+    const aliasIds = new Set((aliases || []).filter((a) => fold(a.alias).includes(q)).map((a) => fold(a.canonical)));
+    const rank = <T,>(list: { item: T; s: number }[]) => list.filter((x) => x.s > 0).sort((a, b) => b.s - a.s).map((x) => x.item);
+
+    const drivers = rank(
+      Object.values(names!.drivers).map((d) => {
+        const s = score(q, [cleanName(d.full_name), d.nationality], aliasIds.has(fold(d.id)) || aliasIds.has(fold(d.full_name)));
+        return { item: d, s: s ? s + (wins.get(d.id) || 0) : 0 };
+      }),
+    );
+    const teams = rank(Object.values(names!.teams).map((t) => ({ item: t, s: score(q, [t.full_name, t.short_name], aliasIds.has(fold(t.id)) || aliasIds.has(fold(t.full_name))) })));
+    const cars = rank(Object.values(names!.cars).map((c) => ({ item: c, s: score(q, [`${c.manufacturer || ""} ${c.model_name}`.trim(), c.model_name], aliasIds.has(fold(c.id))) })));
+    const circ = rank(circuits!.map((c) => ({ item: c, s: score(q, [c.name, c.location, c.country], aliasIds.has(fold(c.id)) || aliasIds.has(fold(c.name))) })));
+    const races = rank(
+      events!.map((e) => ({
+        item: e,
+        s: score(q, [stripYear(e.name), e.short_name, e.circuit?.name, e.circuit?.location, e.series?.name, e.series?.short_name, String(e.year ?? "")]),
+      })),
+    );
+    const ser = rank(series!.map((s) => ({ item: s, s: score(q, [s.name, s.short_name], aliasIds.has(fold(s.id)) || aliasIds.has(fold(s.name))) })));
+    return { drivers, teams, races, circuits: circ, cars, series: ser };
+  }, [ready, q, names, events, circuits, series, aliases, wins]);
+
+  if (tab && REDIRECT[tab]) return <Navigate to={REDIRECT[tab] + (qParam && (tab === "circuits" || tab === "drivers") ? `?q=${encodeURIComponent(qParam)}` : "")} replace />;
+
+  const counts = results ? (Object.fromEntries(Object.entries(results).map(([k, v]) => [k, v.length])) as Record<Exclude<Kind, "all">, number>) : null;
+  const total = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
+  const show = (k: Exclude<Kind, "all">) => (kind === "all" || kind === k) && (counts?.[k] || 0) > 0;
+  const lim = (n: number) => (kind === "all" ? n : 200);
+  const setKind = (k: Kind) => {
+    const n = new URLSearchParams(params);
+    if (k === "all") n.delete("type");
+    else n.set("type", k);
+    setParams(n, { replace: true });
   };
 
-  const setType = (v: FilterVal) => updateParams({ type: v });
-
-  // Directory data for the Drivers / Circuits tabs
-  useEffect(() => {
-    if (typeFilterVal === "driver" && !drivers) {
-      supabase
-        .from("v2_drivers")
-        .select("id, full_name, nationality")
-        .order("full_name")
-        .limit(2000)
-        .then(({ data }) =>
-          setDrivers(
-            ((data || []) as any[])
-              .map((d) => ({ type: "driver" as const, id: d.id, label: d.full_name, url: `/driver/${d.id}`, nationality: d.nationality }))
-              .sort((a, b) => sortKey(a.label).localeCompare(sortKey(b.label)) || a.label.localeCompare(b.label)),
-          ),
-        );
-    }
-    if (typeFilterVal === "circuit" && !circuits) {
-      Promise.all([
-        supabase.from("v2_circuits").select("id, name, country, location").order("name").limit(1000),
-        supabase
-          .from("v2_circuit_layouts")
-          .select("circuit_id, length_km, turns, total_straight_length_km, total_elevation_change_m, heavy_braking_corners, sort_order")
-          .order("sort_order")
-          .limit(2000),
-        supabase.from("v2_events").select("circuit_id").eq("status", "published" as any).limit(2000),
-      ]).then(([{ data: cs }, { data: ls }, { data: es }]) => {
-        const layout: Record<string, any> = {};
-        for (const l of (ls || []) as any[]) if (!layout[l.circuit_id]) layout[l.circuit_id] = l;
-        const evCount: Record<string, number> = {};
-        for (const e of (es || []) as any[]) if (e.circuit_id) evCount[e.circuit_id] = (evCount[e.circuit_id] || 0) + 1;
-        setCircuits(
-          ((cs || []) as any[]).map((c) => {
-            const l = layout[c.id];
-            const m = l
-              ? computeTrackMetrics(
-                  l.length_km,
-                  l.turns,
-                  l.total_straight_length_km,
-                  l.total_elevation_change_m,
-                  l.heavy_braking_corners,
-                )
-              : null;
-            return {
-              id: c.id,
-              name: c.name,
-              location: c.location,
-              country: c.country,
-              lengthKm: l?.length_km != null ? Number(l.length_km) : null,
-              turns: l?.turns ?? null,
-              character: m?.tcsCategory ?? null,
-              events: evCount[c.id] || 0,
-            };
-          }),
-        );
-      });
-    }
-  }, [typeFilterVal, drivers, circuits]);
-
-  // Keep the input in sync when ?q= changes from outside (command palette, back button)
-  useEffect(() => {
-    const q = searchParams.get("q") || "";
-    if (q !== search) setSearch(q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (!search.trim()) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
-
-    const timer = setTimeout(async () => {
-      const items: ResultItem[] = [];
-      const shouldSearch = (type: string) => typeFilterVal === "all" || typeFilterVal === type;
-
-      // Resolve aliases
-      const { data: aliases } = await supabase.from("search_aliases").select("alias, canonical, entity_type").ilike("alias", `%${search}%`);
-      const searchTerms = [search];
-      if (aliases) for (const a of aliases) searchTerms.push(a.canonical);
-
-      const promises: Promise<void>[] = [];
-
-      if (shouldSearch("driver")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_drivers")
-                .select("id, full_name, nationality, short_name")
-                .or(`full_name.ilike.${pgQuote(`%${term}%`)},nationality.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`)
-                .limit(20);
-              (data || []).forEach((d: any) => {
-                if (!existing.has(d.id)) {
-                  items.push({ type: "driver", id: d.id, label: d.full_name, url: `/driver/${d.id}`, nationality: d.nationality });
-                  existing.add(d.id);
-                }
-              });
-            }
-          })(),
-        );
-      }
-
-      if (shouldSearch("team")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_teams")
-                .select("id, full_name, nationality, short_name")
-                .or(`full_name.ilike.${pgQuote(`%${term}%`)},nationality.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`)
-                .limit(20);
-              (data || []).forEach((t: any) => {
-                if (!existing.has(t.id)) {
-                  items.push({ type: "team", id: t.id, label: t.full_name, url: `/team/${t.id}`, nationality: t.nationality });
-                  existing.add(t.id);
-                }
-              });
-            }
-          })(),
-        );
-      }
-
-      if (shouldSearch("event")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_events")
-                .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits(name, country)")
-                .or(`name.ilike.${pgQuote(`%${term}%`)}`)
-                .eq("status", "published" as any)
-                .limit(30);
-              // Also search by circuit name/country
-              const { data: data2 } = await supabase
-                .from("v2_events")
-                .select("id, name, start_date, end_date, status, v2_seasons(year, v2_series(name)), v2_circuits!inner(name, country)")
-                .or(`name.ilike.${pgQuote(`%${term}%`)},country.ilike.${pgQuote(`%${term}%`)}`, { referencedTable: "v2_circuits" })
-                .eq("status", "published" as any)
-                .limit(20);
-              for (const e of [...(data || []), ...(data2 || [])]) {
-                if (!existing.has(e.id)) {
-                  const dateStr = e.start_date ? formatDateRange(e.start_date, e.end_date) : "";
-                  items.push({
-                    type: "event",
-                    id: e.id,
-                    label: e.name,
-                    url: `/events/${e.id}`,
-                    subtitle: `${(e as any).v2_seasons?.v2_series?.name || ""} · ${dateStr || (e as any).v2_seasons?.year || ""}`,
-                    nationality: (e as any).v2_circuits?.country,
-                  });
-                  existing.add(e.id);
-                }
-              }
-            }
-          })(),
-        );
-      }
-
-      if (shouldSearch("series")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_series")
-                .select("id, name, short_name")
-                .or(`name.ilike.${pgQuote(`%${term}%`)},short_name.ilike.${pgQuote(`%${term}%`)}`)
-                .limit(20);
-              (data || []).forEach((s: any) => {
-                if (!existing.has(s.id)) {
-                  items.push({ type: "series", id: s.id, label: s.name, url: `/series/${s.id}`, subtitle: s.short_name });
-                  existing.add(s.id);
-                }
-              });
-            }
-          })(),
-        );
-      }
-
-      if (shouldSearch("circuit")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_circuits")
-                .select("id, name, country, location")
-                .or(`name.ilike.${pgQuote(`%${term}%`)},country.ilike.${pgQuote(`%${term}%`)},location.ilike.${pgQuote(`%${term}%`)}`)
-                .limit(20);
-              if (!data) continue;
-              const circuitIds = data.map((c: any) => c.id);
-              const { data: layoutData } =
-                circuitIds.length > 0
-                  ? await supabase
-                      .from("v2_circuit_layouts")
-                      .select("circuit_id, length_km, turns, total_straight_length_km, total_elevation_change_m, heavy_braking_corners")
-                      .in("circuit_id", circuitIds)
-                      .order("sort_order")
-                      .limit(100)
-                  : { data: [] };
-              const layoutMap: Record<string, any> = {};
-              (layoutData || []).forEach((l: any) => {
-                if (!layoutMap[l.circuit_id]) layoutMap[l.circuit_id] = l;
-              });
-
-              data.forEach((c: any) => {
-                if (!existing.has(c.id)) {
-                  const l = layoutMap[c.id];
-                  const tags: { label: string; color: string }[] = [];
-                  if (l) {
-                    const m = computeTrackMetrics(
-                      l.length_km,
-                      l.turns,
-                      l.total_straight_length_km,
-                      l.total_elevation_change_m,
-                      l.heavy_braking_corners,
-                    );
-                    for (const cat of [m.tcsCategory, m.eiCategory, m.csiCategory, m.tdiCategory]) if (cat) tags.push({ label: cat, color: categoryHexColor(cat) });
-                  }
-                  items.push({
-                    type: "circuit",
-                    id: c.id,
-                    label: c.name,
-                    url: `/circuit/${c.id}`,
-                    subtitle: [c.location, c.country].filter(Boolean).join(", "),
-                    nationality: c.country,
-                    tags,
-                  });
-                  existing.add(c.id);
-                }
-              });
-            }
-          })(),
-        );
-      }
-
-      if (shouldSearch("car")) {
-        promises.push(
-          (async () => {
-            const existing = new Set<string>();
-            for (const term of searchTerms) {
-              const { data } = await supabase
-                .from("v2_cars")
-                .select("id, model_name, manufacturer")
-                .or(`model_name.ilike.${pgQuote(`%${term}%`)},manufacturer.ilike.${pgQuote(`%${term}%`)}`)
-                .limit(20);
-              (data || []).forEach((c: any) => {
-                if (!existing.has(c.id)) {
-                  items.push({ type: "car", id: c.id, label: [c.manufacturer, c.model_name].filter(Boolean).join(" "), url: `/car/${c.id}`, subtitle: c.manufacturer });
-                  existing.add(c.id);
-                }
-              });
-            }
-          })(),
-        );
-      }
-
-      await Promise.all(promises);
-
-      setResults(items);
-      setLoading(false);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [search, typeFilterVal]);
-
-  /* Results grouped by type, in tab order */
-  const grouped = useMemo(() => {
-    const order = typeFilter.map((t) => t.value);
-    const m = new Map<ResultType, ResultItem[]>();
-    for (const r of results) {
-      if (!m.has(r.type)) m.set(r.type, []);
-      m.get(r.type)!.push(r);
-    }
-    return [...m.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
-  }, [results]);
-
-  const driverLetters = useMemo(() => {
-    const m = new Map<string, ResultItem[]>();
-    for (const d of drivers || []) {
-      const ch = sortKey(d.label).charAt(0).toUpperCase();
-      const k = /[A-Z]/.test(ch) ? ch : "#";
-      if (!m.has(k)) m.set(k, []);
-      m.get(k)!.push(d);
-    }
-    return [...m.entries()];
-  }, [drivers]);
-
-  const isDirectory = !search.trim() && (typeFilterVal === "driver" || typeFilterVal === "circuit");
-  const meta = typeFilter.find((t) => t.value === typeFilterVal)!;
-  const pageTitle = typeFilterVal === "driver" ? "Drivers" : typeFilterVal === "circuit" ? "Circuits" : "Search";
-  const kicker = typeFilterVal === "driver" || typeFilterVal === "circuit" ? "Directory" : "Database";
-
-  const headerMeta =
-    typeFilterVal === "driver" && drivers ? (
-      <span>
-        <span className="num text-foreground">{drivers.length}</span> drivers ·{" "}
-        <span className="num text-foreground">{new Set(drivers.map((d) => getCountryCode(d.nationality)).filter(Boolean)).size}</span> nationalities
-      </span>
-    ) : typeFilterVal === "circuit" && circuits ? (
-      <span>
-        <span className="num text-foreground">{circuits.length}</span> circuits ·{" "}
-        <span className="num text-foreground">{new Set(circuits.map((c) => c.country).filter(Boolean)).size}</span> countries
-      </span>
-    ) : (
-      <span>Drivers, teams, events, series, circuits and cars.</span>
-    );
-
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead
-        title={pageTitle}
-        description={
-          typeFilterVal === "driver"
-            ? "Every driver in the database, A–Z by surname."
-            : typeFilterVal === "circuit"
-              ? "Every circuit in the database with layout length, turns and character."
-              : "Search across drivers, teams, events, series, circuits, and cars."
-        }
-        canonical={meta.tab ? `/search?tab=${meta.tab}` : "/search"}
-      />
+    <div className="min-h-screen">
+      <SEOHead title={qParam ? `“${qParam}” – Search` : "Search"} description="Search every driver, team, race, circuit, car and championship on the record." canonical="/search" noIndex={!!qParam} />
       <Header />
-      <PageHeader kicker={kicker} title={pageTitle} meta={headerMeta} />
 
-      <main className="container py-8">
-        <div className="flex flex-col gap-3">
-          <FilterInput
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              updateParams({ q: v });
-            }}
-            placeholder={
-              typeFilterVal === "driver"
-                ? "Search drivers by name or nationality…"
-                : typeFilterVal === "circuit"
-                  ? "Search circuits by name, location or country…"
-                  : "Search everything…"
-            }
-          />
-          <div className="flex items-center justify-between gap-3">
-            <Segmented label="Type" value={typeFilterVal} onChange={setType} options={typeFilter.map((t) => ({ value: t.value, label: t.label }))} />
-            {search.trim() && !loading && <Count n={results.length} label={results.length === 1 ? "match" : "matches"} className="hidden sm:inline" />}
+      <Page className="pt-8 sm:pt-14">
+        <Eyebrow>Search the record</Eyebrow>
+        <form
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = new URLSearchParams(params);
+            if (input) n.set("q", input);
+            else n.delete("q");
+            setParams(n, { replace: true });
+          }}
+          className="mt-5"
+        >
+          <label className="group relative flex items-center rounded-[28px] border bg-sheet pl-5 pr-3 transition-colors focus-within:border-ink/50 sm:pl-8">
+            <SearchIcon className="h-6 w-6 shrink-0 text-ink-3 sm:h-8 sm:w-8" />
+            <span className="sr-only">Search</span>
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Driver, team, race, circuit…"
+              className="display h-20 min-w-0 flex-1 bg-transparent px-4 text-[2.2rem] outline-none placeholder:text-ink-3/70 sm:h-28 sm:px-6 sm:text-[3.6rem]"
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {input && (
+              <button type="button" onClick={() => setInput("")} aria-label="Clear search" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-ink/[0.06]">
+                <X className="h-5 w-5" />
+              </button>
+            )}
+          </label>
+        </form>
+
+        {!qParam ? (
+          <div className="mt-8 flex flex-wrap items-center gap-2">
+            <span className="mr-2 text-sm text-ink-3">Try</span>
+            {SUGGEST.map((s) => (
+              <button key={s} onClick={() => setInput(s)} className="h-9 rounded-full border bg-sheet px-4 text-sm transition-colors hover:border-ink/40">
+                {s}
+              </button>
+            ))}
           </div>
-        </div>
+        ) : (
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-lg text-ink-2">
+              {!results ? (
+                <Skeleton className="h-6 w-56" />
+              ) : total ? (
+                <>
+                  {plural(total, "result")} for <span className="text-ink">&ldquo;{qParam}&rdquo;</span>
+                </>
+              ) : (
+                <>
+                  Nothing on the record for <span className="text-ink">&ldquo;{qParam}&rdquo;</span>
+                </>
+              )}
+            </div>
+            {counts && total > 0 && (
+              <Tabs
+                value={kind}
+                onChange={setKind}
+                items={[
+                  { value: "all" as Kind, label: "All" },
+                  ...(Object.keys(KIND_LABEL) as Exclude<Kind, "all">[])
+                    .filter((k) => counts[k] > 0)
+                    .map((k) => ({
+                      value: k as Kind,
+                      label: (
+                        <>
+                          {KIND_LABEL[k]} <span className="num ml-1 text-[11px] opacity-60">{counts[k]}</span>
+                        </>
+                      ),
+                    })),
+                ]}
+              />
+            )}
+          </div>
+        )}
+      </Page>
 
-        <div className="mt-6">
-          {isDirectory && typeFilterVal === "driver" ? (
-            !drivers ? (
-              <RowsSkeleton rows={10} />
-            ) : (
-              <>
-                {/* A–Z jump bar */}
-                <div className="mb-4 flex flex-wrap gap-px overflow-hidden rounded border bg-border">
-                  {driverLetters.map(([l]) => (
-                    <button
-                      key={l}
-                      onClick={() => letterRefs.current[l]?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      className="h-8 min-w-[2rem] flex-1 bg-card font-display text-sm font-bold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                <div className="space-y-6">
-                  {driverLetters.map(([letter, list]) => (
-                    <section key={letter} ref={(el) => (letterRefs.current[letter] = el)} className="scroll-mt-20">
-                      <div className="mb-2 flex items-end justify-between border-b pb-1.5">
-                        <h2 className="font-accent text-2xl leading-none text-foreground">{letter}</h2>
-                        <Count n={list.length} label={list.length === 1 ? "driver" : "drivers"} />
-                      </div>
-                      {/* Cells draw right/bottom rules; the negative margin tucks the outer ones under the frame */}
-                      <div className="overflow-hidden rounded border bg-card">
-                        <div className="-mb-px -mr-px grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                          {list.map((d) => (
-                            <DriverCell key={d.id} d={d} />
-                          ))}
+      <Page className="mt-14">
+        {!qParam ? (
+          <Browse />
+        ) : !results ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }, (_, i) => (
+              <Skeleton key={i} className="h-20 rounded-2xl" />
+            ))}
+          </div>
+        ) : total === 0 ? (
+          <Note title="No matches">
+            Check the spelling, try a surname on its own, or browse the{" "}
+            <Link to="/drivers" className="underline underline-offset-4">
+              drivers
+            </Link>
+            ,{" "}
+            <Link to="/results" className="underline underline-offset-4">
+              races
+            </Link>{" "}
+            and{" "}
+            <Link to="/circuits" className="underline underline-offset-4">
+              circuits
+            </Link>
+            .
+          </Note>
+        ) : (
+          <div className="space-y-16">
+            {show("drivers") && (
+              <Group title="Drivers" count={counts!.drivers} more={kind === "all" && counts!.drivers > 9 ? () => setKind("drivers") : undefined}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.drivers.slice(0, lim(9)).map((d) => (
+                    <Link key={d.id} to={`/driver/${d.id}`} className="group flex items-center gap-4 rounded-2xl border bg-sheet p-4 transition-colors hover:border-ink/30">
+                      <Initials name={d.full_name} className="h-11 w-11 shrink-0 text-lg" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15.5px]">
+                          <Hl text={cleanName(d.full_name)} q={q} />
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-3">
+                          {d.nationality && <FlagImage nationality={d.nationality} size={13} className="rounded-[2px]" />}
+                          <span className="truncate">{d.nationality || "Nationality unknown"}</span>
                         </div>
                       </div>
-                    </section>
+                      {(wins.get(d.id) || 0) > 0 && (
+                        <span className="text-right">
+                          <span className="num block text-lg leading-none">{wins.get(d.id)}</span>
+                          <span className="eyebrow text-[9.5px]">{wins.get(d.id) === 1 ? "win" : "wins"}</span>
+                        </span>
+                      )}
+                    </Link>
                   ))}
                 </div>
-              </>
-            )
-          ) : isDirectory && typeFilterVal === "circuit" ? (
-            !circuits ? (
-              <RowsSkeleton rows={10} />
-            ) : (
-              <CircuitTable circuits={circuits} />
-            )
-          ) : !search.trim() ? (
-            <EmptyState title={`Search ${meta.value === "all" ? "the database" : meta.plural.toLowerCase()}`}>
-              Type a name, nationality, circuit or country. Tip: press <kbd className="rounded-sm border bg-muted px-1 font-mono text-[11px]">/</kbd> anywhere to
-              open quick search.
-            </EmptyState>
-          ) : loading ? (
-            <RowsSkeleton rows={6} />
-          ) : results.length === 0 ? (
-            <EmptyState title="No matches">Nothing found for “{search}”.</EmptyState>
-          ) : (
-            <div className="space-y-8">
-              {grouped.map(([type, list]) => {
-                const t = typeFilter.find((x) => x.value === type)!;
-                return (
-                  <section key={type}>
-                    <div className="mb-2 flex items-end justify-between border-b pb-1.5">
-                      <h2 className="font-display text-lg font-bold uppercase tracking-wide">{t.plural}</h2>
-                      <Count n={list.length} label={list.length === 1 ? "match" : "matches"} />
-                    </div>
-                    <div className="grid gap-px overflow-hidden rounded border bg-border">
-                      {list.map((r) => (
-                        <ResultRow key={`${r.type}-${r.id}`} r={r} />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </main>
+              </Group>
+            )}
+
+            {show("races") && (
+              <Group title="Races" count={counts!.races} more={kind === "all" && counts!.races > 4 ? () => setKind("races") : undefined}>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {results.races.slice(0, lim(4)).map((e) => {
+                    const w = overallWinner(headline(digests?.[e.id]));
+                    return (
+                      <Link key={e.id} to={`/events/${e.id}`} className="group flex items-center gap-4 overflow-hidden rounded-2xl border bg-sheet p-4 transition-colors hover:border-ink/30">
+                        <div className="relative h-12 w-20 shrink-0 sm:h-14 sm:w-28">
+                          <Livery key={w?.livery} src={w?.livery} alt="" className="absolute inset-0 m-auto h-full w-full" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="eyebrow truncate">
+                            {e.series?.short_name} · {dateRange(e.start_date, e.end_date)}
+                          </div>
+                          <div className="display mt-1 line-clamp-2 text-[1.45rem] leading-[1.05]">
+                            <Hl text={stripYear(e.name)} q={q} />
+                          </div>
+                          <div className="truncate text-xs text-ink-3">{w ? `Won by ${crewLastNames(w.driverIds, names)}` : e.circuit?.name}</div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </Group>
+            )}
+
+            {show("teams") && (
+              <Group title="Teams" count={counts!.teams} more={kind === "all" && counts!.teams > 6 ? () => setKind("teams") : undefined}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.teams.slice(0, lim(6)).map((t) => (
+                    <Row key={t.id} to={`/team/${t.id}`} title={<Hl text={t.full_name} q={q} />} meta={t.short_name && t.short_name !== t.full_name ? t.short_name : "Team"} />
+                  ))}
+                </div>
+              </Group>
+            )}
+
+            {show("circuits") && (
+              <Group title="Circuits" count={counts!.circuits} more={kind === "all" && counts!.circuits > 4 ? () => setKind("circuits") : undefined}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {results.circuits.slice(0, lim(4)).map((c) => {
+                    const l = layoutsOf(c.id, layouts)[0];
+                    return (
+                      <Link key={c.id} to={`/circuit/${c.id}`} className="group flex flex-col rounded-2xl border bg-sheet p-4 transition-colors hover:border-ink/30">
+                        <div className="relative h-24">
+                          <TrackMap key={l?.layout_image_url} src={l?.layout_image_url} alt="" className="absolute inset-0 m-auto h-full w-full opacity-80 transition-transform duration-500 group-hover:scale-105" />
+                        </div>
+                        <div className="display mt-3 text-[1.3rem] leading-tight">
+                          <Hl text={c.name} q={q} />
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5 text-xs text-ink-3">
+                          <FlagImage nationality={c.country} size={13} className="rounded-[2px]" />
+                          <span className="truncate">{c.location || c.country}</span>
+                          {num(l?.length_km) != null && <span className="num ml-auto shrink-0">{num(l?.length_km)!.toFixed(3)} km</span>}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </Group>
+            )}
+
+            {show("cars") && (
+              <Group title="Cars" count={counts!.cars} more={kind === "all" && counts!.cars > 6 ? () => setKind("cars") : undefined}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.cars.slice(0, lim(6)).map((c) => (
+                    <Row key={c.id} to={`/car/${c.id}`} title={<Hl text={`${c.manufacturer ? `${c.manufacturer} ` : ""}${c.model_name}`} q={q} />} meta="Car" />
+                  ))}
+                </div>
+              </Group>
+            )}
+
+            {show("series") && (
+              <Group title="Championships" count={counts!.series}>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.series.map((s) => (
+                    <Row key={s.id} to={`/series/${s.id}`} title={<Hl text={s.name} q={q} />} meta={s.short_name || "Championship"} />
+                  ))}
+                </div>
+              </Group>
+            )}
+          </div>
+        )}
+      </Page>
+
       <Footer />
     </div>
   );
-};
+}
 
-function DriverCell({ d }: { d: ResultItem }) {
-  const sn = surname(d.label);
-  const first = d.label.slice(0, d.label.length - sn.length).trim();
-  const code = getCountryCode(d.nationality);
+function Group({ title, count, more, children }: { title: string; count: number; more?: () => void; children: ReactNode }) {
   return (
-    <Link to={d.url} className="group flex min-w-0 items-center gap-2.5 border-b border-r px-3 py-2.5 transition-colors hover:bg-accent/60">
-      <span className="flex w-5 shrink-0 justify-center">
-        <FlagImage nationality={d.nationality} size={18} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {first && <span className="text-muted-foreground group-hover:text-foreground">{first} </span>}
-        <span className="font-semibold uppercase tracking-wide text-foreground group-hover:text-primary">{sn}</span>
-      </span>
-      {code && <span className="num shrink-0 text-[11px] text-muted-foreground">{code}</span>}
+    <section>
+      <div className="mb-5 flex items-end justify-between gap-4 border-b pb-3">
+        <h2 className="display text-[2rem] leading-none sm:text-[2.4rem]">
+          {title} <span className="num align-top text-sm text-ink-3">{count}</span>
+        </h2>
+        {more && (
+          <button onClick={more} className="group flex items-center gap-1 text-sm text-ink-2 hover:text-ink">
+            <span className="link-u">See all {count}</span>
+            <ArrowUpRight className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Row({ to, title, meta }: { to: string; title: ReactNode; meta: ReactNode }) {
+  return (
+    <Link to={to} className="group flex items-center justify-between gap-4 rounded-2xl border bg-sheet px-5 py-4 transition-colors hover:border-ink/30">
+      <div className="min-w-0">
+        <div className="truncate text-[15.5px]">{title}</div>
+        <div className="mt-0.5 truncate text-xs text-ink-3">{meta}</div>
+      </div>
+      <ArrowUpRight className="h-4 w-4 shrink-0 text-ink-3 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" />
     </Link>
   );
 }
 
-function CircuitTable({ circuits }: { circuits: CircuitRow[] }) {
+function Browse() {
+  const items = [
+    { to: "/results", label: "Races", blurb: "Every race, replayable" },
+    { to: "/series", label: "Championships", blurb: "Points races, season by season" },
+    { to: "/drivers", label: "Drivers", blurb: "Career records" },
+    { to: "/teams", label: "Teams", blurb: "Entries, wins, line-ups" },
+    { to: "/circuits", label: "Circuits", blurb: "Character, winners, lap records" },
+    { to: "/cars", label: "Cars", blurb: "Machines and their results" },
+  ];
   return (
-    <div className="overflow-hidden rounded border bg-card">
-      <table className="data-table table-fixed">
-        <thead>
-          <tr>
-            <th>Circuit</th>
-            <th className="hidden md:table-cell">Location</th>
-            <th className="hidden w-44 lg:table-cell">Character</th>
-            <th className="w-20 text-right">Length</th>
-            <th className="hidden w-16 text-right sm:table-cell">Turns</th>
-            <th className="w-16 text-right">Events</th>
-          </tr>
-        </thead>
-        <tbody>
-          {circuits.map((c) => (
-            <tr key={c.id} className="group">
-              <td className="py-2">
-                <Link to={`/circuit/${c.id}`} className="flex min-w-0 items-center gap-2 font-medium text-foreground group-hover:text-primary">
-                  <span className="flex w-5 shrink-0 justify-center">
-                    <FlagImage nationality={c.country} size={18} />
-                  </span>
-                  <span className="min-w-0 leading-snug">{c.name}</span>
-                </Link>
-                <div className="truncate pl-7 text-xs text-muted-foreground md:hidden">{[c.location, c.country].filter(Boolean).join(", ")}</div>
-              </td>
-              <td className="hidden truncate text-muted-foreground md:table-cell">{[c.location, c.country].filter(Boolean).join(", ") || "—"}</td>
-              <td className="hidden lg:table-cell">
-                {c.character ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs">
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: categoryHexColor(c.character) }} />
-                    {c.character}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </td>
-              <td className="num text-right">
-                {c.lengthKm != null ? (
-                  <>
-                    {c.lengthKm.toFixed(3)}
-                    <span className="ml-0.5 text-[10px] text-muted-foreground">km</span>
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </td>
-              <td className="num hidden text-right sm:table-cell">{c.turns ?? <span className="text-muted-foreground">—</span>}</td>
-              <td className={cn("num text-right", c.events ? "text-foreground" : "text-muted-foreground")}>{c.events || "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      <Eyebrow className="mb-4">Or browse</Eyebrow>
+      <nav className="grid gap-x-10 sm:grid-cols-2">
+        {items.map((i) => (
+          <Link key={i.to} to={i.to} className={cn("group flex items-baseline justify-between gap-4 border-b py-5")}>
+            <span className="display text-4xl transition-transform duration-300 group-hover:translate-x-1.5 sm:text-5xl">{i.label}</span>
+            <span className="text-right text-xs text-ink-3">{i.blurb}</span>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }
-
-function ResultRow({ r }: { r: ResultItem }) {
-  return (
-    <Link to={r.url} className="group flex min-w-0 items-center gap-3 bg-card px-4 py-3 transition-colors hover:bg-accent/60">
-      {(r.type === "driver" || r.type === "circuit" || r.type === "event" || r.nationality) && (
-        <span className="flex w-5 shrink-0 justify-center">
-          <FlagImage nationality={r.nationality} size={16} />
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-foreground group-hover:text-primary">{r.label}</div>
-        {(r.subtitle || (r.tags && r.tags.length > 0)) && (
-          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-            {r.subtitle && <span className="truncate">{r.subtitle}</span>}
-            {r.tags?.map((t) => (
-              <span key={t.label} className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: t.color }} />
-                {t.label}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-    </Link>
-  );
-}
-
-export default SearchPage;

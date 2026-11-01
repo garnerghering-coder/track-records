@@ -130,12 +130,14 @@ export function Initials({ name, className }: { name: string; className?: string
 
 export function Livery({ src, alt, className }: { src?: string | null; alt: string; className?: string }) {
   const [ok, setOk] = useState(!!src);
+  useEffect(() => setOk(!!src), [src]);
   if (!src || !ok) return null;
   return <img src={src} alt={alt} loading="lazy" onError={() => setOk(false)} className={cn("pointer-events-none select-none object-contain", className)} />;
 }
 
 export function TrackMap({ src, alt, className }: { src?: string | null; alt: string; className?: string }) {
   const [ok, setOk] = useState(!!src);
+  useEffect(() => setOk(!!src), [src]);
   if (!src || !ok) return null;
   return <img src={src} alt={alt} loading="lazy" onError={() => setOk(false)} className={cn("logo-adapt pointer-events-none select-none object-contain", className)} />;
 }

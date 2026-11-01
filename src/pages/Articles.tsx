@@ -1,182 +1,130 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { EmptyState, FilterInput, PageHeader } from "@/components/tr/primitives";
 import { articles, ARTICLE_CATEGORIES, type Article } from "@/lib/articles-data";
-import { formatDateRange } from "@/lib/date-utils";
-import { cn } from "@/lib/utils";
-
-const readingMinutes = (body: string) => Math.max(1, Math.round(body.split(/\s+/).length / 230));
+import { Eyebrow, Note, Page, Tabs, dateRange } from "@/site/ui";
+import { readingMinutes } from "@/site/archive";
 
 export default function Articles() {
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-
-  const filtered = useMemo(() => {
-    return articles.filter((a) => {
-      const matchesCategory = !activeCategory || a.category === activeCategory;
-      const matchesSearch =
-        !search.trim() ||
-        a.title.toLowerCase().includes(search.toLowerCase()) ||
-        a.excerpt.toLowerCase().includes(search.toLowerCase()) ||
-        a.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
-      return matchesCategory && matchesSearch;
-    });
-  }, [search, activeCategory]);
-
-  const isFiltering = !!activeCategory || !!search.trim();
-  const [lead, ...rest] = filtered;
-  const list = isFiltering ? filtered : rest;
+  const [params, setParams] = useSearchParams();
+  const cat = params.get("category") || "all";
+  const sorted = useMemo(() => [...articles].sort((a, b) => b.date.localeCompare(a.date)), []);
+  const cats = ARTICLE_CATEGORIES.filter((c) => sorted.some((a) => a.category === c));
+  const list = cat === "all" ? sorted : sorted.filter((a) => a.category === cat);
+  const [lead, ...rest] = list;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead
-        title="Articles"
-        description="In-depth motorsport analysis, race breakdowns, driver profiles, and pre-race predictions from Track Records."
-        canonical="/articles"
-      />
+    <div className="min-h-screen">
+      <SEOHead title="Articles" description="Race breakdowns, previews and analysis, written from the data on the record." canonical="/articles" />
       <Header />
 
-      <PageHeader
-        kicker={
-          <>
-            <span className="h-1.5 w-1.5 rounded-full bg-signal" /> Editorial
-          </>
-        }
-        title="Articles"
-        meta={<span>Race breakdowns, previews and analysis, built on the timing data.</span>}
-      />
-
-      <main className="container py-8 md:py-10">
-        {/* Filters */}
-        <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-            <div className="flex w-max gap-px overflow-hidden rounded border bg-border">
-              <CategoryButton active={!activeCategory} onClick={() => setActiveCategory(null)}>
-                All
-              </CategoryButton>
-              {ARTICLE_CATEGORIES.map((cat) => (
-                <CategoryButton
-                  key={cat}
-                  active={activeCategory === cat}
-                  onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                >
-                  {cat}
-                </CategoryButton>
-              ))}
-            </div>
+      <Page className="pt-8 sm:pt-14">
+        <div className="grid gap-8 lg:grid-cols-[1.5fr_1fr] lg:items-end">
+          <div>
+            <Eyebrow>Articles</Eyebrow>
+            <h1 className="display mt-4 text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
+              Notes from <em>the paddock.</em>
+            </h1>
           </div>
-          <FilterInput value={search} onChange={setSearch} placeholder="Search articles…" className="w-full lg:max-w-xs" />
+          <p className="max-w-md text-lg leading-relaxed text-ink-2 lg:justify-self-end">Breakdowns, previews and analysis, written from the numbers on the record.</p>
         </div>
-
-        {filtered.length === 0 && <EmptyState title="No articles found">Try a different search or category.</EmptyState>}
-
-        {/* Featured lead */}
-        {lead && !isFiltering && (
-          <Link
-            to={`/articles/${lead.slug}`}
-            className="group grid overflow-hidden rounded border bg-card transition-colors hover:border-foreground/25 lg:grid-cols-[1.35fr_1fr]"
-          >
-            <div className="aspect-[16/9] overflow-hidden border-b bg-muted lg:aspect-auto lg:min-h-[340px] lg:border-b-0 lg:border-r">
-              <img src={lead.heroImage} alt={lead.title} className="h-full w-full object-cover" />
-            </div>
-            <div className="flex flex-col p-5 sm:p-7">
-              <div className="label-caps flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-primary">Latest</span>
-                <span aria-hidden>/</span>
-                <span>{lead.category}</span>
-              </div>
-              <h2 className="mt-3 font-display text-3xl font-bold uppercase leading-[1.02] tracking-tight text-foreground sm:text-4xl">
-                {lead.title}
-              </h2>
-              <p className="mt-4 text-base leading-relaxed text-muted-foreground">{lead.excerpt}</p>
-              <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-6">
-                <ArticleMeta article={lead} />
-                <span className="flex items-center gap-1 font-display text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
-                  Read article <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </span>
-              </div>
-            </div>
-          </Link>
+        {cats.length > 1 && (
+          <div className="mt-10">
+            <Tabs
+              value={cat}
+              onChange={(v) => setParams(v === "all" ? {} : { category: v }, { replace: true })}
+              items={[{ value: "all", label: "Everything" }, ...cats.map((c) => ({ value: c, label: c }))]}
+            />
+          </div>
         )}
+      </Page>
 
-        {/* List */}
-        {list.length > 0 && (
-          <section className={cn(!isFiltering && "mt-12")}>
-            {!isFiltering && (
-              <div className="mb-0 flex items-end justify-between border-b pb-2.5">
-                <h2 className="font-display text-xl font-bold uppercase tracking-wide text-foreground">More articles</h2>
-                <span className="label-caps num">{list.length}</span>
-              </div>
+      <Page className="mt-12 sm:mt-16">
+        {!lead ? (
+          <Note title="Nothing in this section yet">New pieces are published after race weekends.</Note>
+        ) : (
+          <>
+            <Lead a={lead} />
+            {rest.length > 0 && (
+              <ol className="mt-16 border-t">
+                {rest.map((a, i) => (
+                  <li key={a.slug}>
+                    <ArticleRow a={a} n={i + 2} />
+                  </li>
+                ))}
+              </ol>
             )}
-            <ul className={cn("divide-y border-b", isFiltering && "border-t")}>
-              {list.map((article) => (
-                <li key={article.slug}>
-                  <Link
-                    to={`/articles/${article.slug}`}
-                    className="group grid gap-4 py-5 sm:grid-cols-[120px_minmax(0,1fr)_200px] sm:gap-6 md:py-6"
-                  >
-                    <div className="hidden sm:block">
-                      <div className="num text-xs text-foreground">{formatDateRange(article.date)}</div>
-                      <div className="label-caps mt-1.5">{article.category}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="label-caps mb-1.5 sm:hidden">
-                        {article.category} <span aria-hidden>/</span>{" "}
-                        <span className="num normal-case tracking-normal">{formatDateRange(article.date)}</span>
-                      </div>
-                      <h3 className="font-display text-xl font-bold uppercase leading-tight tracking-wide text-foreground transition-colors group-hover:text-primary md:text-2xl">
-                        {article.title}
-                      </h3>
-                      <p className="mt-2 line-clamp-2 max-w-[68ch] text-sm leading-relaxed text-muted-foreground">{article.excerpt}</p>
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        {article.author} <span aria-hidden>·</span> <span className="num">{readingMinutes(article.body)}</span> min read
-                      </div>
-                    </div>
-                    <div className="order-first aspect-[16/9] overflow-hidden rounded-sm border bg-muted sm:order-none">
-                      <img src={article.heroImage} alt="" className="h-full w-full object-cover" loading="lazy" />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
+          </>
         )}
-      </main>
+      </Page>
 
       <Footer />
     </div>
   );
 }
 
-function ArticleMeta({ article }: { article: Article }) {
+function Lead({ a }: { a: Article }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span className="num text-foreground">{formatDateRange(article.date)}</span>
-      <span aria-hidden>·</span>
-      <span>{article.author}</span>
-      <span aria-hidden>·</span>
-      <span>
-        <span className="num">{readingMinutes(article.body)}</span> min read
-      </span>
-    </div>
+    <Link to={`/articles/${a.slug}`} className="group grid overflow-hidden rounded-[28px] border bg-sheet lg:grid-cols-[1.4fr_1fr]">
+      <div className="flex flex-col p-7 sm:p-12">
+        <Eyebrow>
+          <span className="rounded-full bg-hl px-2 py-0.5 text-hl-ink">Latest</span>
+          <span>{a.category}</span>
+          <span>·</span>
+          <span>{dateRange(a.date)}</span>
+        </Eyebrow>
+        <h2 className="display mt-6 text-[2.6rem] leading-[0.98] sm:text-[4rem]">{a.title}</h2>
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-2">{a.excerpt}</p>
+        <div className="mt-auto flex flex-wrap items-center gap-x-6 gap-y-3 pt-10 text-sm">
+          <span className="inline-flex items-center gap-2 font-medium">
+            Read the piece <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </span>
+          <span className="text-ink-3">
+            {a.author} · <span className="num">{readingMinutes(a.body)}</span> min read
+          </span>
+        </div>
+      </div>
+      <div className="relative hidden min-h-[22rem] border-l bg-paper/50 p-12 lg:flex lg:flex-col lg:justify-between">
+        <span className="font-accent text-[11rem] leading-[0.8] text-ink/[0.07]">01</span>
+        <ul className="relative space-y-2">
+          {headings(a.body)
+            .slice(0, 5)
+            .map((h, i) => (
+              <li key={h} className="flex gap-3 text-[15px] text-ink-2">
+                <span className="num w-5 shrink-0 text-[11px] leading-6 text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+                <span className="display text-[1.35rem] leading-tight text-ink">{h}</span>
+              </li>
+            ))}
+        </ul>
+      </div>
+    </Link>
   );
 }
 
-function CategoryButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function ArticleRow({ a, n }: { a: Article; n: number }) {
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "h-9 whitespace-nowrap px-3 font-display text-xs font-semibold uppercase tracking-[0.1em] transition-colors",
-        active ? "bg-foreground text-background" : "bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
+    <Link to={`/articles/${a.slug}`} className="group grid gap-4 border-b py-8 sm:grid-cols-[5rem_minmax(0,1fr)_12rem] sm:gap-8 sm:py-10">
+      <span className="font-accent text-4xl leading-none text-ink-3">{String(n).padStart(2, "0")}</span>
+      <div className="min-w-0">
+        <Eyebrow>
+          <span>{a.category}</span>
+          <span>·</span>
+          <span>{dateRange(a.date)}</span>
+        </Eyebrow>
+        <h3 className="display mt-3 text-[2rem] leading-[1.02] transition-transform duration-300 group-hover:translate-x-1 sm:text-[2.6rem]">{a.title}</h3>
+        <p className="mt-3 max-w-2xl text-[15.5px] leading-relaxed text-ink-2">{a.excerpt}</p>
+      </div>
+      <div className="flex items-start justify-between gap-4 text-sm text-ink-3 sm:flex-col sm:items-end">
+        <span>
+          <span className="num">{readingMinutes(a.body)}</span> min read
+        </span>
+        <ArrowUpRight className="h-5 w-5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-ink" />
+      </div>
+    </Link>
   );
 }
+
+const headings = (body: string) => body.split("\n").filter((l) => l.startsWith("## ")).map((l) => l.slice(3).trim());

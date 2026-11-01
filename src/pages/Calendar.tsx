@@ -1,277 +1,329 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { CalendarClock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { ArrowUpRight, CalendarClock } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import EventCard, { EventListHead, type EventCardEvent } from "@/components/EventCard";
-import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
-import { Count, Segmented, Toolbar, UpcomingTag } from "@/components/browse/Segmented";
-import { fetchClassWinners, fetchSeasonClassColors, type ClassWinner } from "@/lib/race-data";
-import { formatDateRange } from "@/lib/date-utils";
 import { cn } from "@/lib/utils";
+import { useDigests, useEvents, useLayouts, useNames, layoutFor, type EventLite } from "@/site/data";
+import { Eyebrow, Note, Page, Skeleton, Tabs, TrackMap, dateRange } from "@/site/ui";
+import { MONTHS_LONG, MONTHS_SHORT, crewLastNames, headline, overallWinner, parseDay, plural, stripYear, todayISO } from "@/site/archive";
 
-type CalEvent = EventCardEvent & { seasonId: string; seriesId: string | null; round: string | null };
+const DAY = 86400000;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const toDate = (s: string) => new Date(s + (s.includes("T") ? "" : "T00:00:00Z"));
+export default function Calendar() {
+  const events = useEvents();
+  const digests = useDigests();
+  const names = useNames();
+  const layouts = useLayouts();
+  const [params, setParams] = useSearchParams();
+  const today = todayISO();
+  const thisYear = new Date().getFullYear();
 
-/** Day block for the leading column: weekday + day number. */
-function DayBlock({ start, end, past }: { start: string | null; end: string | null; past: boolean }) {
-  if (!start) return <span className="label-caps">TBA</span>;
-  const a = toDate(start);
-  const b = end ? toDate(end) : a;
-  const sameMonth = a.getUTCMonth() === b.getUTCMonth();
-  const wd = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
-  const mo = (d: Date) => d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  const years = useMemo(() => {
+    const ys = new Set((events || []).map((e) => e.year).filter((y): y is number => y != null));
+    ys.add(thisYear);
+    return [...ys].sort((a, b) => b - a);
+  }, [events, thisYear]);
+  const year = Number(params.get("year")) || thisYear;
+  const seriesF = params.get("series") || "all";
+
+  const seriesList = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of events || []) if (e.series && e.year === year) m.set(e.series.id, e.series.short_name || e.series.name);
+    return [...m.entries()];
+  }, [events, year]);
+
+  const list = useMemo(
+    () =>
+      (events || [])
+        .filter((e) => e.year === year && (seriesF === "all" || e.series?.id === seriesF))
+        .sort((a, b) => (a.start_date || "").localeCompare(b.start_date || "")),
+    [events, year, seriesF],
+  );
+  const upcoming = list.filter((e) => (e.end_date || e.start_date || "") >= today);
+  const done = list.filter((e) => (e.end_date || e.start_date || "") < today);
+  const next = upcoming[0];
+
+  const months = useMemo(() => {
+    const m = new Map<number, EventLite[]>();
+    for (const e of list) {
+      const d = parseDay(e.start_date);
+      if (!d) continue;
+      if (!m.has(d.getMonth())) m.set(d.getMonth(), []);
+      m.get(d.getMonth())!.push(e);
+    }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [list]);
+
+  const set = (k: string, v: string | null) => {
+    const n = new URLSearchParams(params);
+    if (v == null) n.delete(k);
+    else n.set(k, v);
+    if (k === "year") n.delete("series");
+    setParams(n, { replace: true });
+  };
+
+  const lastDone = done[done.length - 1];
+
   return (
-    <div className="leading-none">
-      <div className="label-caps">
-        {wd(a)}
-        {end && end !== start && `–${wd(b)}`}
-      </div>
-      <div className={cn("mt-1.5 font-accent text-2xl", past ? "text-foreground" : "text-primary")}>
-        {a.getUTCDate()}
-        {end && end !== start && (
-          <span className="num ml-1 align-[0.2em] text-xs text-muted-foreground">
-            –{!sameMonth && `${mo(b)} `}
-            {b.getUTCDate()}
-          </span>
+    <div className="min-h-screen">
+      <SEOHead title={`${year} race calendar`} description="Every round of every championship on the record, month by month: what has run and what is next." canonical="/calendar" />
+      <Header />
+
+      <Page className="pt-8 sm:pt-14">
+        <Eyebrow>Calendar</Eyebrow>
+        <div className="mt-4 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <h1 className="display text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
+            The <span className="font-accent text-[0.82em] tracking-normal">{year}</span> <em>season.</em>
+          </h1>
+          {years.length > 1 && <Tabs value={String(year)} onChange={(v) => set("year", v === String(thisYear) ? null : v)} items={years.map((y) => ({ value: String(y), label: <span className="num">{y}</span> }))} />}
+        </div>
+        {events ? (
+          <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2">
+            {list.length === 0
+              ? `No rounds of ${year} are on the record.`
+              : `${plural(list.length, "race")} on the record for ${year}: ${done.length === list.length ? "all of them run" : `${done.length} run, ${upcoming.length} to come`}.`}
+            {list.length > 0 && !upcoming.length && year >= thisYear ? " The rest of the schedule has not been published here yet." : ""}
+          </p>
+        ) : (
+          <Skeleton className="mt-6 h-7 w-full max-w-xl" />
         )}
+      </Page>
+
+      {/* ── Year at a glance ─────────────────────────────────── */}
+      <Page className="mt-12">
+        {!events ? <Skeleton className="h-28 rounded-3xl" /> : <YearStrip year={year} events={list} today={today} />}
+      </Page>
+
+      {/* ── Up next ──────────────────────────────────────────── */}
+      {events && year >= thisYear && (
+        <Page className="mt-6">
+          {next ? (
+            <NextRace ev={next} today={today} layout={layoutFor(next, layouts)?.layout_image_url} />
+          ) : (
+            <div className="flex flex-col gap-4 rounded-3xl border border-dashed px-6 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+              <div className="flex items-start gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ink/[0.06]">
+                  <CalendarClock className="h-5 w-5 text-ink-2" />
+                </span>
+                <div>
+                  <div className="display text-2xl">Nothing scheduled on the record</div>
+                  <p className="mt-1 max-w-lg text-sm text-ink-2">
+                    Upcoming rounds appear here once a championship&rsquo;s schedule is added. Until then, the latest results are the freshest thing on the record.
+                  </p>
+                </div>
+              </div>
+              {lastDone ? (
+                <Link to={`/events/${lastDone.id}`} className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-full bg-ink px-5 text-sm font-medium text-paper sm:self-auto">
+                  Latest race <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <Link to="/results" className="inline-flex h-11 shrink-0 items-center gap-2 self-start rounded-full bg-ink px-5 text-sm font-medium text-paper sm:self-auto">
+                  All results <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
+          )}
+        </Page>
+      )}
+
+      {/* ── Month by month ───────────────────────────────────── */}
+      <Page className="mt-20 sm:mt-24">
+        {seriesList.length > 1 && (
+          <div className="mb-10">
+            <Tabs value={seriesF} onChange={(v) => set("series", v === "all" ? null : v)} items={[{ value: "all", label: "All series" }, ...seriesList.map(([id, label]) => ({ value: id, label }))]} />
+          </div>
+        )}
+        {!events ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-28 rounded-3xl" />
+            ))}
+          </div>
+        ) : !months.length ? (
+          <Note title={`No races in ${year}`}>
+            {years.filter((y) => y !== year).length ? (
+              <>
+                Try{" "}
+                {years
+                  .filter((y) => y !== year)
+                  .slice(0, 2)
+                  .map((y, i) => (
+                    <span key={y}>
+                      {i > 0 && " or "}
+                      <button onClick={() => set("year", String(y))} className="underline underline-offset-4">
+                        {y}
+                      </button>
+                    </span>
+                  ))}
+                .
+              </>
+            ) : null}
+          </Note>
+        ) : (
+          <div className="space-y-16">
+            {months.map(([m, evs]) => (
+              <section key={m} aria-labelledby={`m${m}`} className="grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10">
+                <div className="lg:sticky lg:top-28 lg:self-start">
+                  <h2 id={`m${m}`} className="display text-[2.6rem] leading-none sm:text-5xl">
+                    {MONTHS_LONG[m]}
+                  </h2>
+                  <div className="eyebrow mt-2">{plural(evs.length, "race")}</div>
+                </div>
+                <ol className="overflow-hidden rounded-3xl border bg-sheet">
+                  {evs.map((e) => (
+                    <CalRow key={e.id} ev={e} today={today} names={names} race={headline(digests?.[e.id])} layout={layoutFor(e, layouts)?.layout_image_url} />
+                  ))}
+                </ol>
+              </section>
+            ))}
+          </div>
+        )}
+      </Page>
+
+      <Footer />
+    </div>
+  );
+}
+
+/* ── Year strip: the season at a glance ─────────────────────────── */
+
+function YearStrip({ year, events, today }: { year: number; events: EventLite[]; today: string }) {
+  const start = new Date(year, 0, 1).getTime();
+  const span = new Date(year + 1, 0, 1).getTime() - start;
+  const pct = (iso?: string | null) => {
+    const d = parseDay(iso);
+    return d ? Math.max(0, Math.min(100, ((d.getTime() - start) / span) * 100)) : 0;
+  };
+  const todayPct = today.startsWith(String(year)) ? pct(today) : null;
+  return (
+    <div className="rounded-3xl border bg-sheet px-5 pb-5 pt-6 sm:px-8">
+      <div className="relative h-10">
+        <div className="absolute inset-x-0 top-1/2 h-px bg-rule" />
+        {events.map((e) => {
+          const a = pct(e.start_date);
+          const b = pct(e.end_date || e.start_date);
+          const up = (e.end_date || e.start_date || "") >= today;
+          return (
+            <Link
+              key={e.id}
+              to={`/events/${e.id}`}
+              title={`${stripYear(e.name)} · ${dateRange(e.start_date, e.end_date)}`}
+              aria-label={`${stripYear(e.name)}, ${dateRange(e.start_date, e.end_date)}`}
+              className={cn(
+                "absolute top-1/2 h-4 min-w-4 -translate-y-1/2 rounded-full border-2 border-sheet transition-transform hover:scale-125",
+                up ? "bg-hl ring-1 ring-ink" : "bg-ink",
+              )}
+              style={{ left: `calc(${a}% - 8px)`, width: `calc(${Math.max(0, b - a)}% + 16px)` }}
+            />
+          );
+        })}
+        {todayPct != null && (
+          <div className="absolute inset-y-0 w-px bg-ink" style={{ left: `${todayPct}%` }}>
+            <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap font-mono text-[10px] uppercase tracking-wider">Today</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-2 grid grid-cols-12">
+        {MONTHS_SHORT.map((m, i) => (
+          <span key={m} className="eyebrow border-l pl-1.5 text-[9.5px] sm:pl-2 sm:text-[11px]">
+            <span className="sm:hidden">{m[0]}</span>
+            <span className="hidden sm:inline">{m}</span>
+            <span className="sr-only">{i}</span>
+          </span>
+        ))}
       </div>
     </div>
   );
 }
 
-const CalendarPage = () => {
-  const [events, setEvents] = useState<CalEvent[] | null>(null);
-  const [series, setSeries] = useState<{ id: string; name: string; short_name: string | null }[]>([]);
-  const [winners, setWinners] = useState<Record<string, ClassWinner[]> | null>(null);
-  const [colors, setColors] = useState<Record<string, Record<string, string>>>({});
-  const [year, setYear] = useState<string>("");
-  const [seriesFilter, setSeriesFilter] = useState("all");
-  const [search, setSearch] = useState("");
+/* ── Next race ──────────────────────────────────────────────────── */
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  useEffect(() => {
-    supabase
-      .from("v2_series")
-      .select("id, name, short_name")
-      .order("name")
-      .then(({ data }) => setSeries((data || []) as any[]));
-
-    (async () => {
-      const { data } = await supabase
-        .from("v2_events")
-        .select("id, name, start_date, end_date, season_id, round_number, v2_seasons(year, v2_series(id, name, short_name)), v2_circuits(id, name, country)")
-        .eq("status", "published" as any)
-        .order("start_date", { ascending: true })
-        .limit(500);
-      const list: CalEvent[] = ((data || []) as any[]).map((e) => ({
-        id: e.id,
-        name: e.name,
-        series: e.v2_seasons?.v2_series?.name || "",
-        seriesShort: e.v2_seasons?.v2_series?.short_name || null,
-        seriesId: e.v2_seasons?.v2_series?.id || null,
-        year: e.v2_seasons?.year || (e.start_date ? Number(e.start_date.slice(0, 4)) : 0),
-        circuitName: e.v2_circuits?.name || null,
-        country: e.v2_circuits?.country || null,
-        date: e.start_date,
-        endDate: e.end_date,
-        seasonId: e.season_id,
-        round: e.round_number,
-      }));
-      setEvents(list);
-
-      // Default season: the current year if it has events, else the most recent one
-      const ys = [...new Set(list.map((e) => e.year))].sort((a, b) => b - a);
-      const thisYear = new Date().getFullYear();
-      setYear((cur) => cur || String(ys.includes(thisYear) ? thisYear : ys[0] ?? thisYear));
-
-      const past = list.filter((e) => e.date && e.date <= today);
-      const [w, cc] = await Promise.all([
-        fetchClassWinners(past.map((e) => e.id), 1),
-        fetchSeasonClassColors([...new Set(list.map((e) => e.seasonId))]),
-      ]);
-      setWinners(w);
-      setColors(cc);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const years = useMemo(() => [...new Set((events || []).map((e) => e.year))].sort((a, b) => b - a), [events]);
-  const upcomingAll = useMemo(() => (events || []).filter((e) => !e.date || e.date > today), [events, today]);
-  const lastRun = useMemo(() => [...(events || [])].reverse().find((e) => e.date && e.date <= today), [events, today]);
-
-  const yearEvents = useMemo(() => (events || []).filter((e) => String(e.year) === year), [events, year]);
-
-  const filtered = useMemo(() => {
-    let list = yearEvents;
-    if (seriesFilter !== "all") list = list.filter((e) => e.seriesId === seriesFilter);
-    const q = search.trim().toLowerCase();
-    if (q)
-      list = list.filter(
-        (e) =>
-          e.name.toLowerCase().includes(q) ||
-          (e.series || "").toLowerCase().includes(q) ||
-          (e.circuitName || "").toLowerCase().includes(q) ||
-          (e.country || "").toLowerCase().includes(q),
-      );
-    return list;
-  }, [yearEvents, seriesFilter, search]);
-
-  const months = useMemo(() => {
-    const m = new Map<string, CalEvent[]>();
-    for (const e of filtered) {
-      const key = e.date ? toDate(e.date).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) : "Date TBA";
-      if (!m.has(key)) m.set(key, []);
-      m.get(key)!.push(e);
-    }
-    return [...m.entries()];
-  }, [filtered]);
-
-  const seriesInYear = useMemo(() => {
-    const ids = new Set(yearEvents.map((e) => e.seriesId));
-    return series.filter((s) => ids.has(s.id));
-  }, [series, yearEvents]);
-
-  const yearUpcoming = yearEvents.filter((e) => !e.date || e.date > today).length;
-  const nextUp = upcomingAll[0];
-
+function NextRace({ ev, today, layout }: { ev: EventLite; today: string; layout?: string | null }) {
+  const days = Math.round(((parseDay(ev.start_date)?.getTime() || 0) - (parseDay(today)?.getTime() || 0)) / DAY);
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead title="Race Calendar" description="Season schedules for every series — upcoming rounds and completed races with class winners." canonical="/calendar" />
-      <Header />
-
-      <PageHeader
-        kicker="Schedule"
-        title="Calendar"
-        meta={
-          events && (
-            <>
-              <span>
-                <span className="num text-foreground">{yearEvents.length}</span> events in <span className="num text-foreground">{year}</span>
-              </span>
-              <span>
-                <span className="num text-foreground">{yearEvents.length - yearUpcoming}</span> completed
-              </span>
-              <span>
-                <span className={cn("num", yearUpcoming ? "text-primary" : "text-foreground")}>{yearUpcoming}</span> upcoming
-              </span>
-            </>
-          )
-        }
-        actions={
-          years.length > 1 && (
-            <Segmented label="Season" value={year} onChange={setYear} options={years.map((y) => ({ value: String(y), label: <span className="num">{y}</span> }))} />
-          )
-        }
-      />
-
-      <main className="container py-8">
-        {/* Next-up banner, or a clear note when nothing is scheduled */}
-        {events &&
-          (nextUp ? (
-            <Link
-              to={`/events/${nextUp.id}`}
-              className="group mb-6 flex flex-col gap-1 rounded border border-primary/40 bg-card px-4 py-3 transition-colors hover:bg-accent/60 sm:flex-row sm:items-center sm:gap-4"
-            >
-              <span className="label-caps flex items-center gap-2 text-primary">
-                <span className="h-1.5 w-1.5 rounded-full bg-signal" /> Next up
-              </span>
-              <span className="font-display text-base font-bold uppercase leading-tight group-hover:text-primary">{nextUp.name}</span>
-              <span className="num text-xs text-muted-foreground sm:ml-auto">{formatDateRange(nextUp.date, nextUp.endDate)}</span>
-            </Link>
-          ) : (
-            <div className="mb-6 flex items-start gap-3 rounded border bg-card px-4 py-3">
-              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="text-sm">
-                <span className="font-display font-bold uppercase tracking-wide text-foreground">No upcoming events scheduled.</span>{" "}
-                <span className="text-muted-foreground">
-                  New rounds appear here as soon as they are added.
-                  {lastRun && (
-                    <>
-                      {" "}
-                      Most recent:{" "}
-                      <Link to={`/events/${lastRun.id}`} className="text-foreground underline-offset-2 hover:text-primary hover:underline">
-                        {lastRun.name}
-                      </Link>{" "}
-                      <span className="num">({formatDateRange(lastRun.date, lastRun.endDate)})</span>.
-                    </>
-                  )}
-                </span>
-              </div>
-            </div>
-          ))}
-
-        <Toolbar>
-          <FilterInput value={search} onChange={setSearch} placeholder="Filter by event, circuit or country…" className="flex-1" />
-          {seriesInYear.length > 1 && (
-            <Segmented
-              label="Series"
-              value={seriesFilter}
-              onChange={setSeriesFilter}
-              options={[
-                { value: "all", label: "All series" },
-                ...seriesInYear.map((s) => ({ value: s.id, label: s.short_name || s.name, count: yearEvents.filter((e) => e.seriesId === s.id).length })),
-              ]}
-            />
-          )}
-        </Toolbar>
-
-        <div className="mt-8">
-          {!events ? (
-            <RowsSkeleton rows={6} />
-          ) : filtered.length === 0 ? (
-            <EmptyState title="No events found">
-              {search || seriesFilter !== "all" ? "Try clearing the filters." : `No events are published for ${year} yet.`}
-            </EmptyState>
-          ) : (
-            <div className="space-y-8">
-              {months.map(([month, list]) => (
-                <section key={month}>
-                  <div className="mb-3 flex items-end justify-between gap-4 border-b pb-2">
-                    <h2 className="font-display text-xl font-bold uppercase tracking-wide">{month}</h2>
-                    <Count n={list.length} label={list.length === 1 ? "event" : "events"} />
-                  </div>
-                  <div className="grid gap-px overflow-hidden rounded border bg-border">
-                    <EventListHead lead="Day" winners="Status / class winners" />
-                    {list.map((ev) => {
-                      const past = !!ev.date && ev.date <= today;
-                      const live = past && !!ev.endDate && ev.endDate >= today;
-                      return (
-                        <EventCard
-                          key={ev.id}
-                          event={ev}
-                          showSeries
-                          hideYear
-                          colors={colors[ev.seasonId]}
-                          winners={past ? (winners ? winners[ev.id] || [] : undefined) : undefined}
-                          aside={
-                            !past ? (
-                              <UpcomingTag />
-                            ) : live ? (
-                              <span className="label-caps flex items-center gap-1.5 text-pb">
-                                <span className="h-1.5 w-1.5 rounded-full bg-pb" /> On track now
-                              </span>
-                            ) : undefined
-                          }
-                          lead={<DayBlock start={ev.date} end={ev.endDate} past={past} />}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
-      <Footer />
-    </div>
+    <Link to={`/events/${ev.id}`} className="group relative grid overflow-hidden rounded-[28px] bg-ink p-7 text-paper sm:grid-cols-[1fr_auto] sm:p-10">
+      <TrackMap key={layout || "x"} src={layout} alt="" className="pointer-events-none absolute -right-10 top-1/2 h-[140%] w-auto -translate-y-1/2 opacity-[0.12] invert dark:invert-0" />
+      <div className="relative">
+        <Eyebrow className="text-paper/60">
+          <span className="rounded-full bg-hl px-2 py-0.5 text-hl-ink">Up next</span>
+          <span>{ev.series?.short_name || ev.series?.name}</span>
+          <span>·</span>
+          <span>{dateRange(ev.start_date, ev.end_date)}</span>
+        </Eyebrow>
+        <h2 className="display mt-4 text-4xl leading-[0.98] sm:text-6xl">{stripYear(ev.name)}</h2>
+        <p className="mt-2 text-paper/60">{ev.circuit?.name}</p>
+      </div>
+      <div className="relative mt-6 sm:mt-0 sm:text-right">
+        <div className="font-accent text-7xl leading-none sm:text-8xl">{days <= 0 ? "Now" : days}</div>
+        <div className="eyebrow mt-2 text-paper/60">{days <= 0 ? "Race weekend" : days === 1 ? "Day to go" : "Days to go"}</div>
+      </div>
+    </Link>
   );
-};
+}
 
-export default CalendarPage;
+/* ── Month row ──────────────────────────────────────────────────── */
+
+function CalRow({ ev, today, names, race, layout }: { ev: EventLite; today: string; names: ReturnType<typeof useNames>; race?: ReturnType<typeof headline>; layout?: string | null }) {
+  const d1 = parseDay(ev.start_date);
+  const d2 = parseDay(ev.end_date);
+  const up = (ev.end_date || ev.start_date || "") >= today;
+  const live = (ev.start_date || "") <= today && up;
+  const overall = overallWinner(race);
+  const days = d1 ? Math.round((d1.getTime() - (parseDay(today)?.getTime() || 0)) / DAY) : null;
+  return (
+    <li className="border-b last:border-b-0">
+      <Link to={`/events/${ev.id}`} className="group grid grid-cols-[5.6rem_minmax(0,1fr)] items-center gap-4 px-5 py-5 transition-colors hover:bg-ink/[0.025] sm:grid-cols-[7.5rem_minmax(0,1fr)_7rem_12rem] sm:gap-6 sm:px-7">
+        <div>
+          <div className="whitespace-nowrap font-accent text-[1.9rem] leading-none sm:text-[2.6rem]">
+            {d1?.getDate()}
+            {d2 && d2.getDate() !== d1?.getDate() && <span className="text-ink-3">–{d2.getDate()}</span>}
+          </div>
+          <div className="eyebrow mt-1.5">
+            {d1 && WEEKDAYS[d1.getDay()]}
+            {d2 && d2.getTime() !== d1?.getTime() && `–${WEEKDAYS[d2.getDay()]}`}
+          </div>
+        </div>
+        <div className="min-w-0">
+          <Eyebrow>
+            <span>{ev.series?.short_name || ev.series?.name}</span>
+            {ev.round_number != null && (
+              <>
+                <span>·</span>
+                <span>Rd {ev.round_number}</span>
+              </>
+            )}
+          </Eyebrow>
+          <div className="display mt-1 text-[1.6rem] leading-[1.04] group-hover:underline group-hover:decoration-1 group-hover:underline-offset-4 sm:text-[1.9rem]">{stripYear(ev.name)}</div>
+          <div className="mt-1 truncate text-[13px] text-ink-3">{[ev.circuit?.name, ev.circuit?.country].filter(Boolean).join(", ")}</div>
+          <div className="mt-2 text-[13px] sm:hidden">{status()}</div>
+        </div>
+        <div className="relative hidden h-16 sm:block">
+          <TrackMap key={layout || "x"} src={layout} alt="" className="absolute inset-0 m-auto h-full w-full opacity-70 transition-transform duration-500 group-hover:scale-105" />
+        </div>
+        <div className="hidden text-right text-[13.5px] sm:block">{status()}</div>
+      </Link>
+    </li>
+  );
+
+  function status() {
+    if (live)
+      return <span className="inline-flex rounded-full bg-hl px-2.5 py-1 font-mono text-[10.5px] uppercase tracking-wider text-hl-ink">This weekend</span>;
+    if (up)
+      return (
+        <span className="text-ink-2">
+          <span className="num text-ink">{days}</span> {days === 1 ? "day" : "days"} to go
+        </span>
+      );
+    if (overall)
+      return (
+        <span className="block text-ink-2">
+          <span className="eyebrow block sm:mb-1">Winner</span>
+          <span className="text-ink">{crewLastNames(overall.driverIds, names, 3)}</span>
+        </span>
+      );
+    return <span className="text-ink-3">Completed</span>;
+  }
+}

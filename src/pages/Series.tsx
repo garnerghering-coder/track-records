@@ -1,148 +1,206 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowUpRight } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
-import { Count, Toolbar } from "@/components/browse/Segmented";
-import { formatDateRange } from "@/lib/date-utils";
+import { classRank } from "@/lib/insights";
+import { useEvents, useLayouts, useSeasons, layoutFor, lastName, type SeasonLite } from "@/site/data";
+import { Eyebrow, Note, Page, PosNum, Skeleton, Sparkline, TrackMap, Ticker } from "@/site/ui";
+import { classColor, groupByPosition, plural, useChampionship, useSeasonClasses, useSeries, type SeriesRow } from "@/site/archive";
 
-interface SeriesRow {
-  id: string;
-  name: string;
-  short_name: string | null;
-  years: number[];
-  events: number;
-  latest: { id: string; name: string; start_date: string | null; end_date: string | null } | null;
-}
+const SeriesIndex = () => {
+  const series = useSeries();
+  const seasons = useSeasons();
+  const events = useEvents();
 
-const GRID = "grid grid-cols-[minmax(0,1fr)_1rem] gap-x-6 md:grid-cols-[minmax(0,1.4fr)_8rem_5rem_minmax(0,1.2fr)_1rem]";
+  const rows = useMemo(() => {
+    if (!series || !seasons) return null;
+    return series
+      .map((s) => {
+        const list = seasons.filter((x) => x.series.id === s.id).sort((a, b) => b.year - a.year);
+        return { series: s, seasons: list, rounds: list.reduce((n, x) => n + x.eventCount, 0) };
+      })
+      .sort((a, b) => b.rounds - a.rounds || a.series.name.localeCompare(b.series.name));
+  }, [series, seasons]);
 
-const SeriesPage = () => {
-  const [seriesList, setSeriesList] = useState<SeriesRow[] | null>(null);
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    supabase
-      .from("v2_series")
-      .select("id, name, short_name, v2_seasons(id, year, v2_events(id, name, start_date, end_date, status))")
-      .order("name")
-      .then(({ data }) => {
-        const today = new Date().toISOString().slice(0, 10);
-        setSeriesList(
-          ((data || []) as any[]).map((s) => {
-            const seasons = (s.v2_seasons || []) as any[];
-            const evs = seasons.flatMap((se) => (se.v2_events || []).filter((e: any) => e.status === "published"));
-            const past = evs.filter((e: any) => e.start_date && e.start_date <= today).sort((a: any, b: any) => (b.start_date || "").localeCompare(a.start_date || ""));
-            return {
-              id: s.id,
-              name: s.name,
-              short_name: s.short_name,
-              years: [...new Set(seasons.filter((se) => (se.v2_events || []).some((e: any) => e.status === "published")).map((se) => se.year as number))].sort((a, b) => b - a),
-              events: evs.length,
-              latest: past[0] || null,
-            };
-          }),
-        );
-      });
-  }, []);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!seriesList || !q) return seriesList || [];
-    return seriesList.filter((s) => s.name.toLowerCase().includes(q) || (s.short_name || "").toLowerCase().includes(q));
-  }, [seriesList, search]);
+  const totalSeasons = seasons?.filter((s) => s.eventCount > 0).length ?? 0;
+  const totalRounds = events?.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead title="Series & Championships" description="Browse motorsport series, their seasons, schedules and championship standings." canonical="/series" />
+    <div className="min-h-screen">
+      <SEOHead title="Championships" description="Every championship on the record: points races, standings and every round, season by season." canonical="/series" />
       <Header />
-      <PageHeader
-        kicker="Championships"
-        title="Series"
-        meta={
-          seriesList && (
-            <>
-              <span>
-                <span className="num text-foreground">{seriesList.length}</span> series
-              </span>
-              <span>
-                <span className="num text-foreground">{seriesList.reduce((n, s) => n + s.events, 0)}</span> events
-              </span>
-            </>
-          )
-        }
-      />
 
-      <main className="container py-8">
-        <Toolbar>
-          <FilterInput value={search} onChange={setSearch} placeholder="Filter by series name…" className="flex-1" />
-          {seriesList && <Count n={filtered.length} label="series" />}
-        </Toolbar>
-
-        <div className="mt-6">
-          {!seriesList ? (
-            <RowsSkeleton rows={3} />
-          ) : filtered.length === 0 ? (
-            <EmptyState title="No series found">Nothing matches “{search}”.</EmptyState>
-          ) : (
-            <div className="grid gap-px overflow-hidden rounded border bg-border">
-              <div className={`${GRID} hidden h-9 items-center bg-card px-4 md:grid`}>
-                <span className="label-caps">Series</span>
-                <span className="label-caps">Seasons</span>
-                <span className="label-caps text-right">Events</span>
-                <span className="label-caps">Latest round</span>
-                <span />
-              </div>
-              {filtered.map((s) => (
-                <Link key={s.id} to={`/series/${s.id}`} className={`${GRID} group items-center gap-y-2 bg-card px-4 py-4 transition-colors hover:bg-accent/60`}>
-                  <div className="min-w-0">
-                    <div className="label-caps text-primary">{s.short_name || "Series"}</div>
-                    <div className="mt-0.5 font-display text-lg font-bold uppercase leading-tight transition-colors group-hover:text-primary">{s.name}</div>
-                    {/* Mobile meta */}
-                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground md:hidden">
-                      <span>
-                        <span className="num text-foreground">{s.events}</span> events
-                      </span>
-                      {s.years.length > 0 && <span className="num">{s.years.join(" · ")}</span>}
-                      {s.latest && <span className="truncate">Latest: {s.latest.name}</span>}
-                    </div>
-                  </div>
-                  <div className="hidden flex-wrap gap-1 md:flex">
-                    {s.years.length ? (
-                      s.years.map((y) => (
-                        <span key={y} className="num rounded-sm border px-1.5 py-0.5 text-xs text-foreground">
-                          {y}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </div>
-                  <div className="num hidden text-right text-lg text-foreground md:block">{s.events}</div>
-                  <div className="hidden min-w-0 md:block">
-                    {s.latest ? (
-                      <>
-                        <div className="truncate text-sm text-foreground">{s.latest.name}</div>
-                        <div className="num text-xs text-muted-foreground">{formatDateRange(s.latest.start_date, s.latest.end_date)}</div>
-                      </>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">No results yet</span>
-                    )}
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
-                </Link>
-              ))}
-            </div>
-          )}
+      <Page className="pt-8 sm:pt-14">
+        <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+          <div>
+            <Eyebrow>Championships</Eyebrow>
+            <h1 className="display mt-4 text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
+              Every title fight, <em>round by round.</em>
+            </h1>
+          </div>
+          <p className="max-w-md text-lg leading-relaxed text-ink-2 lg:justify-self-end">
+            Points races, standings and the full calendar of each season, computed from the official results.
+          </p>
         </div>
-      </main>
+        <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-3xl border bg-rule">
+          {[
+            { label: "Championships", value: series?.length },
+            { label: "Seasons", value: seasons ? totalSeasons : undefined },
+            { label: "Rounds", value: events ? totalRounds : undefined },
+          ].map((s) => (
+            <div key={s.label} className="bg-sheet px-4 py-5 sm:px-6">
+              <div className="eyebrow">{s.label}</div>
+              <div className="num mt-2 text-2xl sm:text-3xl">{s.value == null ? <Skeleton className="h-8 w-12" /> : <Ticker value={s.value} />}</div>
+            </div>
+          ))}
+        </div>
+      </Page>
+
+      <Page className="mt-16 space-y-5 sm:mt-24">
+        {!rows ? (
+          [0, 1, 2].map((i) => <Skeleton key={i} className="h-[360px] rounded-[28px]" />)
+        ) : rows.length === 0 ? (
+          <Note title="No championships yet">Championships appear here once their first season is published.</Note>
+        ) : (
+          rows.map((r) => <SeriesCard key={r.series.id} series={r.series} seasons={r.seasons} />)
+        )}
+      </Page>
+
       <Footer />
     </div>
   );
 };
 
-export default SeriesPage;
+function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLite[] }) {
+  const latest = seasons.find((s) => s.eventCount > 0) || seasons[0];
+  const ch = useChampionship(latest?.id).data;
+  const classes = useSeasonClasses();
+  const events = useEvents();
+  const layouts = useLayouts();
+  const rounds = (events || []).filter((e) => e.season_id === latest?.id).sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
+  const leaders = ch
+    ? ch.classes
+        .map((c) => ({ c, g: groupByPosition(ch.drivers[c] || []) }))
+        .filter((x) => x.g[0])
+        .sort((a, b) => classRank(a.c) - classRank(b.c))
+    : null;
+  const finished = latest ? latest.year < new Date().getFullYear() : false;
+  const years = seasons.map((s) => s.year);
+
+  return (
+    <article className="group/card relative overflow-hidden rounded-[28px] border bg-sheet">
+      <div className="grid lg:grid-cols-[1fr_1.1fr]">
+        <div className="flex flex-col p-6 sm:p-9">
+          <Eyebrow>
+            {series.short_name && <span>{series.short_name}</span>}
+            {series.short_name && <span>·</span>}
+            <span>{years.length > 1 ? `${Math.min(...years)}–${Math.max(...years)}` : years[0]}</span>
+          </Eyebrow>
+          <h2 className="display mt-3 text-[2.4rem] leading-[0.98] sm:text-[3.2rem]">
+            <Link to={`/series/${series.id}`} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none [&:focus-visible]:underline">
+              {series.name}
+            </Link>
+          </h2>
+          <div className="relative z-10 mt-6 flex flex-wrap gap-2">
+            {seasons.filter((s) => s.eventCount > 0).map((s) => (
+              <Link
+                key={s.id}
+                to={`/series/${series.id}?season=${s.year}`}
+                className="inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[13px] transition-colors hover:border-ink/40 hover:bg-ink/[0.04]"
+              >
+                <span className="num">{s.year}</span>
+                <span className="text-[11px] text-ink-3">{plural(s.eventCount, "rd", "rds")}</span>
+              </Link>
+            ))}
+          </div>
+          {seasons
+            .filter((s) => s.id !== latest?.id && s.eventCount > 0 && s.year < new Date().getFullYear())
+            .map((s) => (
+              <PastChampions key={s.id} season={s} />
+            ))}
+          {/* the season in track maps */}
+          {rounds.length > 0 && (
+            <div className="mt-auto pt-10">
+              <div className="eyebrow mb-3">{latest?.year} calendar</div>
+              <div className="flex flex-wrap gap-x-3 gap-y-2">
+                {rounds.map((e) => (
+                  <div key={e.id} className="flex h-10 w-14 items-center justify-center" title={e.short_name || e.name}>
+                    <TrackMap key={layoutFor(e, layouts)?.layout_image_url || "none"} src={layoutFor(e, layouts)?.layout_image_url} alt={e.circuit?.name || ""} className="h-full w-full opacity-70" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t p-6 sm:p-9 lg:border-l lg:border-t-0">
+          <div className="flex items-center justify-between">
+            <Eyebrow>
+              {latest?.year} · {finished ? "Champions" : "Leaders"}
+              {ch && leaders && leaders.length > 0 && <span>· after {plural(ch.rounds.length, "round")}</span>}
+            </Eyebrow>
+            <ArrowUpRight className="h-5 w-5 text-ink-3 transition-transform group-hover/card:-translate-y-0.5 group-hover/card:translate-x-0.5 group-hover/card:text-ink" />
+          </div>
+          <div className="mt-6 space-y-5">
+            {!leaders && <Skeleton className="h-40" />}
+            {leaders && leaders.length === 0 && (
+              <p className="max-w-sm text-[15px] text-ink-2">No championship points have been published for {latest?.year} yet. The results of its rounds are on the record.</p>
+            )}
+            {leaders?.map(({ c, g }) => {
+              const lead = g[0];
+              const gap = g[1] ? lead.entries[0].totalPoints - g[1].entries[0].totalPoints : null;
+              const col = classColor(latest ? classes?.[latest.id] : undefined, c);
+              return (
+                <div key={c} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
+                  <PosNum n={1} size="md" className="w-6 text-center" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {c && (
+                        <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-ink-2">
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: col }} />
+                          {c}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 truncate text-[16px]">{lead.entries.map((e) => lastName(e.name)).join(" / ")}</div>
+                    <Sparkline values={[0, ...lead.entries[0].cumulative]} color={col} className="mt-1.5 h-5" />
+                  </div>
+                  <div className="text-right">
+                    <div className="num text-xl">{lead.entries[0].totalPoints.toLocaleString()}</div>
+                    {gap != null && <div className="num text-[11px] text-ink-3">+{gap.toLocaleString()}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PastChampions({ season }: { season: SeasonLite }) {
+  const ch = useChampionship(season.id).data;
+  const classes = useSeasonClasses();
+  if (!ch) return <Skeleton className="mt-8 h-16" />;
+  const champs = ch.classes.map((c) => ({ c, g: groupByPosition(ch.drivers[c] || [])[0] })).filter((x) => x.g);
+  if (!champs.length) return null;
+  return (
+    <div className="mt-8">
+      <div className="eyebrow mb-2.5">{season.year} champions</div>
+      <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+        {champs.map(({ c, g }) => (
+          <li key={c} className="flex min-w-0 items-center gap-2 text-[14px]">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: classColor(classes?.[season.id], c) }} />
+            {c && <span className="w-[3.6rem] shrink-0 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">{c}</span>}
+            <span className="truncate">{g.entries.map((e) => lastName(e.name)).join(" / ")}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export default SeriesIndex;

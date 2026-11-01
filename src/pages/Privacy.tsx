@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { PageHeader } from "@/components/tr/primitives";
+import { Eyebrow, Page } from "@/site/ui";
 
 const SECTIONS = [
   { id: "data-we-collect", title: "What data we collect" },
@@ -17,17 +17,15 @@ const SECTIONS = [
 
 /* Reading styles shared by every section body */
 const PROSE =
-  "space-y-4 text-[17px] leading-[1.7] text-foreground/85 [&_strong]:font-semibold [&_strong]:text-foreground " +
-  "[&_ul]:space-y-2.5 [&_li]:relative [&_li]:pl-5 [&_li]:before:absolute [&_li]:before:left-0 [&_li]:before:top-[0.8em] [&_li]:before:h-px [&_li]:before:w-2.5 [&_li]:before:bg-primary";
+  "space-y-4 text-[17px] leading-[1.75] text-ink/85 [&_strong]:font-semibold [&_strong]:text-ink " +
+  "[&_ul]:space-y-3 [&_li]:relative [&_li]:pl-6 [&_li]:before:absolute [&_li]:before:left-0 [&_li]:before:top-[0.85em] [&_li]:before:h-px [&_li]:before:w-3 [&_li]:before:bg-ink-3";
 
 function Section({ index, children }: { index: number; children: ReactNode }) {
   const s = SECTIONS[index];
   return (
-    <section id={s.id} className="scroll-mt-20 border-t pt-8 first:border-t-0 first:pt-0">
-      <h2 className="mb-4 flex items-baseline gap-3 font-display text-[1.65rem] font-bold uppercase leading-tight tracking-wide text-foreground">
-        <span className="num text-sm font-normal text-primary">{String(index + 1).padStart(2, "0")}</span>
-        {s.title}
-      </h2>
+    <section id={s.id} className="scroll-mt-28">
+      <div className="num text-xs text-ink-3">{String(index + 1).padStart(2, "0")}</div>
+      <h2 className="display mb-5 mt-2 text-[2.1rem] leading-[1.02] sm:text-[2.5rem]">{s.title}</h2>
       <div className={PROSE}>{children}</div>
     </section>
   );
@@ -35,37 +33,26 @@ function Section({ index, children }: { index: number; children: ReactNode }) {
 
 const Privacy = () => {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       <SEOHead title="Privacy Policy" description="Learn how Track Records collects, uses, and protects your data." canonical="/privacy" />
       <Header />
 
-      <PageHeader
-        kicker={
-          <>
-            <span className="h-1.5 w-1.5 rounded-full bg-signal" /> Legal
-          </>
-        }
-        title="Privacy policy"
-        meta={
-          <span>
-            Last updated <span className="num text-foreground">February 2026</span>
-          </span>
-        }
-      />
+      <Page className="pt-8 sm:pt-14">
+        <Eyebrow>Legal · Last updated <span className="num text-ink">February 2026</span></Eyebrow>
+        <h1 className="display mt-4 text-[3.2rem] leading-[0.92] sm:text-[5rem] lg:text-[6rem]">
+          Privacy <em>policy.</em>
+        </h1>
+      </Page>
 
-      <main className="container py-10 md:py-12">
-        <div className="mx-auto grid max-w-5xl gap-10 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-12">
-          {/* Contents */}
-          <nav aria-label="Contents" className="lg:sticky lg:top-24 lg:self-start">
-            <div className="label-caps mb-2">Contents</div>
-            <ol className="divide-y overflow-hidden rounded border bg-card">
+      <Page className="mt-14 sm:mt-20">
+        <div className="grid gap-12 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-20">
+          <nav aria-label="Contents" className="lg:sticky lg:top-28 lg:self-start">
+            <div className="eyebrow mb-3">Contents</div>
+            <ol className="overflow-hidden rounded-2xl border bg-sheet lg:rounded-none lg:border-0 lg:bg-transparent">
               {SECTIONS.map((s, i) => (
-                <li key={s.id}>
-                  <a
-                    href={`#${s.id}`}
-                    className="flex gap-2.5 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <span className="num text-xs leading-5 text-primary">{String(i + 1).padStart(2, "0")}</span>
+                <li key={s.id} className="border-b last:border-b-0 lg:border-b-0">
+                  <a href={`#${s.id}`} className="flex gap-3 px-4 py-2.5 text-[14px] text-ink-2 transition-colors hover:text-ink lg:px-0 lg:py-1.5">
+                    <span className="num pt-px text-[11px] leading-5 text-ink-3">{String(i + 1).padStart(2, "0")}</span>
                     <span>{s.title}</span>
                   </a>
                 </li>
@@ -73,7 +60,7 @@ const Privacy = () => {
             </ol>
           </nav>
 
-          <article className="max-w-[68ch] space-y-10">
+          <article className="min-w-0 max-w-[40rem] space-y-14">
             <Section index={0}>
               <ul>
                 <li><strong>Account information</strong> — email address, name, and nationality when you sign up.</li>
@@ -137,7 +124,7 @@ const Privacy = () => {
               </ul>
               <p>
                 To exercise any of these rights, contact us at{" "}
-                <a href="mailto:privacy@trackrecord.com" className="text-primary underline decoration-primary/40 underline-offset-[3px] hover:decoration-primary">
+                <a href="mailto:privacy@trackrecord.com" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
                   privacy@trackrecord.com
                 </a>
                 .
@@ -151,7 +138,7 @@ const Privacy = () => {
             </Section>
           </article>
         </div>
-      </main>
+      </Page>
       <Footer />
     </div>
   );
