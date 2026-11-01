@@ -7,6 +7,7 @@ import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
 import { cn } from "@/lib/utils";
 import { useEvents, useLayouts } from "@/site/data";
+import { Chip } from "@/site/record-ui";
 import { Eyebrow, Note, Page, SectionHead, Skeleton, Tabs, TrackMap } from "@/site/ui";
 import { fingerprint, fold, layoutsOf, num, plural, useCircuits, type CircuitRow, type LayoutRow } from "@/site/archive";
 
@@ -28,27 +29,41 @@ export default function Circuits() {
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState(params.get("q") || "");
   const sort = (["raced", "name", "length"].includes(params.get("sort") || "") ? params.get("sort") : "raced") as Sort;
+  const seriesF = params.get("series") || "";
+  const seriesList = useMemo(() => {
+    const m = new Map<string, { id: string; short: string; circuits: Set<string> }>();
+    for (const e of events || []) {
+      if (!e.series || !e.circuit_id) continue;
+      if (!m.has(e.series.id)) m.set(e.series.id, { id: e.series.id, short: e.series.short_name || e.series.name, circuits: new Set() });
+      m.get(e.series.id)!.circuits.add(e.circuit_id);
+    }
+    return [...m.values()].sort((a, b) => b.circuits.size - a.circuits.size);
+  }, [events]);
 
   const items = useMemo<Item[] | null>(() => {
     if (!circuits || !layouts || !events) return null;
     return circuits.map((c) => {
       const ls = layoutsOf(c.id, layouts);
-      const evs = events.filter((e) => e.circuit_id === c.id);
+      const evs = events.filter((e) => e.circuit_id === c.id && (!seriesF || e.series?.id === seriesF));
+      // Show the layout of the most recent race here (venues may have an oval and a road course).
+      const recent = evs.find((e) => e.layout_id && ls.some((l) => l.id === e.layout_id))?.layout_id;
+      const layout = ls.find((l) => l.id === recent) || ls[0];
       return {
         c,
-        layout: ls[0],
+        layout,
         layouts: ls.length,
         races: evs.length,
         last: evs.reduce<number | null>((m, e) => (e.year != null && (m == null || e.year > m) ? e.year : m), null),
-        character: fingerprint(ls[0])?.tcsCategory ?? null,
+        character: fingerprint(layout)?.tcsCategory ?? null,
       };
     });
-  }, [circuits, layouts, events]);
+  }, [circuits, layouts, events, seriesF]);
 
   const filtered = useMemo(() => {
     if (!items) return null;
     const f = fold(q);
-    const list = f ? items.filter((i) => [i.c.name, i.c.location, i.c.country, i.character].some((s) => fold(s).includes(f))) : items;
+    const inSeries = seriesF ? items.filter((i) => i.races > 0) : items;
+    const list = f ? inSeries.filter((i) => [i.c.name, i.c.location, i.c.country, i.character].some((s) => fold(s).includes(f))) : inSeries;
     return [...list].sort((a, b) =>
       sort === "name"
         ? a.c.name.localeCompare(b.c.name)
@@ -56,12 +71,18 @@ export default function Circuits() {
           ? (num(b.layout?.length_km) ?? 0) - (num(a.layout?.length_km) ?? 0)
           : b.races - a.races || (b.last ?? 0) - (a.last ?? 0) || a.c.name.localeCompare(b.c.name),
     );
-  }, [items, q, sort]);
+  }, [items, q, sort, seriesF]);
 
   const raced = filtered?.filter((i) => i.races > 0) || [];
   const atlas = filtered?.filter((i) => i.races === 0) || [];
   const countries = items ? new Set(items.map((i) => i.c.country).filter(Boolean)).size : null;
 
+  const setSeries = (id: string) => {
+    const n = new URLSearchParams(params);
+    if (id) n.set("series", id);
+    else n.delete("series");
+    setParams(n, { replace: true });
+  };
   const setSort = (s: Sort) => {
     const n = new URLSearchParams(params);
     if (s === "raced") n.delete("sort");
@@ -94,7 +115,20 @@ export default function Circuits() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {seriesList.length > 1 && (
+          <div className="-mx-4 mt-10 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter by series">
+            <Chip active={!seriesF} onClick={() => setSeries("")}>
+              All series
+            </Chip>
+            {seriesList.map((s) => (
+              <Chip key={s.id} active={seriesF === s.id} onClick={() => setSeries(seriesF === s.id ? "" : s.id)}>
+                {s.short} <span className="num text-[11px] opacity-60">{s.circuits.size}</span>
+              </Chip>
+            ))}
+          </div>
+        )}
+
+        <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", seriesList.length > 1 ? "mt-4" : "mt-10")}>
           <label className="relative flex h-11 w-full items-center rounded-full border bg-sheet pl-11 pr-3 focus-within:border-ink/40 sm:max-w-sm">
             <Search className="absolute left-4 h-4 w-4 text-ink-3" />
             <span className="sr-only">Filter circuits</span>
