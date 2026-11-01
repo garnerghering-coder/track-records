@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap');
 
 @font-face {
   font-family: 'ModernAge';
@@ -12,96 +12,66 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ─────────────────────────────────────────────
-   "Timing screen": neutral graphite / paper surfaces, a single
-   signal-yellow accent, and fixed timing semantics:
-   fastest = purple, personal best = green, flag = yellow, DNF = red.
-   ─────────────────────────────────────────────────────────────── */
+/* ─── "The Record" design tokens (see docs/REIMAGINE.md) ─────────
+   Day = warm paper & ink (default). Night = race at night.
+   Values are HSL triplets so Tailwind can apply alpha.            */
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 240 10% 7%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 7%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 7%;
+    --paper: 43 22% 94%;
+    --sheet: 45 27% 98%;
+    --ink: 60 6% 7%;
+    --ink-2: 43 6% 31%;
+    --ink-3: 40 6% 52%;
+    --rule: 42 17% 83%;
+    --hl: 71 87% 62%;
+    --hl-ink: 60 6% 7%;
+    --fastest: 274 72% 50%;
+    --win: 142 60% 32%;
+    --loss: 0 68% 46%;
 
-    /* Deep amber in light mode so accent text stays readable on white */
-    --primary: 36 100% 36%;
-    --primary-foreground: 0 0% 100%;
-    --signal: 46 100% 50%;
-    --signal-foreground: 240 10% 7%;
-
-    --secondary: 240 6% 95%;
-    --secondary-foreground: 240 10% 12%;
-    --muted: 240 6% 95.5%;
-    --muted-foreground: 240 5% 38%;
-    --accent: 240 6% 93%;
-    --accent-foreground: 240 10% 7%;
-
-    --destructive: 0 72% 46%;
+    /* shadcn bridge */
+    --background: var(--paper);
+    --foreground: var(--ink);
+    --card: var(--sheet);
+    --card-foreground: var(--ink);
+    --popover: var(--sheet);
+    --popover-foreground: var(--ink);
+    --primary: var(--ink);
+    --primary-foreground: var(--paper);
+    --secondary: 43 18% 90%;
+    --secondary-foreground: var(--ink);
+    --muted: 43 18% 90%;
+    --muted-foreground: var(--ink-2);
+    --accent: 43 18% 89%;
+    --accent-foreground: var(--ink);
+    --destructive: var(--loss);
     --destructive-foreground: 0 0% 100%;
-
-    --border: 240 6% 88%;
-    --input: 240 6% 85%;
-    --ring: 36 100% 40%;
-    --radius: 0.25rem;
-
-    --fastest: 274 72% 52%;
-    --pb: 142 72% 32%;
-    --flag: 45 100% 42%;
-    --dnf: 0 72% 46%;
-
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 10% 12%;
-    --sidebar-primary: 36 100% 36%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 6% 93%;
-    --sidebar-accent-foreground: 240 10% 7%;
-    --sidebar-border: 240 6% 88%;
-    --sidebar-ring: 36 100% 40%;
+    --border: var(--rule);
+    --input: var(--rule);
+    --ring: var(--ink);
+    --radius: 0.875rem;
+    --signal: var(--hl);
+    --signal-foreground: var(--hl-ink);
+    --pb: var(--win);
+    --flag: 45 100% 45%;
+    --dnf: var(--loss);
   }
 
   .dark {
-    --background: 240 6% 5.5%;
-    --foreground: 0 0% 95%;
-    --card: 240 5% 8.5%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 5% 9.5%;
-    --popover-foreground: 0 0% 95%;
-
-    --primary: 46 100% 52%;
-    --primary-foreground: 240 10% 6%;
-    --signal: 46 100% 52%;
-    --signal-foreground: 240 10% 6%;
-
-    --secondary: 240 4% 12.5%;
-    --secondary-foreground: 0 0% 92%;
-    --muted: 240 4% 12%;
-    --muted-foreground: 240 4% 62%;
-    --accent: 240 4% 14%;
-    --accent-foreground: 0 0% 95%;
-
-    --destructive: 0 75% 55%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 240 4% 15.5%;
-    --input: 240 4% 18%;
-    --ring: 46 100% 52%;
-
-    --fastest: 274 90% 70%;
-    --pb: 142 70% 50%;
-    --flag: 48 100% 55%;
-    --dnf: 0 80% 62%;
-
-    --sidebar-background: 240 6% 7%;
-    --sidebar-foreground: 0 0% 88%;
-    --sidebar-primary: 46 100% 52%;
-    --sidebar-primary-foreground: 240 10% 6%;
-    --sidebar-accent: 240 4% 13%;
-    --sidebar-accent-foreground: 0 0% 92%;
-    --sidebar-border: 240 4% 15.5%;
-    --sidebar-ring: 46 100% 52%;
+    --paper: 60 4% 4.5%;
+    --sheet: 60 4% 8%;
+    --ink: 43 18% 91%;
+    --ink-2: 41 6% 60%;
+    --ink-3: 39 5% 41%;
+    --rule: 45 7% 14%;
+    --fastest: 274 90% 72%;
+    --win: 142 60% 55%;
+    --loss: 0 80% 64%;
+    --secondary: 60 4% 12%;
+    --muted: 60 4% 12%;
+    --accent: 60 4% 13%;
+    --primary: var(--ink);
+    --primary-foreground: var(--paper);
   }
 }
 
@@ -109,79 +79,113 @@
   * {
     @apply border-border;
   }
-
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
   }
-
   body {
     @apply bg-background text-foreground;
-    font-family: 'Barlow', system-ui, sans-serif;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-size: 15px;
-    line-height: 1.5;
+    line-height: 1.55;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Barlow Condensed', 'Barlow', sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    line-height: 1.1;
-  }
-
   ::selection {
-    background: hsl(var(--signal) / 0.35);
+    background: hsl(var(--hl));
+    color: hsl(var(--hl-ink));
   }
-
   :focus-visible {
-    outline: 2px solid hsl(var(--ring));
+    outline: 2px solid hsl(var(--ink));
     outline-offset: 2px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
   }
 }
 
 @layer components {
-  /* Small caps label used for column heads, section kickers, meta */
-  .label-caps {
-    @apply font-display text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+  .display {
+    font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.015em;
+    line-height: 0.95;
   }
-  /* Numbers in tables / timing: monospaced + tabular */
+  .eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-[0.16em] text-ink-3;
+  }
   .num {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: 'Geist Mono', ui-monospace, monospace;
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
-  /* White logo PNG → black in light mode */
+  /* Highlighter mark behind text */
+  .mark {
+    background: linear-gradient(transparent 12%, hsl(var(--hl)) 12%, hsl(var(--hl)) 88%, transparent 88%);
+    color: hsl(var(--hl-ink));
+    padding: 0 0.12em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .sheet {
+    @apply rounded-2xl border bg-sheet;
+  }
+  .link-u {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.25s ease;
+  }
+  .link-u:hover {
+    background-size: 100% 1px;
+  }
   .logo-adapt {
     filter: invert(1);
   }
   .dark .logo-adapt {
     filter: none;
   }
-  /* Hairline-ruled data table */
+  /* legacy helpers still used by analysis charts */
+  .label-caps {
+    @apply font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground;
+  }
   .data-table {
     @apply w-full text-sm;
   }
   .data-table thead th {
-    @apply label-caps h-9 whitespace-nowrap border-b px-3 align-middle;
+    @apply eyebrow h-10 whitespace-nowrap border-b px-3 align-middle font-normal;
   }
-  /* zero-specificity default so text-right / text-center utilities win */
   :where(.data-table thead th) {
     text-align: left;
   }
   .data-table tbody td {
-    @apply h-11 border-b px-3 align-middle;
+    @apply h-12 border-b px-3 align-middle;
   }
   .data-table tbody tr {
     @apply transition-colors hover:bg-accent/60;
   }
-  /* Subtle striped "pit wall" background for headers */
   .grid-bg {
-    background-image:
-      linear-gradient(hsl(var(--border) / 0.6) 1px, transparent 1px),
-      linear-gradient(90deg, hsl(var(--border) / 0.6) 1px, transparent 1px);
-    background-size: 32px 32px;
-    mask-image: linear-gradient(to bottom, black, transparent);
+    background-image: radial-gradient(hsl(var(--rule)) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  /* Paper grain */
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .dark .grain::after {
+    mix-blend-mode: screen;
+    opacity: 0.25;
   }
 }
 

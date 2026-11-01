@@ -1,62 +1,44 @@
 import { Link } from "react-router-dom";
+import { openSearch } from "@/components/Header";
 
-const COLS = [
-  {
-    title: "Results",
-    links: [
-      { to: "/results", label: "Latest results" },
-      { to: "/series", label: "Series" },
-    ],
-  },
-  {
-    title: "Database",
-    links: [
-      { to: "/search?tab=drivers", label: "Drivers" },
-      { to: "/teams", label: "Teams" },
-      { to: "/search?tab=circuits", label: "Circuits" },
-      { to: "/cars", label: "Cars" },
-    ],
-  },
-  {
-    title: "Track Records",
-    links: [
-      { to: "/articles", label: "Articles" },
-      { to: "/calendar", label: "Calendar" },
-      { to: "/privacy", label: "Privacy" },
-    ],
-  },
+const LINKS = [
+  { to: "/results", label: "Races" },
+  { to: "/series", label: "Championships" },
+  { to: "/drivers", label: "Drivers" },
+  { to: "/teams", label: "Teams" },
+  { to: "/circuits", label: "Circuits" },
+  { to: "/cars", label: "Cars" },
+  { to: "/calendar", label: "Calendar" },
+  { to: "/compare", label: "Compare" },
+  { to: "/articles", label: "Articles" },
+  { to: "/privacy", label: "Privacy" },
 ];
 
 const Footer = () => (
-  <footer className="mt-16 border-t bg-card/50">
-    <div className="container grid gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
-      <div className="max-w-xs">
-        <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/brand/logo.png" />
-        <p className="mt-3 text-sm text-muted-foreground">
-          Multi-class sportscar results, timing analysis and driver records, linked together.
-        </p>
-      </div>
-      {COLS.map((c) => (
-        <div key={c.title}>
-          <div className="label-caps mb-3">{c.title}</div>
-          <ul className="space-y-2 text-sm">
-            {c.links.map((l) => (
-              <li key={l.to}>
-                <Link to={l.to} className="text-foreground/80 transition-colors hover:text-primary">
-                  {l.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
+  <footer className="mt-28 border-t">
+    <div className="mx-auto max-w-[1320px] px-4 pb-10 pt-14 sm:px-6 lg:px-10">
+      <div className="grid gap-10 lg:grid-cols-[1.3fr_1fr]">
+        <div>
+          <p className="display max-w-xl text-4xl leading-[1.05] sm:text-5xl">
+            The record of sportscar racing, <em className="text-ink-2">lap by lap.</em>
+          </p>
+          <button onClick={openSearch} className="mt-6 inline-flex h-11 items-center gap-3 rounded-full border px-5 text-sm hover:bg-ink/[0.05]">
+            Search the record <kbd className="rounded-md border bg-sheet px-1.5 font-mono text-[10px] text-ink-3">/</kbd>
+          </button>
         </div>
-      ))}
-    </div>
-    <div className="border-t">
-      <div className="container flex flex-col justify-between gap-2 py-4 text-xs text-muted-foreground sm:flex-row">
-        <span>© {new Date().getFullYear()} Track Records</span>
-        <span>
-          Press <kbd className="rounded-sm border bg-muted px-1 font-mono text-[10px]">/</kbd> anywhere to search
-        </span>
+        <nav className="grid grid-cols-2 gap-x-8 gap-y-2.5 self-end text-[15px] sm:grid-cols-3">
+          {LINKS.map((l) => (
+            <Link key={l.to} to={l.to} className="link-u w-fit text-ink-2 hover:text-ink">
+              {l.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+      <div className="mt-14 flex flex-col items-start justify-between gap-4 border-t pt-6 sm:flex-row sm:items-center">
+        <img alt="Track Records" className="logo-adapt h-5 w-auto" src="/brand/logo.png" />
+        <p className="text-xs text-ink-3">
+          Results from official timing and scoring. © {new Date().getFullYear()} Track Records.
+        </p>
       </div>
     </div>
   </footer>

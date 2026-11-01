@@ -21,6 +21,9 @@ const SeriesProfile = lazy(() => import("./pages/SeriesProfile"));
 const SeriesListing = lazy(() => import("./pages/Series"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Cars = lazy(() => import("./pages/Cars"));
+const Drivers = lazy(() => import("./pages/Drivers"));
+const Circuits = lazy(() => import("./pages/Circuits"));
+const Compare = lazy(() => import("./pages/Compare"));
 const CarProfile = lazy(() => import("./pages/CarProfile"));
 const EventPage = lazy(() => import("./pages/EventPage"));
 const Articles = lazy(() => import("./pages/Articles"));
@@ -28,7 +31,7 @@ const ArticleDetail = lazy(() => import("./pages/ArticleDetail"));
 const queryClient = new QueryClient();
 
 const App = () => (
-  <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+  <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       
@@ -48,6 +51,9 @@ const App = () => (
           <Route path="/series" element={<SeriesListing />} />
           <Route path="/series/:id" element={<SeriesProfile />} />
           <Route path="/cars" element={<Cars />} />
+          <Route path="/drivers" element={<Drivers />} />
+          <Route path="/circuits" element={<Circuits />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/car/:id" element={<CarProfile />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/events/:slug" element={<EventPage />} />

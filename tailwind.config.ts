@@ -9,18 +9,34 @@ export default {
       center: true,
       padding: { DEFAULT: "1rem", sm: "1.5rem", lg: "2rem" },
       screens: {
-        "2xl": "1360px",
+        "2xl": "1320px",
       },
     },
     extend: {
       fontFamily: {
-        display: ["Barlow Condensed", "Barlow", "sans-serif"],
-        body: ["Barlow", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
-        accent: ["ModernAge", "Barlow Condensed", "sans-serif"],
+        serif: ["Instrument Serif", "ui-serif", "Georgia", "serif"],
+        sans: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        body: ["Geist", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "ui-monospace", "monospace"],
+        accent: ["ModernAge", "Geist", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
+        paper: "hsl(var(--paper))",
+        sheet: "hsl(var(--sheet))",
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          2: "hsl(var(--ink-2))",
+          3: "hsl(var(--ink-3))",
+        },
+        rule: "hsl(var(--rule))",
+        hl: {
+          DEFAULT: "hsl(var(--hl))",
+          ink: "hsl(var(--hl-ink))",
+        },
+        win: "hsl(var(--win))",
+        loss: "hsl(var(--loss))",
         signal: {
           DEFAULT: "hsl(var(--signal))",
           foreground: "hsl(var(--signal-foreground))",
