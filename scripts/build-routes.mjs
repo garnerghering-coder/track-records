@@ -29,9 +29,11 @@ function page(route, title, description) {
     .replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${esc(title)}$2`)
     .replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${esc(description)}$2`)
     .replace("</head>", `  <link rel="canonical" href="${SITE}${route}" />\n  </head>`);
-  const dir = path.join(DIST, route);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "index.html"), html);
+  // "/events/<id>" is served from "events/<id>.html" by GitHub Pages without a
+  // redirect ("<route>/index.html" would 301 to a trailing-slash URL).
+  const file = path.join(DIST, `${route}.html`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, html);
   return route;
 }
 
