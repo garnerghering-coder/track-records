@@ -3,3 +3,6 @@
 {"id":"58412392-e87b-4bc5-8527-53dbba19b04d","series_id":"a20a05b9-cd43-450a-9497-b8abf990377a","alias":"IMSA MPC","created_at":"2026-02-24T18:33:17.316357+00:00"}
 {"id":"6671b7d1-d23d-44d6-b288-34951d2343e8","series_id":"5b0e1181-7436-40c2-83b7-a2810e77e4da","alias":"IMSA","created_at":"2026-02-22T11:17:03.987069+00:00"}
 {"id":"6b32f98f-777e-418d-89d6-20a2c0c5f85f","series_id":"a20a05b9-cd43-450a-9497-b8abf990377a","alias":"IMSA","created_at":"2026-02-24T18:33:17.316357+00:00"}
+{"series_id":"4fa06176-37f8-41b7-bf2a-e9cd6511a2d6","alias":"NCS","id":"9375ec78-3bc6-4106-bc26-7c0a5a7aca59","created_at":"2026-11-01T19:42:38.903Z"}
+{"series_id":"4fa06176-37f8-41b7-bf2a-e9cd6511a2d6","alias":"NASCAR Cup","id":"bf241ad4-d84e-4833-bb41-bce14b72d97f","created_at":"2026-11-01T19:42:38.903Z"}
+{"series_id":"4fa06176-37f8-41b7-bf2a-e9cd6511a2d6","alias":"Cup Series","id":"feb49819-5fb2-40bb-b9a0-24e65923a121","created_at":"2026-11-01T19:42:38.903Z"}
