@@ -1,3 +1,4 @@
+import { normalizeFlag } from "@/lib/flags";
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ const FLAG_COLORS: Record<string, string> = {
   GREEN: "rgba(34, 197, 94, 0.08)", YELLOW: "rgba(234, 179, 8, 0.12)",
   FCY: "rgba(251, 146, 60, 0.12)", RED: "rgba(239, 68, 68, 0.12)",
   SC: "rgba(251, 146, 60, 0.12)",
+  VSC: "rgba(251, 191, 36, 0.12)", CAUTION: "rgba(234, 179, 8, 0.12)", CODE60: "rgba(124, 58, 237, 0.10)",
 };
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -733,13 +735,13 @@ export default function PositionProgressionChart({
             <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
             {/* Flag segment overlays */}
             {isContinuousMode && flagSegments
-              .filter(f => f.flag_state !== "GREEN" && FLAG_COLORS[f.flag_state])
+              .filter(f => normalizeFlag(f.flag_state) !== "GREEN" && FLAG_COLORS[normalizeFlag(f.flag_state)])
               .map((f, i) => (
                 <ReferenceArea
                   key={`flag-${i}`}
                   x1={f.start_elapsed}
                   x2={f.end_elapsed}
-                  fill={FLAG_COLORS[f.flag_state]}
+                  fill={FLAG_COLORS[normalizeFlag(f.flag_state)]}
                   fillOpacity={1}
                   ifOverflow="hidden"
                 />

@@ -21,11 +21,18 @@ const browserLoader: Loader = {
     if (!res.ok) throw new Error(`Could not load data schema (${res.status})`);
     return (await res.json()) as Schema;
   },
+  async partitions(table) {
+    const res = await fetch(`${BASE}${table}/_index.json`);
+    return res.ok ? ((await res.json()) as string[]) : [];
+  },
   async load(table, partitions) {
     const url = partitions ? `${BASE}${table}/${encodeURIComponent(partitions[0])}.json` : `${BASE}${table}.json`;
     const res = await fetch(url);
     if (!res.ok) return [];
-    return (await res.json()) as Record<string, unknown>[];
+    const rows = (await res.json()) as Record<string, unknown>[];
+    // Partition files may omit their key (build-data strips it from lap times): put it back.
+    if (partitions && table === "v2_lap_times") for (const r of rows) if (r.session_id == null) r.session_id = partitions[0];
+    return rows;
   },
 };
 

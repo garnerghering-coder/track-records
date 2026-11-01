@@ -24,6 +24,11 @@ export interface Relationship {
 }
 
 export interface Schema {
+  /**
+   * `partitions` may be omitted for a partitioned table (the published site lists
+   * them in <table>/_index.json instead, see Loader.partitions), so the schema
+   * stays small however many sessions there are.
+   */
   tables: Record<string, { partitionKey?: string; partitions?: string[] }>;
   relationships: Relationship[];
 }
@@ -32,6 +37,8 @@ export interface Loader {
   schema(): Promise<Schema>;
   /** Load a table, or only some partitions of a partitioned table. */
   load(table: string, partitions?: string[]): Promise<Row[]>;
+  /** List a partitioned table's partitions when the schema does not. */
+  partitions?(table: string): Promise<string[]>;
   /** Persist changes (Node only). */
   save?(table: string, rows: Row[], schema: Schema): Promise<void>;
 }
@@ -244,14 +251,18 @@ export class LocalDB {
     if (!meta.partitionKey || !partitions) {
       if (!this.full.has(table)) {
         if (meta.partitionKey) {
-          const all = meta.partitions || [];
-          this.full.set(table, Promise.all(all.map((p) => this.partition(table, p))).then((x) => x.flat()));
+          const list = meta.partitions ? Promise.resolve(meta.partitions) : this.loader.partitions ? this.loader.partitions(table) : Promise.resolve([]);
+          this.full.set(
+            table,
+            list.then((all) => Promise.all(all.map((p) => this.partition(table, p)))).then((x) => x.flat()),
+          );
         } else this.full.set(table, this.loader.load(table));
       }
       return this.full.get(table)!;
     }
-    const known = new Set(meta.partitions || []);
-    const lists = await Promise.all(partitions.filter((p) => known.has(String(p))).map((p) => this.partition(table, String(p))));
+    // Without a partition list, ask for each requested partition (a missing one loads as []).
+    const known = meta.partitions ? new Set(meta.partitions) : null;
+    const lists = await Promise.all(partitions.filter((p) => !known || known.has(String(p))).map((p) => this.partition(table, String(p))));
     return lists.flat();
   }
 
@@ -472,8 +483,8 @@ class QueryBuilder implements PromiseLike<Result> {
     }
   }
 
-  private partitionHint(): string[] | undefined {
-    const f = this.filters.find((x) => x.col === "session_id" && x.partitionValues);
+  private partitionHint(key = "session_id"): string[] | undefined {
+    const f = this.filters.find((x) => x.col === key && x.partitionValues);
     return f?.partitionValues?.map(String);
   }
 
@@ -484,7 +495,7 @@ class QueryBuilder implements PromiseLike<Result> {
       if (this.mode === "single") return this.result(null, null, { message: "No rows", code: "PGRST116" });
       return this.result(this.head ? null : this.mode === "maybe" ? null : [], this.countMode ? 0 : null);
     }
-    let rows = await this.db.rows(this.table, this.partitionHint());
+    let rows = await this.db.rows(this.table, this.partitionHint(schema.tables[this.table].partitionKey || "session_id"));
     for (const f of this.filters) rows = rows.filter(f.pred);
 
     const tree = parseSelect(this.selectStr);
@@ -543,7 +554,10 @@ class QueryBuilder implements PromiseLike<Result> {
         out[key] = null;
         continue;
       }
-      const target = await this.db.rows(n.name);
+      // A child partitioned on the joined column: load only this parent's partition.
+      const pk = schema.tables[n.name]?.partitionKey;
+      const via = pk ? rel.pairs.find(([, b]) => b === pk) : undefined;
+      const target = via ? (row[via[0]] != null ? await this.db.rows(n.name, [String(row[via[0]])]) : []) : await this.db.rows(n.name);
       const efs = this.embedFilters.filter((f) => f.path === subPath);
       if (rel.kind === "one") {
         let match = target.find((t) => rel.pairs.every(([a, b]) => row[a] != null && eqLoose(row[a], t[b]))) || null;

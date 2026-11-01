@@ -304,7 +304,7 @@ export function InsightGrid({ insights, names, max = 5 }: { insights: Insight[];
           </div>
           <p className={`mt-4 text-ink-2 ${k === 0 ? "text-lg" : "text-[15px]"}`}>
             {i.detail}
-            {i.driverIds && i.driverIds.length > 0 && names && i.kind !== "longest_stint" && i.kind !== "quickest_stop" && (
+            {i.driverIds && i.driverIds.length > 0 && names && !i.named && i.kind !== "longest_stint" && i.kind !== "quickest_stop" && (
               <span className="text-ink-3"> {i.driverIds.map((id) => lastName(names.drivers[id]?.full_name)).filter(Boolean).join(" / ")}</span>
             )}
           </p>
