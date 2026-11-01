@@ -213,6 +213,12 @@ summaries, `column_order`, `highlights_url`) has to be re-attached to the new se
   JS P217, "VasserSullivan", "TeamTGM", "Turner Motorpsort") and marks MX-5 Cup drivers "(R)" or
   "(V)". The importer ignores spacing, punctuation and the markers; for typos add a
   `search_aliases` row (entity_type `driver`, `team` or `car`, canonical = the row id).
+  Entry-list placeholders (driver "TBD TBD", no team or car) are skipped.
+- **Multi-race weekends** (MX-5 Cup, VP Racing): "Race N" takes the N-th race of the weekend in
+  IMSA's points data. MX-5 Cup gets IMSA's per-driver points; VP Racing has no points scheme yet
+  (`resolvePointsScheme` returns `imsa_vprc`, which records none).
+- **VP Racing classes** are `P3`, `GSX` and, in 2025 only, `GTDX`. The VPRC rounds at Daytona are
+  on the ROAR event pages. 2025 VIR also holds the "CTMP Race 2 Makeup" race.
 
 ## Full catalog
 
