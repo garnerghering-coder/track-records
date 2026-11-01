@@ -25,3 +25,6 @@ dist-ssr
 
 # Generated from data/ by scripts/build-data.mjs
 public/data
+
+# API response cache for scripts/import-f1.mjs and scripts/f1-media.mjs
+.cache/

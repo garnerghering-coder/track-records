@@ -626,3 +626,44 @@ Series folder names seen: `05_NASCAR Classic Presented by Petty's Garage`
 | Event | Sessions (races) | Time cards | Weather | Flags | Hour results | Importable | Results URL |
 |---|---|---|---|---|---|---|---|
 | VIRginia International Raceway | 4 (2) | yes | JSON | PDF | - | yes | https://imsa.results.alkamelcloud.com/?season=24_2024&evvent=15_VIRginia%20International%20Raceway |
+
+## Formula 1 — FIA Formula One World Championship (Jolpica + OpenF1)
+
+F1 does not use Al Kamel. `scripts/import-f1.mjs` imports Grands Prix and Sprints from two open APIs:
+
+| Source | Used for |
+|---|---|
+| [Jolpica](https://api.jolpi.ca/ergast/f1/) (Ergast-compatible) | calendar, race / sprint / qualifying classifications (Q1–Q3), championship points incl. the 2024 fastest-lap point, drivers (date of birth, nationality), constructors, official standings for verification, lap times as a fallback |
+| [OpenF1](https://api.openf1.org/v1/) | session times (local), practice and sprint-qualifying classifications, lap-by-lap timing → `v2_lap_times.elapsed`, tyre stints → `v2_stints`, pit-lane passages → `v2_pit_stops`, race control → `v2_annotation_items` and `v2_flag_segments`, weather → `v2_session_weather` |
+
+```bash
+# one season per run; every API response is cached (default .cache/f1, git-ignored; or F1_CACHE / --cache)
+node --experimental-strip-types scripts/import-f1.mjs --year 2025              # every round with race results
+node --experimental-strip-types scripts/import-f1.mjs --year 2026 --round 19     # one round
+node --experimental-strip-types scripts/import-f1.mjs --year 2025 --replace     # re-import rounds already in the data
+node --experimental-strip-types scripts/import-f1.mjs --year 2025 --verify-only # stored points vs official standings
+node --experimental-strip-types scripts/f1-media.mjs                            # liveries + track maps (see docs/CREDITS.md)
+node --experimental-strip-types scripts/recompute-fingerprints.mjs
+```
+
+How the data is shaped:
+
+- Series `Formula 1` (short `F1`; aliases F1 / Formula One / FIA Formula One World Championship — the site picks F1
+  rules by this name); one single-class season per year, no classes (`extra_data.Class` unset). Events are named `<year> <Grand Prix name>` with the Jolpica round number; rounds without race
+  results yet are skipped (re-run after the weekend).
+- Sessions: `Practice 1–3` (practice), `Sprint Qualifying` and `Qualifying` (qualifying), `Sprint` (sprint_race),
+  `Race` (race), in chronological order, with local start/end times.
+- Teams are constructors (one `v2_teams` row each, `team_id` set on every result row; Sauber and Audi are separate constructors); cars are the chassis per
+  season (`v2_cars` e.g. McLaren MCL39, linked in `v2_team_season_cars`). Drivers are matched to existing rows by
+  accent-insensitive name, or birthday + family name.
+- `v2_race_results.points` are the points awarded in that session (sprint points on the Sprint row, the 2024
+  fastest-lap point on the Race row). Classified retirements are `classified` with the reason in `dnf_reason`;
+  `extra_data` carries `PIC` (= position; the site reads wins, podiums and poles from it), the grid position, `position_text` and the fastest-lap rank. Grand Prix qualifying rows also carry `PIC` (pole = PIC 1; sprint-qualifying rows deliberately do not, so sprint poles are not counted as poles). Qualifying rows carry `q1_time`–`q3_time`; `best_time` is the time from the
+  last part reached and `gap_to_pole` is relative to the fastest time in that part.
+- Lap elapsed times are measured from the race start, set so the winner's last lap ends at the official race time
+  (so red-flag stoppages are included, as in the official time). When OpenF1 is missing laps (2025 Miami), the race's
+  Jolpica lap times are used instead. Flags: SC from "SAFETY CAR DEPLOYED" until the track goes green after
+  "SAFETY CAR IN THIS LAP"; VSC → `VSC`; track red flag → `RED` until the session restarts; full-track yellows →
+  `YELLOW`; `CHEQUERED` from the chequered flag until the last car finishes. Blue-flag messages are left out of the race-control annotations.
+- After a full-season run the script compares every driver's and constructor's stored points with Jolpica's official
+  standings and prints any mismatch (2024 and 2025 match exactly; 2026 matches through the last imported round).
