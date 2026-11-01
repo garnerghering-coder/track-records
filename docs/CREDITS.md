@@ -82,6 +82,15 @@ The derived PNGs are shared under the same licence as their source file.
 | Phoenix Raceway — Oval | [File:Phoenix Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:Phoenix_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
 | World Wide Technology Raceway — Oval | [File:World Wide Technology Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:World_Wide_Technology_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
 
+## Car liveries (2026 NASCAR Cup Series and Mazda MX-5 Cup gaps)
+
+These side profiles are used for educational purposes; please ask the rights holders before reusing them.
+
+| Season · car | Source | Rights | Processing |
+|---|---|---|---|
+| NASCAR Cup Series 2026 · #9 (Chase Elliott, NAPA Auto Parts Chevrolet) | Hendrick Motorsports' 2026 paint-scheme render `9C26-NAPA0004.png` (left-side frame of the team's 360° view), served from the team's image CDN (`d1moysbdfluzeo.cloudfront.net/uploads/production/`) and found embedded in [AutoRacing1's 2026 scheme post](https://www.autoracing1.com/?p=468085) ("Image supplied by Hendrick Motorsports") | © Hendrick Motorsports and the sponsors; team press image | Faint render noise around the car removed, trimmed, resized to 1200 px wide. Orientation unchanged. |
+| Whelen Mazda MX-5 Cup 2026 · #09 (Damon Ockey, BSI Racing) and #32 (Christian Hodneland, BSI Racing) | BSI Racing's 2026 driver cards on [bsiracing.com/drivers](https://www.bsiracing.com/drivers) (`BSI-Drivers-ockey`, `BSI-Drivers-hodneland`), which use the series' MX-5 Cup side-profile car art | © BSI Racing / IMSA / Mazda and the sponsors | Cut out of the card with the outline of the series' MX-5 Cup car art (the silhouette shared by this season's other MX-5 liveries, flipped because the cards show the car's right side) aligned to the car. The driver photo and background behind the car are removed. The artwork itself is unchanged and not mirrored. |
+
 ## Car liveries (NTT INDYCAR SERIES)
 
 INDYCAR side-profile car illustrations (2026) are INDYCAR's official car artwork published on indycar.com team pages
