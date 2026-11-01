@@ -234,7 +234,7 @@ function WinnerCell({ car, names, label, color }: { car: ClassifiedCar; names: R
 
 /* ── Insights ───────────────────────────────────────────────────── */
 
-export function InsightGrid({ insights, names, max = 6 }: { insights: Insight[]; names: ReturnType<typeof useNames>; max?: number }) {
+export function InsightGrid({ insights, names, max = 5 }: { insights: Insight[]; names: ReturnType<typeof useNames>; max?: number }) {
   const list = insights.slice(0, max);
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
