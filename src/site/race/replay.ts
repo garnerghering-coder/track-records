@@ -14,6 +14,7 @@ export interface ReplayCar {
   livery?: string;
   crossings: number[]; // elapsed at the end of lap 1..n (ascending)
   finalStatus: string;
+  grid?: number | null; // starting position, orders the field before lap 1 is complete
 }
 
 export interface ReplayStint {
@@ -87,7 +88,7 @@ export function buildModel(input: {
   for (const [k, arr] of byCar) {
     const crossings = arr.filter((x) => typeof x === "number").sort((a, b) => a - b);
     const meta = known.get(k);
-    cars.push({ carNumber: k, className: meta?.className ?? null, teamId: meta?.teamId ?? null, driverIds: meta?.driverIds ?? [], livery: meta?.livery, finalStatus: meta?.finalStatus ?? "", crossings });
+    cars.push({ carNumber: k, className: meta?.className ?? null, teamId: meta?.teamId ?? null, driverIds: meta?.driverIds ?? [], livery: meta?.livery, finalStatus: meta?.finalStatus ?? "", grid: meta?.grid ?? null, crossings });
   }
   const duration = Math.max(0, ...cars.map((c) => c.crossings[c.crossings.length - 1] || 0));
 
@@ -211,7 +212,12 @@ export function towerAt(model: ReplayModel, t: number, classFilter: string | nul
       const lastLap = laps >= 2 ? car.crossings[laps - 1] - car.crossings[laps - 2] : null;
       return { car, laps, lastCross, inPit, driverId: st?.driverId ?? car.driverIds[0] ?? null, out, lastLap };
     })
-    .sort((a, b) => b.laps - a.laps || a.lastCross - b.lastCross || a.car.carNumber.localeCompare(b.car.carNumber, undefined, { numeric: true }));
+    .sort(
+      (a, b) =>
+        b.laps - a.laps ||
+        (a.laps === 0 ? (a.car.grid ?? 999) - (b.car.grid ?? 999) : a.lastCross - b.lastCross) ||
+        a.car.carNumber.localeCompare(b.car.carNumber, undefined, { numeric: true }),
+    );
 
   const classCount = new Map<string, number>();
   const gapTo = (leader: number[], r: (typeof rows)[number]) => {

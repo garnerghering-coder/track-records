@@ -432,7 +432,15 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
 
   // longest stint
   const stints = mergeStints(input.stints.filter((s) => inRace(s.session_id)));
+  // Only meaningful where cars share drivers (endurance); single-driver cars always "never hand over".
+  const driversPerCar = new Map<string, Set<string>>();
+  for (const s of stints) {
+    const k = String(s.car_number);
+    if (!driversPerCar.has(k)) driversPerCar.set(k, new Set());
+    if (s.driver_id) driversPerCar.get(k)!.add(s.driver_id);
+  }
   const longest = stints
+    .filter((s) => (driversPerCar.get(String(s.car_number))?.size ?? 0) > 1)
     .map((s) => ({ s, d: (s.end_elapsed ?? 0) - (s.start_elapsed ?? 0) }))
     .filter((x) => x.d > 0)
     .sort((a, b) => b.d - a.d)[0];
