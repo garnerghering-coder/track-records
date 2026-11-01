@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Flag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,6 +10,10 @@ interface ReportDialogProps {
   targetId: string;
   targetName: string;
 }
+
+/** Compact uppercase action button used in page-header action rows. */
+export const actionBtn =
+  "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded border bg-card px-3 font-display text-xs font-semibold uppercase tracking-[0.12em] text-foreground transition-colors hover:border-foreground/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0";
 
 const ReportDialog = ({ reportType, targetId, targetName }: ReportDialogProps) => {
   const { toast } = useToast();
@@ -24,11 +27,13 @@ const ReportDialog = ({ reportType, targetId, targetName }: ReportDialogProps) =
 
     const { data: { session } } = await supabase.auth.getSession();
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.from("reports" as any).insert({
       report_type: reportType,
       target_id: targetId,
       reporter_id: session?.user?.id || null,
       message: message.trim(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
 
     setSubmitting(false);
@@ -44,27 +49,34 @@ const ReportDialog = ({ reportType, targetId, targetName }: ReportDialogProps) =
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <Flag className="h-3.5 w-3.5" /> Report
-        </Button>
+        <button type="button" className={actionBtn}>
+          <Flag /> Report
+        </button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="rounded sm:rounded">
         <DialogHeader>
-          <DialogTitle>Report: {targetName}</DialogTitle>
+          <div className="label-caps">Report an issue · {reportType}</div>
+          <DialogTitle className="font-display text-xl font-bold uppercase tracking-wide">{targetName}</DialogTitle>
+          <DialogDescription>
+            Spotted incorrect or missing information? Describe it below and an admin will review your report.
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <p className="text-sm text-muted-foreground">
-            If you notice incorrect information, please describe the issue below. An admin will review your report.
-          </p>
+        <div className="space-y-3">
           <Textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Describe what's incorrect…"
+            placeholder="e.g. Wrong finishing position at Sebring 2025 — should be P2 in GTD."
             rows={4}
+            className="rounded"
           />
-          <Button onClick={handleSubmit} disabled={submitting || !message.trim()} className="w-full">
-            {submitting ? "Submitting…" : "Submit Report"}
-          </Button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || !message.trim()}
+            className="h-10 w-full rounded bg-signal font-display text-sm font-bold uppercase tracking-[0.12em] text-signal-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+          >
+            {submitting ? "Submitting…" : "Submit report"}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

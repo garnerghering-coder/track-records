@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Trophy, HelpCircle } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TrackFingerprint from "@/components/TrackFingerprint";
 import Header from "@/components/Header";
@@ -12,6 +12,9 @@ import { formatDateRange } from "@/lib/date-utils";
 import { computeTrackMetrics } from "@/lib/track-calculations";
 import ReportDialog from "@/components/ReportDialog";
 import FlagImage from "@/components/FlagImage";
+import { EmptyState, PageHeader, Panel, Pos, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
+import { ProfileLoading, ProfileNotFound, ReportStrip, ShareButton, yearSpan } from "@/components/profile-kit";
+import { shortName } from "@/lib/race-data";
 
 interface PodiumEntry {
   driverId: string;
@@ -19,17 +22,25 @@ interface PodiumEntry {
   position: number;
 }
 
-function shortenName(full: string): string {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length <= 1) return full;
-  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
-}
+const num = (v: any) => (v == null || v === "" ? null : Number(v));
 
-const PODIUM_COLORS: Record<number, string> = {
-  1: "bg-yellow-500/20 text-yellow-400 border-yellow-500/40",
-  2: "bg-gray-300/15 text-gray-300 border-gray-400/40",
-  3: "bg-amber-700/20 text-amber-600 border-amber-700/40",
-};
+function Spec({ label, value, unit, className }: { label: string; value: number | null; unit?: string; className?: string }) {
+  return (
+    <div className={`min-w-0 bg-card px-4 py-2.5 ${className ?? ""}`}>
+      <div className="label-caps truncate">{label}</div>
+      <div className="num mt-0.5 text-sm text-foreground">
+        {value != null && Number.isFinite(value) ? (
+          <>
+            {value}
+            {unit && <span className="ml-0.5 text-xs text-muted-foreground">{unit}</span>}
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const CircuitProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -133,8 +144,18 @@ const CircuitProfile = () => {
     fetchData();
   }, [id]);
 
-  if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
-  if (!circuit) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Circuit not found.</p></div></div>;
+  const derived = useMemo(() => {
+    const years = [...new Set(events.map((e: any) => e.v2_seasons?.year ?? (e.start_date ? Number(e.start_date.slice(0, 4)) : null)).filter(Boolean))] as number[];
+    const series = [...new Set(events.map((e: any) => e.v2_seasons?.v2_series?.name).filter(Boolean))] as string[];
+    return { years, series };
+  }, [events]);
+
+  if (loading) return <ProfileLoading />;
+  if (!circuit) return <ProfileNotFound what="Circuit" backTo="/search?tab=circuits" backLabel="Back to circuits" />;
+
+  const main = layouts[0];
+  const lengthKm = num(circuit.length_km) ?? num(main?.length_km);
+  const turns = num(main?.turns);
 
   return (
     <div className="min-h-screen bg-background">
@@ -145,44 +166,80 @@ const CircuitProfile = () => {
         ogImage={circuit.layout_image_url || undefined}
       />
       <Header />
-      <section className="pt-24 pb-10 bg-card border-b border-border">
-        <div className="container">
-          <Link to="/search" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Link>
-          <h1 className="font-display text-3xl font-bold text-foreground">{circuit.name}</h1>
-          <div className="mt-2 flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
-            {circuit.country && <span>{circuit.country}</span>}
-            {circuit.location && <span>{circuit.location}</span>}
-            {circuit.length_km && <span>{Number(circuit.length_km).toFixed(2)} km</span>}
-          </div>
-        </div>
-      </section>
 
-      <div className="container py-8">
+      <PageHeader
+        kicker={
+          <>
+            <Link to="/search?tab=circuits" className="text-primary hover:underline">
+              Circuit
+            </Link>
+            {circuit.country && (
+              <>
+                <span>·</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <FlagImage nationality={circuit.country} size={14} /> {circuit.country}
+                </span>
+              </>
+            )}
+          </>
+        }
+        title={circuit.name}
+        meta={
+          <>
+            {circuit.location && <span className="text-foreground">{circuit.location}</span>}
+            {derived.series.map((s) => (
+              <span key={s}>{s}</span>
+            ))}
+          </>
+        }
+        actions={
+          <>
+            <ShareButton title={`${circuit.name} · Track Records`} />
+            <ReportDialog reportType="circuit" targetId={circuit.id} targetName={circuit.name} />
+          </>
+        }
+      >
+        <StatStrip className="mt-7 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Length" value={lengthKm != null ? lengthKm.toFixed(3) : "—"} sub={lengthKm != null ? "km" : "Not recorded"} />
+          <Stat label="Turns" value={turns ?? "—"} sub={main ? main.name : "Not recorded"} />
+          <Stat label="Layouts" value={layouts.length || "—"} sub={layouts.length > 1 ? "configurations" : layouts.length ? "configuration" : "Not recorded"} />
+          <Stat label="Events" value={events.length} sub="published" accent={events.length > 0} />
+          <Stat label="Series" value={derived.series.length} sub={derived.series[0]} />
+          <Stat label="Seasons" value={derived.years.length || "—"} sub={derived.years.length ? yearSpan(derived.years) : undefined} />
+        </StatStrip>
+      </PageHeader>
+
+      <main className="container py-10 md:py-12">
         {circuit.layout_image_url && (
-          <div className="mb-8 rounded-lg border border-border bg-card p-5">
-            <h3 className="font-display text-sm font-semibold text-card-foreground mb-2">Circuit Layout</h3>
-            <img src={circuit.layout_image_url} alt={`${circuit.name} layout`} className="w-full max-h-64 rounded object-contain" />
-          </div>
+          <section className="mb-12">
+            <SectionHeader kicker="Map" title="Circuit layout" />
+            <Panel className="flex items-center justify-center p-6">
+              <img src={circuit.layout_image_url} alt={`${circuit.name} layout`} className="logo-adapt max-h-64 w-full object-contain" />
+            </Panel>
+          </section>
         )}
 
-        {/* Circuit Configurations with Metrics */}
+        {/* ── Layouts + fingerprint ─────────────────────────────── */}
         {layouts.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="font-display text-xl font-semibold text-foreground">Circuit Fingerprint</h2>
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 hover:text-muted-foreground cursor-help transition-colors" />
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[240px] text-xs">
-                    These characteristics are calculated using mathematical formulas derived from circuit configuration data — no AI is used.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+          <section className="mb-12">
+            <SectionHeader
+              kicker={`${layouts.length} configuration${layouts.length !== 1 ? "s" : ""}`}
+              title="Circuit fingerprint"
+              right={
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="label-caps flex shrink-0 items-center gap-1 transition-colors hover:text-foreground">
+                        <HelpCircle className="h-3.5 w-3.5" /> How it works
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="max-w-[240px] text-xs">
+                      These characteristics are calculated using mathematical formulas derived from circuit configuration data — no AI is used.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              }
+            />
             <div className="space-y-4">
               {layouts.map((l: any) => {
                 const m = computeTrackMetrics(
@@ -190,76 +247,108 @@ const CircuitProfile = () => {
                   l.turns,
                   l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
                   l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
-                  l.heavy_braking_corners
+                  l.heavy_braking_corners,
                 );
                 return (
-                <div key={l.id} className="rounded-lg border border-border bg-card p-5 flex items-center justify-between gap-6">
-                    {!l.layout_image_url && (
-                      <div className="shrink-0">
-                        <span className="font-display text-sm font-semibold text-card-foreground">{l.name}</span>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                          {l.length_km && <span>{l.length_km} km</span>}
-                          {l.turns != null && <span>{l.turns} turns</span>}
+                  <Panel key={l.id} className="overflow-hidden">
+                    <div className="flex h-10 items-center gap-2 border-b px-4">
+                      <span className="label-caps">Layout</span>
+                      <span className="truncate font-display text-base font-bold uppercase tracking-wide">{l.name}</span>
+                    </div>
+                    <div className={l.layout_image_url ? "grid md:grid-cols-[minmax(0,260px)_1fr]" : ""}>
+                      {l.layout_image_url && (
+                        <div className="flex items-center justify-center border-b p-5 md:border-b-0 md:border-r">
+                          <img src={l.layout_image_url} alt={`${l.name} layout`} className="logo-adapt max-h-36 w-full object-contain" loading="lazy" />
                         </div>
+                      )}
+                      <div className="flex min-w-0 items-center overflow-x-auto p-4">
+                        <TrackFingerprint metrics={m} />
                       </div>
-                    )}
-                    <TrackFingerprint
-                      metrics={m}
-                      layoutImageUrl={l.layout_image_url}
-                      layoutName={l.name}
-                      lengthKm={l.length_km}
-                      turns={l.turns}
-                    />
-                  </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-px border-t bg-border sm:grid-cols-5">
+                      <Spec label="Length" value={num(l.length_km)} unit="km" />
+                      <Spec label="Turns" value={num(l.turns)} />
+                      <Spec label="Heavy braking" value={num(l.heavy_braking_corners)} unit="corners" />
+                      <Spec label="Elevation Δ" value={num(l.total_elevation_change_m)} unit="m" />
+                      <Spec label="Straights" value={num(l.total_straight_length_km)} unit="km" className="col-span-2 sm:col-span-1" />
+                    </div>
+                  </Panel>
                 );
               })}
             </div>
-          </div>
+          </section>
         )}
 
-        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events at This Circuit</h2>
-        {events.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No events linked to this circuit yet.</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {events.map((ev: any) => {
-              const evPodium = (podiums[ev.id] || []).sort((a, b) => a.position - b.position);
-              return (
-                <Link key={ev.id} to={`/events/${ev.id}`} className="group rounded-lg border border-border bg-card p-4 hover:border-primary/40 transition-all">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 shrink-0">
-                      <FlagImage nationality={ev.v2_circuits?.country} size={24} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="font-display text-sm font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{ev.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {ev.v2_seasons?.v2_series?.name} · {ev.start_date ? formatDateRange(ev.start_date, ev.end_date) : ev.v2_seasons?.year}
-                      </p>
-                    </div>
-                  </div>
-                  {evPodium.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-1.5">
-                      {evPodium.map(p => (
-                        <span key={p.position} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${PODIUM_COLORS[p.position] || ""}`}>
-                          <Trophy className="h-2.5 w-2.5" />
-                          <span className="opacity-60">P{p.position}</span>
-                          <span className="truncate max-w-[80px]">{shortenName(p.name)}</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        {/* ── Events held ──────────────────────────────────────── */}
+        <section>
+          <SectionHeader kicker={`${events.length} event${events.length !== 1 ? "s" : ""}`} title="Events held here" />
+          {events.length === 0 ? (
+            <EmptyState title="No events yet">No published events are linked to this circuit yet.</EmptyState>
+          ) : (
+            <div className="overflow-hidden rounded border bg-card">
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th className="hidden w-[9.5rem] sm:table-cell">Date</th>
+                      <th>Event</th>
+                      <th className="hidden lg:table-cell">Series</th>
+                      <th className="hidden md:table-cell">Overall podium</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {events.map((ev: any) => {
+                      const evPodium = [...(podiums[ev.id] || [])].sort((a, b) => a.position - b.position);
+                      const date = ev.start_date ? formatDateRange(ev.start_date, ev.end_date) : String(ev.v2_seasons?.year ?? "—");
+                      return (
+                        <tr key={ev.id}>
+                          <td className="num hidden whitespace-nowrap text-xs text-muted-foreground sm:table-cell">{date}</td>
+                          <td className="py-2.5">
+                            <Link to={`/events/${ev.id}`} className="font-medium leading-snug hover:text-primary">
+                              {ev.name}
+                            </Link>
+                            <div className="text-xs text-muted-foreground lg:hidden">
+                              <span className="num sm:hidden">{date} · </span>
+                              {ev.v2_seasons?.v2_series?.name}
+                            </div>
+                            {evPodium.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 md:hidden">
+                                {evPodium.map((p) => (
+                                  <span key={p.position} className="inline-flex items-center gap-1.5 text-xs">
+                                    <Pos value={p.position} className="h-5 min-w-[1.25rem] text-xs" />
+                                    {shortName(p.name)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="hidden text-muted-foreground lg:table-cell">{ev.v2_seasons?.v2_series?.name}</td>
+                          <td className="hidden py-2 md:table-cell">
+                            {evPodium.length === 0 ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                {evPodium.map((p) => (
+                                  <Link key={p.position} to={`/driver/${p.driverId}`} className="inline-flex items-center gap-1.5 whitespace-nowrap hover:text-primary">
+                                    <Pos value={p.position} className="h-5 min-w-[1.25rem] text-xs" />
+                                    {shortName(p.name)}
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
 
-        <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
-          <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
-          <p className="text-xs text-muted-foreground mb-3">Help us improve this circuit profile.</p>
-          <ReportDialog reportType="circuit" targetId={id!} targetName={circuit.name} />
-        </div>
-      </div>
+        <ReportStrip reportType="circuit" targetId={id!} targetName={circuit.name} noun="circuit" />
+      </main>
       <Footer />
     </div>
   );

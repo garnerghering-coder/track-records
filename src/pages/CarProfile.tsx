@@ -1,21 +1,34 @@
-import { useEffect, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Wrench } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import FlagImage from "@/components/FlagImage";
 import ReportDialog from "@/components/ReportDialog";
-import { formatDateRange } from "@/lib/date-utils";
+import { ClassBadge, EmptyState, PageHeader, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
+import {
+  CountList,
+  DriverTallyTable,
+  EntriesTable,
+  ProfileLoading,
+  ProfileNotFound,
+  ReportStrip,
+  ShareButton,
+  buildEntries,
+  driverTallies,
+  entryStats,
+  yearSpan,
+} from "@/components/profile-kit";
+import { fetchSeasonClassColors } from "@/lib/race-data";
+import { getClassColor, sortClasses } from "@/lib/classes";
 
 const CarProfilePage = () => {
   const { id } = useParams<{ id: string }>();
   const [car, setCar] = useState<any>(null);
   const [raceHistory, setRaceHistory] = useState<any[]>([]);
   const [teamAliasMap, setTeamAliasMap] = useState<Record<string, string>>({});
+  const [classColors, setClassColors] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,38 +40,29 @@ const CarProfilePage = () => {
       if (c) {
         const { data: raceResults } = await supabase
           .from("v2_race_results" as any)
-          .select("position, status, car_number, v2_drivers(id, full_name, nationality), v2_teams(id, full_name), v2_sessions(id, name, session_type, event_id, date, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(name)), v2_circuits(name, country)))")
+          .select(
+            "position, status, car_number, session_id, extra_data, v2_drivers(id, full_name, nationality), v2_teams(id, full_name), v2_sessions(id, name, session_type, event_id, date, parent_session_id, v2_events(id, name, start_date, end_date, v2_seasons(id, year, v2_series(id, name, short_name)), v2_circuits(name, country)))",
+          )
           .eq("car_id", id)
           .order("created_at", { ascending: false })
-          .limit(200);
+          .limit(1000);
 
-        const results = (raceResults || []).map((r: any) => ({
-          ...r,
-          event: r.v2_sessions?.v2_events,
-          session: r.v2_sessions,
-        })).sort((a: any, b: any) => {
-          const dateA = a.event?.start_date || "";
-          const dateB = b.event?.start_date || "";
-          return dateB.localeCompare(dateA);
-        });
+        const results = (raceResults || []) as any[];
         setRaceHistory(results);
 
-        // Build team alias map
-        const seasonIds = new Set<string>();
-        for (const r of results) {
-          const sid = r.event?.v2_seasons?.id;
-          if (sid) seasonIds.add(sid);
-        }
-        if (seasonIds.size > 0) {
-          const { data: aliases } = await supabase
-            .from("v2_team_season_names" as any)
-            .select("team_id, season_id, display_name")
-            .in("season_id", Array.from(seasonIds));
+        // Build team alias map + class colours
+        const seasonIds = [...new Set(results.map((r) => r.v2_sessions?.v2_events?.v2_seasons?.id).filter(Boolean))] as string[];
+        if (seasonIds.length > 0) {
+          const [{ data: aliases }, colors] = await Promise.all([
+            supabase.from("v2_team_season_names" as any).select("team_id, season_id, display_name").in("season_id", seasonIds),
+            fetchSeasonClassColors(seasonIds),
+          ]);
           const map: Record<string, string> = {};
           for (const a of (aliases || []) as any[]) {
             map[`${a.team_id}:${a.season_id}`] = a.display_name;
           }
           setTeamAliasMap(map);
+          setClassColors(colors);
         }
       }
       setLoading(false);
@@ -66,95 +70,129 @@ const CarProfilePage = () => {
     fetchData();
   }, [id]);
 
-  if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
-  if (!car) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Car not found.</p></div></div>;
+  const entries = useMemo(() => buildEntries(raceHistory, teamAliasMap), [raceHistory, teamAliasMap]);
+  const stats = useMemo(() => entryStats(entries), [entries]);
+  const drivers = useMemo(() => driverTallies(entries), [entries]);
+  const side = useMemo(() => {
+    const teams = new Map<string, { id: string; name: string; n: number; wins: number }>();
+    for (const e of entries) {
+      if (!e.team) continue;
+      const t = teams.get(e.team.id) ?? { ...e.team, n: 0, wins: 0 };
+      t.n++;
+      if (e.classified && e.classPos === 1) t.wins++;
+      teams.set(e.team.id, t);
+    }
+    const classes = new Map<string, { n: number; seasonId?: string }>();
+    for (const e of entries) if (e.cls) classes.set(e.cls, { n: (classes.get(e.cls)?.n || 0) + 1, seasonId: e.seasonId });
+    const series = new Map<string, { name: string; n: number }>();
+    for (const e of entries) {
+      const s = e.event?.v2_seasons?.v2_series;
+      if (s) series.set(s.id, { name: s.name, n: (series.get(s.id)?.n || 0) + 1 });
+    }
+    return {
+      teams: [...teams.values()].sort((a, b) => b.n - a.n),
+      classes: [...classes.entries()].sort((a, b) => sortClasses(a[0], b[0])).map(([c, v]) => ({ c, ...v })),
+      series: [...series.entries()].map(([sid, v]) => ({ id: sid, ...v })),
+    };
+  }, [entries]);
+
+  if (loading) return <ProfileLoading />;
+  if (!car) return <ProfileNotFound what="Car" backTo="/cars" backLabel="Back to cars" />;
 
   const displayName = [car.manufacturer, car.model_name].filter(Boolean).join(" ");
+  const pct = (n: number) => (stats.starts > 0 ? `${Math.round((n / stats.starts) * 100)}% of entries` : undefined);
 
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead
-        title={displayName}
-        description={`Car profile for ${displayName}. View race history and results.`}
-        canonical={`/car/${id}`}
-      />
+      <SEOHead title={displayName} description={`Car profile for ${displayName}. View race history and results.`} canonical={`/car/${id}`} />
       <Header />
-      <section className="pt-24 pb-12" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
-        <div className="container">
-          <Link to="/cars" className="inline-flex items-center gap-1 text-sm mb-6" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-            <ArrowLeft className="h-4 w-4" /> Back to Cars
-          </Link>
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-            <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/20">
-              <Wrench className="h-10 w-10 text-primary" />
-            </div>
-            <div>
-              <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>{displayName}</h1>
-              {car.manufacturer && <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>{car.manufacturer}</p>}
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <div className="container py-10">
-        <h2 className="font-display text-xl font-semibold text-foreground mb-4">Race Results</h2>
-        {raceHistory.length === 0 ? (
-          <p className="text-muted-foreground text-sm">No race results found for this car.</p>
+      <PageHeader
+        kicker={
+          <>
+            <Link to="/cars" className="text-primary hover:underline">
+              Car
+            </Link>
+            {car.manufacturer && (
+              <>
+                <span>·</span>
+                <span>{car.manufacturer}</span>
+              </>
+            )}
+            {side.classes.map((c) => (
+              <ClassBadge key={c.c} name={c.c} color={getClassColor(c.c, c.seasonId ? classColors[c.seasonId] : undefined)} />
+            ))}
+          </>
+        }
+        title={displayName}
+        meta={
+          <>
+            {side.series.map((s) => (
+              <span key={s.id}>{s.name}</span>
+            ))}
+            {stats.years.length > 0 && <span className="num">{yearSpan(stats.years)}</span>}
+          </>
+        }
+        actions={
+          <>
+            <ShareButton title={`${displayName} · Track Records`} />
+            <ReportDialog reportType="car" targetId={car.id} targetName={car.model_name} />
+          </>
+        }
+      >
+        <StatStrip className="mt-7 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Entries" value={stats.starts} sub={`${stats.events} event${stats.events !== 1 ? "s" : ""}${stats.dnfs ? ` · ${stats.dnfs} DNF` : ""}`} />
+          <Stat label={stats.classAware ? "Class wins" : "Wins"} value={stats.wins} accent={stats.wins > 0} sub={pct(stats.wins)} />
+          <Stat label={stats.classAware ? "Class podiums" : "Podiums"} value={stats.podiums} sub={pct(stats.podiums)} />
+          <Stat
+            label="Best finish"
+            value={stats.best ? `P${stats.best.classPos}` : "—"}
+            sub={stats.best ? (stats.bestCount > 1 ? `${stats.bestCount} times` : stats.best.event?.name) : undefined}
+          />
+          <Stat label="Teams" value={side.teams.length} sub="ran this car" />
+          <Stat label="Drivers" value={drivers.length} sub={stats.years.length ? yearSpan(stats.years) : undefined} />
+        </StatStrip>
+      </PageHeader>
+
+      <main className="container py-10 md:py-12">
+        {entries.length === 0 ? (
+          <EmptyState title="No race results">We don't have race results for this car yet.</EmptyState>
         ) : (
-          <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Session</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Driver</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead className="text-center">Pos</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {raceHistory.map((r: any, i: number) => (
-                    <TableRow key={r.id || i}>
-                      <TableCell>
-                        {r.event ? <Link to={`/events/${r.event.id}`} className="text-primary hover:underline font-medium">{r.event.name}</Link> : "—"}
-                        <p className="text-xs text-muted-foreground">{r.event?.v2_seasons?.v2_series?.name} {r.event?.v2_seasons?.year && `· ${r.event.v2_seasons.year}`}</p>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{r.session?.name || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {r.event?.start_date ? formatDateRange(r.event.start_date, r.event.end_date) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {r.v2_drivers ? (
-                          <Link to={`/driver/${r.v2_drivers.id}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                            <FlagImage nationality={r.v2_drivers.nationality} size={14} />
-                            {r.v2_drivers.full_name}
-                          </Link>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {r.v2_teams ? <Link to={`/team/${r.v2_teams.id}`} className="text-primary hover:underline text-sm">{teamAliasMap[`${r.v2_teams.id}:${r.event?.v2_seasons?.id}`] || r.v2_teams.full_name}</Link> : "—"}
-                      </TableCell>
-                      <TableCell className="text-center font-accent font-bold text-card-foreground text-base">{r.position ?? "—"}</TableCell>
-                      <TableCell>
-                        {r.status && r.status !== "finished" ? <span className="text-destructive text-sm font-medium">{r.status.toUpperCase()}</span> : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+          <>
+            <div className="grid items-start gap-8 lg:grid-cols-[300px_1fr]">
+              <section className="min-w-0">
+                <SectionHeader kicker="Entrants" title="Teams" />
+                <div className="grid gap-px overflow-hidden rounded border bg-border">
+                  <CountList
+                    title="Team · entries"
+                    items={side.teams.map((t) => ({
+                      key: t.id,
+                      label: (
+                        <Link to={`/team/${t.id}`} className="font-medium hover:text-primary">
+                          {t.name}
+                        </Link>
+                      ),
+                      sub: t.wins > 0 ? `${t.wins} class win${t.wins !== 1 ? "s" : ""}` : undefined,
+                      count: t.n,
+                    }))}
+                  />
+                </div>
+              </section>
+              <section className="min-w-0">
+                <SectionHeader kicker={`${drivers.length} drivers · by entries`} title="Drivers" />
+                <DriverTallyTable tallies={drivers} classAware={stats.classAware} />
+              </section>
             </div>
-          </div>
+
+            <section className="mt-12">
+              <SectionHeader kicker={`${entries.length} entries · one row per car`} title="Race results" />
+              <EntriesTable entries={entries} other="team" classColors={classColors} />
+            </section>
+          </>
         )}
 
-        <div className="mt-8 rounded-lg border border-border bg-card p-5 text-center">
-          <p className="text-sm font-medium text-card-foreground mb-1">Missing or incorrect information?</p>
-          <p className="text-xs text-muted-foreground mb-3">Help us improve this car profile.</p>
-          <ReportDialog reportType="car" targetId={id!} targetName={car.model_name} />
-        </div>
-      </div>
+        <ReportStrip reportType="car" targetId={id!} targetName={car.model_name} noun="car" />
+      </main>
       <Footer />
     </div>
   );
