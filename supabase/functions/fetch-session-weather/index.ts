@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -93,6 +94,10 @@ function computeEndDate(sessionDate: string, startTime: string, endTime: string)
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Admin only (or an internal service-role call): this function writes with the service-role key.
+  const auth = await requireAdmin(req, corsHeaders);
+  if (auth instanceof Response) return auth;
 
   try {
     const supabase = createClient(

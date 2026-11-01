@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireCronOrAdmin } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,33 +18,25 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Caller check: a scheduler presenting CRON_SECRET in `x-cron-secret` (or the
+    // service-role key as bearer), or a signed-in admin. Previously the cron path
+    // (no sourceId) ran for anyone.
+    const auth = await requireCronOrAdmin(req, corsHeaders);
+    if (auth instanceof Response) return auth;
+
     // Check if called with a specific sourceId (manual "Run Now") or as cron (all due sources)
     let sources: any[] = [];
-    let authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
+    // Downstream scrape-race-results requires an admin user or the service-role key:
+    // forward the admin's JWT, or use the service-role key for internal (cron) calls.
+    const authHeader = auth.internal
+      ? `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+      : req.headers.get("Authorization")!;
 
     const body = await req.json().catch(() => ({}));
     const specificSourceId = body.sourceId;
 
     if (specificSourceId) {
-      // Manual run - verify admin
-      const anonClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const token = authHeader.replace("Bearer ", "");
-      const { data: claimsData } = await anonClient.auth.getClaims(token);
-      if (!claimsData?.claims) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const userId = claimsData.claims.sub as string;
-      const { data: roleData } = await adminClient.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
-      if (!roleData || roleData.length === 0) {
-        return new Response(JSON.stringify({ error: "Admin access required" }), {
-          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
+      // Manual run
       const { data } = await adminClient.from("import_sources").select("*").eq("id", specificSourceId).single();
       if (data) sources = [data];
     } else {

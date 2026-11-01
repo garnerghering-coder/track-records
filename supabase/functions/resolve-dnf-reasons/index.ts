@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/auth.ts";
 import { callAI } from "../_shared/call-ai.ts";
 
 const corsHeaders = {
@@ -84,6 +85,10 @@ async function processBatch(admin: any, batch: any[]): Promise<{ resolved: numbe
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Admin only (or an internal service-role call): this function writes with the service-role key.
+  const auth = await requireAdmin(req, corsHeaders);
+  if (auth instanceof Response) return auth;
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
