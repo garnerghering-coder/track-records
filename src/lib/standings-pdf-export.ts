@@ -346,7 +346,7 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     doc.setFontSize(6);
     doc.setTextColor(180);
     doc.text(new Date().toLocaleDateString(), margin, pageHeight - 6);
-    doc.text("track-records.lovable.app", pageWidth - margin, pageHeight - 6, { align: "right" });
+    doc.text("track-records.com", pageWidth - margin, pageHeight - 6, { align: "right" });
   }
 
   onProgress?.(90);

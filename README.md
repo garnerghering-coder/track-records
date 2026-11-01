@@ -1,73 +1,39 @@
-# Welcome to your Lovable project
+# Track Records
 
-## Project info
+Multi-class sportscar results, timing analysis and driver records — IMSA and beyond.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+The site is a static React app. **All data lives in this repository** under `data/`; there is no database server. Every data change is a commit you can review and revert.
 
-## How can I edit this code?
+## How it works
 
-There are several ways of editing your application.
+| Piece | Where |
+|---|---|
+| Data store | `data/<table>.ndjson` (one JSON row per line). Lap times, stints and pit stops are split per session: `data/<table>/<session_id>.ndjson` |
+| Images | `public/media/` (car liveries, circuit layouts) |
+| Query engine | `src/integrations/supabase/local-db.ts` — runs the same supabase-js style queries the pages use, over the data files, in the browser and in Node |
+| Scoring | `supabase/functions/_shared/fingerprint-math.ts`, `driver-fingerprint.ts` (driver & circuit fingerprints), `imsa-points.ts` (official points rules), `src/lib/standings.ts` (championship standings) |
+| Design system | `docs/REDESIGN.md`, `src/index.css`, `src/components/tr/` |
+| Data sources | `docs/DATA-SOURCES.md` — importable series and events from official timing |
 
-**Use Lovable**
+## Develop
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm install
+npm run dev        # builds public/data from data/, then starts Vite on :8080
+npx vitest run     # scoring, points and standings tests
+npm run build      # production build in dist/
 ```
 
-**Edit a file directly in GitHub**
+## Data scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Run with Node 22.6+:
 
-**Use GitHub Codespaces**
+```bash
+node scripts/build-data.mjs                                              # data/ -> public/data (automatic before dev/build)
+node --experimental-strip-types scripts/recompute-fingerprints.mjs       # recompute driver fingerprints
+node scripts/export-from-supabase.mjs                                    # one-time export from the old Supabase backend
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Deploy
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Pushing to `main` runs `.github/workflows/deploy.yml`: tests, build, publish to GitHub Pages. For a custom domain, set it in **Settings → Pages** and point DNS at GitHub Pages.

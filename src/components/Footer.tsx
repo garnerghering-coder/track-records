@@ -31,7 +31,7 @@ const Footer = () => (
   <footer className="mt-16 border-t bg-card/50">
     <div className="container grid gap-10 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
       <div className="max-w-xs">
-        <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/lovable-uploads/c4e44093-bdee-41b1-bde6-0e0d54bf8054.png" />
+        <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/brand/logo.png" />
         <p className="mt-3 text-sm text-muted-foreground">
           Multi-class sportscar results, timing analysis and driver records, linked together.
         </p>

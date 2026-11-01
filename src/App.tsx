@@ -34,7 +34,7 @@ const App = () => (
       
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
         <ScrollToTop />
         <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Routes>

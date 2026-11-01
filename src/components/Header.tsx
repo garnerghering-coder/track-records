@@ -56,7 +56,7 @@ const Header = () => {
       <header className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
         <div className="container flex h-14 items-center gap-6">
           <Link to="/" className="flex shrink-0 items-center" aria-label="Track Records home">
-            <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/lovable-uploads/bdb4b583-1508-42b0-bfde-3780509298af.png" />
+            <img alt="Track Records" className="logo-adapt h-6 w-auto" src="/brand/logo.png" />
           </Link>
 
           <nav className="hidden h-full items-stretch lg:flex">
