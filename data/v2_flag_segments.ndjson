@@ -6,6 +6,7 @@
 {"flag_state":"YELLOW","start_elapsed":6798.291,"end_elapsed":6838.263,"session_id":"7f8da5fc-0565-4dff-85e0-548addc8887b","id":"008549df-4369-4bdc-a20b-fe125565ef30","created_at":"2026-11-01T15:28:59.887Z"}
 {"flag_state":"GREEN","start_elapsed":901.361,"end_elapsed":5773.201,"session_id":"2066dec4-f537-4c24-8ecf-41eb923f0ef2","id":"0086f576-9242-456f-9a74-e19969b4a304","created_at":"2026-11-01T15:22:49.229Z"}
 {"flag_state":"GREEN","start_elapsed":3810.725,"end_elapsed":7002.674,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"008f77b7-7b62-4aad-a6c9-7d5d84135121","created_at":"2026-11-01T15:16:49.272Z"}
+{"session_id":"ed2df1db-4d73-4602-8010-4881085b5578","flag_state":"GREEN","start_elapsed":0,"end_elapsed":6120.345,"id":"0092128d-c681-4091-b2c6-f15bae69933e","created_at":"2026-11-01T19:41:31.487Z"}
 {"flag_state":"GREEN","start_elapsed":1504.837,"end_elapsed":1506.051,"session_id":"ccd5c97f-c8c7-400b-8303-509bc1586789","id":"009dd7bf-b40c-4e54-9fb2-df19bb73eeae","created_at":"2026-11-01T15:34:38.760Z"}
 {"flag_state":"GREEN","start_elapsed":2177.184,"end_elapsed":2178.601,"session_id":"d68a5fd6-70f2-4937-b725-e843b21276ff","id":"00a0b77b-b336-493a-bfd5-94bdbd1fbc42","created_at":"2026-11-01T15:34:20.849Z"}
 {"flag_state":"GREEN","start_elapsed":9418.536,"end_elapsed":9419.037,"session_id":"e23c5590-30a8-437d-a8bb-3d3f23b0b788","id":"00e558c7-95e7-45f5-bcc0-1dfb3013e81f","created_at":"2026-11-01T15:13:32.885Z"}
@@ -52,6 +53,7 @@
 {"flag_state":"GREEN","start_elapsed":84475.428,"end_elapsed":86400,"session_id":"17528e74-414b-48c4-94df-d5fe899baeae","id":"06a6cd8d-2d0a-4904-a22c-f125c69d3edc","created_at":"2026-11-01T15:16:52.038Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1455.956,"session_id":"a05b53de-593b-4d97-b1f5-ab3ccb8004af","id":"06b1e991-873c-44d2-bab1-8c66de0b5f1f","created_at":"2026-11-01T15:38:38.902Z"}
 {"flag_state":"FCY","start_elapsed":131.936,"end_elapsed":539.178,"session_id":"fd7eae4d-a817-434e-babd-eef9d65c4949","id":"06c840bb-068e-4f89-9c20-8e192d79fe91","created_at":"2026-11-01T15:33:32.530Z"}
+{"session_id":"101cb558-a44d-4d2b-983a-4bcb70164b47","flag_state":"CHEQUERED","start_elapsed":1825.502,"end_elapsed":1900.597,"id":"06cf3a9c-2d5b-488b-ba4f-9a5a3fd95f7b","created_at":"2026-11-01T19:41:30.981Z"}
 {"flag_state":"FCY","start_elapsed":38348.011,"end_elapsed":39682.191,"session_id":"a5c41410-34a0-429a-93d8-698c049a02d2","id":"06d910b0-8e92-4a90-b26f-912e87494f97","created_at":"2026-11-01T15:21:59.477Z"}
 {"flag_state":"GREEN","start_elapsed":1145.065,"end_elapsed":1643.106,"session_id":"30f92325-3c36-4ac9-ac7b-9a71a0db1ef9","id":"072a65e5-33cf-464d-a3e3-7ec674d19e2a","created_at":"2026-11-01T15:13:50.942Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2225.468,"session_id":"4fd4618f-da28-4bef-95f7-133a87cedc30","id":"072ad4ed-25a8-45d0-aafd-bb462691cbaf","created_at":"2026-11-01T15:27:51.512Z"}
@@ -64,6 +66,7 @@
 {"flag_state":"GREEN","start_elapsed":70844.883,"end_elapsed":70845.248,"session_id":"77586c21-8f39-4716-b15b-dda7415a3f5a","id":"07dfb02c-dd77-460a-bfc5-9f31415e9059","created_at":"2026-11-01T15:03:17.382Z"}
 {"flag_state":"GREEN","start_elapsed":8002.453,"end_elapsed":9117.497,"session_id":"27c07d51-7144-47e7-973d-a8ceed9a1e23","id":"0810282e-46c7-46e1-aecf-7f50290fa9a0","created_at":"2026-11-01T15:03:40.350Z"}
 {"flag_state":"FCY","start_elapsed":31338.707,"end_elapsed":32400,"session_id":"3333eb3c-7388-4521-b2e0-5107f85946b3","id":"0843ee01-1dd6-4df3-989f-4e0f5a003d2a","created_at":"2026-11-01T15:02:39.175Z"}
+{"session_id":"62afd12a-2f6a-4b5d-92d8-68fb9513872c","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5995.173,"id":"0862bc2a-ab11-48a3-ac73-d7fa832ec2d5","created_at":"2026-11-01T19:41:30.917Z"}
 {"flag_state":"FCY","start_elapsed":15715.296,"end_elapsed":15928.287,"session_id":"170738a5-afe3-41be-8411-84ba042778d8","id":"08732528-9a29-47ef-92d7-9ca696c76af2","created_at":"2026-11-01T15:22:00.710Z"}
 {"session_id":"25957f99-b4ec-4bbc-9624-d07c5efce050","flag_state":"SC","start_elapsed":4846.9,"end_elapsed":5393.9,"id":"089756c5-57f9-4599-b991-f82c0ac049f0","created_at":"2026-11-01T19:41:18.404Z"}
 {"flag_state":"FCY","start_elapsed":2771.077,"end_elapsed":2819.057,"session_id":"41448be1-ab94-44cb-bbbb-fed3763c14a7","id":"08d2ebfa-749e-43ba-912a-7bf56f550062","created_at":"2026-11-01T15:34:08.223Z"}
@@ -127,6 +130,7 @@
 {"session_id":"9aaaf408-e6cb-4fcd-aaa5-385e6e7434dc","flag_state":"CHEQUERED","start_elapsed":1596.648,"end_elapsed":1636.075,"id":"10fc6c22-0d94-4bc2-b38b-578c73b8562a","created_at":"2026-11-01T19:41:24.679Z"}
 {"flag_state":"YELLOW","start_elapsed":16601.346,"end_elapsed":17386.615,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"11235e53-965f-4ed9-8b18-b09ab78fd1b9","created_at":"2026-11-01T15:14:02.745Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":3518.896,"session_id":"d252beb6-05ff-408f-9815-5c81f2ecfef1","id":"11d94dd0-4611-41bd-8b8e-07e59d414082","created_at":"2026-11-01T15:28:17.923Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1155.334,"id":"11e38135-14d7-44ab-82be-7542cfb4e2b2","created_at":"2026-11-01T19:41:31.353Z"}
 {"flag_state":"GREEN","start_elapsed":11408.089,"end_elapsed":11408.903,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"11f02663-9902-47c9-98f6-099b502df19d","created_at":"2026-11-01T15:13:09.264Z"}
 {"flag_state":"GREEN","start_elapsed":17966.863,"end_elapsed":18000,"session_id":"937aac79-fb2d-4b19-b5de-05574f69cffc","id":"11f876e7-6ddb-4574-8f03-93d5026de6a2","created_at":"2026-11-01T15:02:45.519Z"}
 {"flag_state":"YELLOW","start_elapsed":6460.547,"end_elapsed":6482.774,"session_id":"f1152131-a782-4ae0-91d7-d351c1864432","id":"1222e09a-bf80-468c-b860-ec26c3070b51","created_at":"2026-11-01T15:28:39.254Z"}
@@ -209,6 +213,7 @@
 {"flag_state":"GREEN","start_elapsed":3057.69,"end_elapsed":7217.92,"session_id":"9d405d88-feed-44e7-af65-19afa0007b47","id":"1bafd679-b056-4383-b5ac-e8adac68a79b","created_at":"2026-11-01T15:28:22.205Z"}
 {"flag_state":"GREEN","start_elapsed":1604.927,"end_elapsed":1606.028,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"1bbd77f7-9509-49a6-b3d7-448fd3b887ee","created_at":"2026-11-01T15:13:44.342Z"}
 {"flag_state":"FCY","start_elapsed":1713.766,"end_elapsed":2825.544,"session_id":"d5d9d3bb-2c13-4685-9f70-ed5da35d83a8","id":"1c1452fb-a7f3-4e2f-be7e-ca786c27b164","created_at":"2026-11-01T15:27:04.001Z"}
+{"session_id":"d886e6da-5b0a-453f-b288-8d8a4f6562ce","flag_state":"CHEQUERED","start_elapsed":5282.338,"end_elapsed":5375.671,"id":"1c47e4ca-b7b4-4db0-b9a0-a40744f63cac","created_at":"2026-11-01T19:41:30.010Z"}
 {"flag_state":"RED","start_elapsed":2703.487,"end_elapsed":2781.204,"session_id":"defaafb6-bb90-464e-b3aa-2ab9294b90cf","id":"1c7c0134-dff8-4a05-b9f7-4700157280a1","created_at":"2026-11-01T15:39:10.535Z"}
 {"flag_state":"GREEN","start_elapsed":1420.896,"end_elapsed":1421.291,"session_id":"2975fad1-b47c-4062-a0b9-9f939ab357c9","id":"1c815d67-6e22-4176-8ae8-5ffe99133fc4","created_at":"2026-11-01T15:34:26.523Z"}
 {"flag_state":"YELLOW","start_elapsed":1241.804,"end_elapsed":1711.957,"session_id":"12c86724-8589-43fd-8bfb-cdb92e27eb9c","id":"1d029d21-231c-4170-aa22-33f9ac2d419d","created_at":"2026-11-01T15:28:54.351Z"}
@@ -265,6 +270,7 @@
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2795.019,"session_id":"8ea5c61f-a9b9-434d-b261-ee7c1ab5465f","id":"23808ce9-4908-4092-aa03-f926d495deb9","created_at":"2026-11-01T15:38:28.284Z"}
 {"flag_state":"GREEN","start_elapsed":27008.561,"end_elapsed":27038.346,"session_id":"bac6dd79-727f-4aeb-9f7c-eefa0bb5eebb","id":"238f6677-1f4c-41b7-ae05-30f8ca6cdb48","created_at":"2026-11-01T15:02:54.764Z"}
 {"flag_state":"FCY","start_elapsed":26709.339,"end_elapsed":28129.439,"session_id":"a5c41410-34a0-429a-93d8-698c049a02d2","id":"23931ce3-14fe-4ad5-98e4-f2fc0ada18ac","created_at":"2026-11-01T15:21:59.477Z"}
+{"session_id":"d886e6da-5b0a-453f-b288-8d8a4f6562ce","flag_state":"GREEN","start_elapsed":2841.338,"end_elapsed":5282.338,"id":"23bf80d8-7bf2-4619-8680-880cb8e2b916","created_at":"2026-11-01T19:41:30.010Z"}
 {"flag_state":"GREEN","start_elapsed":5327.183,"end_elapsed":5327.658,"session_id":"a9c8da80-3684-48b7-8dc9-f3da890947fa","id":"23db1b61-9667-41cc-b73d-b6bcd918ba46","created_at":"2026-11-01T15:13:32.855Z"}
 {"flag_state":"GREEN","start_elapsed":17546.213,"end_elapsed":17813.364,"session_id":"34501e0c-63c9-431d-b92c-6f332ba064a9","id":"23f8fcfe-992e-4fd8-93aa-dfe75ac017b5","created_at":"2026-11-01T15:14:04.222Z"}
 {"flag_state":"GREEN","start_elapsed":5112.42,"end_elapsed":5334.873,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"242757c4-4f32-4310-a987-f76ae6dad973","created_at":"2026-11-01T15:14:02.745Z"}
@@ -281,6 +287,7 @@
 {"flag_state":"GREEN","start_elapsed":58729.799,"end_elapsed":69138.658,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"255c98f5-c696-40e6-9e7c-404ce9dd3d72","created_at":"2026-11-01T15:16:49.272Z"}
 {"flag_state":"RED","start_elapsed":21644.754,"end_elapsed":21645.051,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"259b72e6-8610-4283-8d76-e6122ed10ee2","created_at":"2026-11-01T15:13:44.342Z"}
 {"flag_state":"YELLOW","start_elapsed":12439.558,"end_elapsed":13332.857,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"25a1b461-6544-4923-a552-85faba614c38","created_at":"2026-11-01T15:13:32.054Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"SC","start_elapsed":4128.677,"end_elapsed":4501.677,"id":"25ca52b1-823a-442d-a060-3fe103a5c81c","created_at":"2026-11-01T19:41:31.274Z"}
 {"flag_state":"GREEN","start_elapsed":573.249,"end_elapsed":3290.832,"session_id":"b608200e-892e-48f0-917e-91cbbe6946d7","id":"25ce6536-a07b-4eb6-a133-5cb8cd91a4af","created_at":"2026-11-01T15:27:55.957Z"}
 {"flag_state":"RED","start_elapsed":9673.429,"end_elapsed":9679.595,"session_id":"2066dec4-f537-4c24-8ecf-41eb923f0ef2","id":"25e0f606-cf3a-48d0-8bdd-f3d3ccf165e9","created_at":"2026-11-01T15:22:49.229Z"}
 {"flag_state":"YELLOW","start_elapsed":142.451,"end_elapsed":358.852,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"25f1a27c-0242-4cb5-bb37-76c9f13fe241","created_at":"2026-11-01T15:23:07.016Z"}
@@ -312,11 +319,13 @@
 {"flag_state":"GREEN","start_elapsed":28129.439,"end_elapsed":28505.47,"session_id":"a5c41410-34a0-429a-93d8-698c049a02d2","id":"28d62790-fc61-4226-9842-294db1ff8b76","created_at":"2026-11-01T15:21:59.477Z"}
 {"flag_state":"GREEN","start_elapsed":38186.106,"end_elapsed":39600,"session_id":"cf565ecf-d480-4d64-8186-4b04cbd64957","id":"28ef239a-0f06-47a2-ac95-c884a2331b0f","created_at":"2026-11-01T15:02:54.805Z"}
 {"flag_state":"GREEN","start_elapsed":32690.659,"end_elapsed":32873.912,"session_id":"fa9ecee8-2746-4d31-a914-2c6f334128ee","id":"2915a0fa-ab26-47b9-ad54-62fa26c584bb","created_at":"2026-11-01T15:02:39.183Z"}
+{"session_id":"2ee8f4a5-74cd-4642-8a02-850b6976a791","flag_state":"CHEQUERED","start_elapsed":2387.673,"end_elapsed":2443.869,"id":"291a4235-15d2-4076-b3ad-3f904cc38ac3","created_at":"2026-11-01T19:41:31.417Z"}
 {"session_id":"0479ced6-012b-4f97-b407-b205f387e9fb","flag_state":"GREEN","start_elapsed":0,"end_elapsed":256.973,"id":"292ea88f-e1a4-42c0-8943-8076bc7d9303","created_at":"2026-11-01T19:41:19.196Z"}
 {"flag_state":"FCY","start_elapsed":0.001,"end_elapsed":57.962,"session_id":"6dcd5a53-db89-40e2-a302-baad441f608d","id":"29419bf7-1a59-4db9-ad44-f14f74994e94","created_at":"2026-11-01T15:34:20.344Z"}
 {"flag_state":"YELLOW","start_elapsed":5385.516,"end_elapsed":5625.081,"session_id":"2065fea0-770c-43e6-9847-becfb37790cb","id":"2962ab73-98ed-4daf-8860-0ecddd0fd9c0","created_at":"2026-11-01T15:13:27.013Z"}
 {"flag_state":"FCY","start_elapsed":4683.368,"end_elapsed":5608.175,"session_id":"2e2286f5-51c9-47f3-83d1-adc54e88711e","id":"297f73ac-dcfe-4d36-b62e-62a8c17f682e","created_at":"2026-11-01T15:02:41.980Z"}
 {"flag_state":"FCY","start_elapsed":47765.855,"end_elapsed":48395.158,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"2982fea8-6c43-49e6-8ed7-6035e2de9115","created_at":"2026-11-01T15:16:49.272Z"}
+{"session_id":"715b29f8-b16a-4376-ac61-2746a0fe1e50","flag_state":"CHEQUERED","start_elapsed":8610.473,"end_elapsed":8654.977,"id":"29aeb184-28ae-400b-a923-118c262f308a","created_at":"2026-11-01T19:41:30.458Z"}
 {"session_id":"f789cc08-621d-4cb2-b2a0-e0866f1c8688","flag_state":"GREEN","start_elapsed":2187.396,"end_elapsed":2201.396,"id":"29b3ed5e-6e4a-435e-99a6-778607b07059","created_at":"2026-11-01T19:41:23.918Z"}
 {"flag_state":"YELLOW","start_elapsed":15906.675,"end_elapsed":16411.392,"session_id":"4c4a6026-dede-41f5-a757-597e709cdb35","id":"29c2aca3-b827-4a64-86d1-4cf83fc4ede6","created_at":"2026-11-01T15:13:45.207Z"}
 {"flag_state":"RED","start_elapsed":21645.051,"end_elapsed":21689.416,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"29d75753-f0d2-49d9-8618-838e82a2d71c","created_at":"2026-11-01T15:13:44.342Z"}
@@ -352,6 +361,7 @@
 {"flag_state":"GREEN","start_elapsed":21413.743,"end_elapsed":21693.632,"session_id":"2e2286f5-51c9-47f3-83d1-adc54e88711e","id":"2d94ad61-fca9-4929-8346-e763dec35700","created_at":"2026-11-01T15:02:41.980Z"}
 {"flag_state":"YELLOW","start_elapsed":7535.467,"end_elapsed":8615.427,"session_id":"1b5b118d-e30b-4760-a125-c7eee7bee01b","id":"2dc6188b-77f5-4197-9cf6-a6b84e6199dc","created_at":"2026-11-01T15:03:15.594Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":448.459,"session_id":"5a9189e5-029f-4da7-bb1d-94ccef859d03","id":"2ddd32b7-592f-449c-be76-5899c040d628","created_at":"2026-11-01T15:34:31.649Z"}
+{"session_id":"da3050d0-100d-4e0f-aebd-2f90954345d0","flag_state":"GREEN","start_elapsed":0,"end_elapsed":92.511,"id":"2de609ed-15ca-487b-b132-9e5f5a00eec2","created_at":"2026-11-01T19:41:30.850Z"}
 {"flag_state":"YELLOW","start_elapsed":11732.894,"end_elapsed":12001.07,"session_id":"0ad15978-34ba-4ba7-8048-ba41a590f621","id":"2e31cec8-49cb-4311-b754-254d0e93397e","created_at":"2026-11-01T15:14:04.194Z"}
 {"flag_state":"GREEN","start_elapsed":21.575,"end_elapsed":692.891,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"2e4bf1a4-a7a0-4487-93f0-429e37fe3899","created_at":"2026-11-01T15:13:44.342Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":334.84,"session_id":"84674d26-8ae1-46dd-895f-53cc59e3f182","id":"2ebcf84e-9faa-4458-b9a0-827b19d45c14","created_at":"2026-11-01T15:02:39.084Z"}
@@ -361,6 +371,7 @@
 {"flag_state":"GREEN","start_elapsed":459.208,"end_elapsed":703.795,"session_id":"f9823291-edc8-4e47-a9ca-68f50f428098","id":"2f1ffa40-1630-47ff-a49a-ab37591194f0","created_at":"2026-11-01T15:02:44.913Z"}
 {"flag_state":"RED","start_elapsed":13075.556,"end_elapsed":14400,"session_id":"0ad15978-34ba-4ba7-8048-ba41a590f621","id":"2f40839a-ffa2-4998-a04b-fc97ce4970b6","created_at":"2026-11-01T15:14:04.194Z"}
 {"flag_state":"YELLOW","start_elapsed":6333.663,"end_elapsed":7200,"session_id":"e45a92ec-9ddc-47d8-bd16-f40dadb68a13","id":"2f9cc2ed-c0aa-4874-9485-05e48b5f51d0","created_at":"2026-11-01T15:03:40.338Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"SC","start_elapsed":3253.677,"end_elapsed":4042.677,"id":"2fd382d1-76a6-4512-aa64-eeb6087f46e6","created_at":"2026-11-01T19:41:31.274Z"}
 {"flag_state":"GREEN","start_elapsed":4301.931,"end_elapsed":5144.808,"session_id":"be07c3fa-8264-4254-a0cc-017c665d0232","id":"2fd40fd3-4462-4928-a4f7-420872b37592","created_at":"2026-11-01T15:02:38.378Z"}
 {"flag_state":"FCY","start_elapsed":358.852,"end_elapsed":404.916,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"2fe1b94c-432b-40f8-bae6-1b67b1fc1ea6","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"FCY","start_elapsed":6587.432,"end_elapsed":7200,"session_id":"0e6df330-9f87-4ab7-bd6f-389759915df7","id":"2fe6aeff-0991-4ec6-a5d5-01a6babf2a8a","created_at":"2026-11-01T15:02:45.464Z"}
@@ -371,6 +382,7 @@
 {"flag_state":"RED","start_elapsed":14437.903,"end_elapsed":14520.687,"session_id":"0055d055-51b7-4739-ae5c-98362f2f8597","id":"31591409-5a6a-498f-9123-1ccb7a38dadc","created_at":"2026-11-01T15:28:32.535Z"}
 {"flag_state":"FCY","start_elapsed":2221.723,"end_elapsed":2639.916,"session_id":"2b14b93d-5caf-4390-a843-c1887eddedf7","id":"316aa676-5bed-4da9-a0cd-7e9326658fa0","created_at":"2026-11-01T15:37:45.515Z"}
 {"flag_state":"FCY","start_elapsed":500.613,"end_elapsed":1012.968,"session_id":"17e62bac-fa3c-406d-8076-c29ab2fe83a4","id":"317234be-c0ef-4b7c-ba51-4d5f70a8eed3","created_at":"2026-11-01T15:27:38.215Z"}
+{"session_id":"256065d0-1339-49a8-bfca-0f17b865ebbb","flag_state":"GREEN","start_elapsed":0,"end_elapsed":7484.052,"id":"317930e5-ca06-4671-867d-8fa4ee7bc9ba","created_at":"2026-11-01T19:41:31.047Z"}
 {"flag_state":"GREEN","start_elapsed":1711.957,"end_elapsed":1712.165,"session_id":"12c86724-8589-43fd-8bfb-cdb92e27eb9c","id":"31a691e6-3317-4140-b87a-93e7cf34b26d","created_at":"2026-11-01T15:28:54.351Z"}
 {"flag_state":"YELLOW","start_elapsed":15099.227,"end_elapsed":15950.489,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"31bda2ce-343e-4dce-96a3-df0c56ce9510","created_at":"2026-11-01T15:13:09.264Z"}
 {"flag_state":"RED","start_elapsed":2770.5,"end_elapsed":2771.424,"session_id":"f6b7e0a3-4479-4f64-9009-c225d257950d","id":"31cb5489-fb4e-4463-b2b4-6c71ff2242da","created_at":"2026-11-01T15:39:15.865Z"}
@@ -431,6 +443,7 @@
 {"flag_state":"RED","start_elapsed":21651.378,"end_elapsed":21786.43,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"38a0ab50-3402-42bb-aa53-7c15547f0391","created_at":"2026-11-01T15:13:32.054Z"}
 {"flag_state":"GREEN","start_elapsed":4569.825,"end_elapsed":4683.368,"session_id":"2e2286f5-51c9-47f3-83d1-adc54e88711e","id":"38a756f1-0758-4639-87ed-d9a020514f0e","created_at":"2026-11-01T15:02:41.980Z"}
 {"flag_state":"FCY","start_elapsed":580.624,"end_elapsed":1296.399,"session_id":"78e1bfac-1d70-4ac2-bd2c-437c4f3f3040","id":"38ad0c49-7073-46bf-a09c-7ae32f141299","created_at":"2026-11-01T15:27:33.866Z"}
+{"session_id":"98d5f93f-d381-421f-aac1-42ee6e2460ca","flag_state":"GREEN","start_elapsed":0,"end_elapsed":4495.498,"id":"38c06ef5-b9b6-457c-9687-c5c556b73bd9","created_at":"2026-11-01T19:41:30.786Z"}
 {"flag_state":"FCY","start_elapsed":49496.429,"end_elapsed":50969.955,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"38e419bf-2656-496d-86cf-f9c81dea454f","created_at":"2026-11-01T15:02:53.195Z"}
 {"flag_state":"YELLOW","start_elapsed":17813.364,"end_elapsed":18000,"session_id":"34501e0c-63c9-431d-b92c-6f332ba064a9","id":"38e6ac17-c866-405d-81ba-51738d835baf","created_at":"2026-11-01T15:14:04.222Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":18.232,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"38e70d55-b05c-41b7-83e8-65456b6c235b","created_at":"2026-11-01T15:03:40.087Z"}
@@ -447,6 +460,8 @@
 {"session_id":"cb735b7a-ce0d-444a-b97a-105c234e8c75","flag_state":"GREEN","start_elapsed":3814.505,"end_elapsed":3890.505,"id":"3a2d3ec4-8098-4daf-8774-f3effd0d6a9b","created_at":"2026-11-01T19:41:19.620Z"}
 {"flag_state":"FCY","start_elapsed":18000,"end_elapsed":20619.955,"session_id":"54a463ed-0e07-4e07-a548-3eecc2c088df","id":"3a3f7d29-ed4b-4ba8-b86f-528157e8bc48","created_at":"2026-11-01T15:17:18.293Z"}
 {"flag_state":"GREEN","start_elapsed":2899.052,"end_elapsed":3013.64,"session_id":"b7eb8091-db07-4d75-9df0-eb43cf1f3c0a","id":"3a5d669a-d8d4-49f8-9c97-b82152e384d8","created_at":"2026-11-01T15:28:44.585Z"}
+{"session_id":"98d5f93f-d381-421f-aac1-42ee6e2460ca","flag_state":"SC","start_elapsed":4495.498,"end_elapsed":5230.498,"id":"3af56641-fded-4d9b-9ba7-7f4dc89ca221","created_at":"2026-11-01T19:41:30.786Z"}
+{"session_id":"98d5f93f-d381-421f-aac1-42ee6e2460ca","flag_state":"CHEQUERED","start_elapsed":5230.498,"end_elapsed":5239.489,"id":"3afccc9e-5cf7-49f9-a07b-05bbe3902f94","created_at":"2026-11-01T19:41:30.786Z"}
 {"flag_state":"GREEN","start_elapsed":61.95,"end_elapsed":1720.98,"session_id":"d68a5fd6-70f2-4937-b725-e843b21276ff","id":"3b1147f5-6548-4026-a940-3e7a9bc53974","created_at":"2026-11-01T15:34:20.849Z"}
 {"flag_state":"GREEN","start_elapsed":1921.918,"end_elapsed":2896.695,"session_id":"7f8da5fc-0565-4dff-85e0-548addc8887b","id":"3b19f5c9-e5a3-43ca-bb6e-ea8d77f8656d","created_at":"2026-11-01T15:28:59.887Z"}
 {"flag_state":"GREEN","start_elapsed":9527.499,"end_elapsed":9528.702,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"3b2c4d7c-7fc7-46af-a3f1-f2359cd53431","created_at":"2026-11-01T15:13:44.342Z"}
@@ -454,6 +469,7 @@
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1243.554,"session_id":"659a0f7b-0f6d-429a-9491-ac4c2bc68d2a","id":"3b762b4d-815b-4c9f-b752-549e14bf0031","created_at":"2026-11-01T15:02:58.459Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":164.883,"session_id":"c8c0343e-7591-4110-a5a6-627470fbf6ef","id":"3b9b1fa6-cd52-4fbe-9b3c-c39a6b7ac857","created_at":"2026-11-01T15:33:37.697Z"}
 {"flag_state":"GREEN","start_elapsed":777.027,"end_elapsed":2771.077,"session_id":"41448be1-ab94-44cb-bbbb-fed3763c14a7","id":"3ba890dd-e2b3-4ba9-95b5-b727b2cd72f9","created_at":"2026-11-01T15:34:08.223Z"}
+{"session_id":"d52f4e53-8712-4076-8789-2fb26784a82e","flag_state":"GREEN","start_elapsed":1290.071,"end_elapsed":5598.071,"id":"3bd616e9-1802-4b16-8ece-9ae3d357d543","created_at":"2026-11-01T19:41:30.194Z"}
 {"flag_state":"YELLOW","start_elapsed":1302.393,"end_elapsed":1752.625,"session_id":"defaafb6-bb90-464e-b3aa-2ab9294b90cf","id":"3bd91fc1-a979-4b41-bb7c-91140a2df3f2","created_at":"2026-11-01T15:39:10.535Z"}
 {"session_id":"22850c96-747a-4557-ab93-90dc4d1fb6c2","flag_state":"SC","start_elapsed":66.002,"end_elapsed":430.002,"id":"3bed8dec-7f55-4030-89ff-3737a036cdf8","created_at":"2026-11-01T19:41:23.856Z"}
 {"flag_state":"FCY","start_elapsed":8607.405,"end_elapsed":9078.221,"session_id":"9eef2f1b-11be-4bba-9803-a310124a9b3e","id":"3c170735-f329-4928-857a-2c824d97786b","created_at":"2026-11-01T15:17:21.980Z"}
@@ -486,6 +502,7 @@
 {"flag_state":"FCY","start_elapsed":2660.549,"end_elapsed":3655.765,"session_id":"db1a6efe-3c51-4878-b0db-796d0c4e2e68","id":"3f2567bc-1f14-40ca-8359-9e59b47da4e6","created_at":"2026-11-01T15:17:04.260Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":615.357,"session_id":"309c8248-efdc-460a-ae8a-68f83ad4510a","id":"3f2fff3a-256a-48dc-999e-135196a30b5a","created_at":"2026-11-01T15:05:20.633Z"}
 {"flag_state":"GREEN","start_elapsed":3481.512,"end_elapsed":4503.223,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"3f3ef401-2657-4fda-921b-e016b4770c70","created_at":"2026-11-01T15:23:07.016Z"}
+{"session_id":"d52f4e53-8712-4076-8789-2fb26784a82e","flag_state":"CHEQUERED","start_elapsed":5598.071,"end_elapsed":5690.295,"id":"3f466270-d9c3-42de-8ecc-b8f4f411470e","created_at":"2026-11-01T19:41:30.194Z"}
 {"flag_state":"YELLOW","start_elapsed":4809.971,"end_elapsed":4831.016,"session_id":"2065fea0-770c-43e6-9847-becfb37790cb","id":"3f4f9d53-8b9d-4f83-9677-ff5aae650566","created_at":"2026-11-01T15:13:27.013Z"}
 {"flag_state":"FCY","start_elapsed":4405.497,"end_elapsed":4940.565,"session_id":"fe92e207-836d-4d51-b16c-5ba95ece7153","id":"3f6505cd-cde1-4077-9de4-ccd925fdfa88","created_at":"2026-11-01T15:27:29.144Z"}
 {"flag_state":"GREEN","start_elapsed":42199.65,"end_elapsed":42200.673,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"3f822a44-b4f3-49c0-84c7-5fb242a661c5","created_at":"2026-11-01T15:13:09.264Z"}
@@ -497,6 +514,7 @@
 {"flag_state":"RED","start_elapsed":2741.79,"end_elapsed":2844.845,"session_id":"e0638be2-cf38-4b3d-be60-0755de0b0463","id":"407fc901-32b8-4dfb-bef0-19ef7912057b","created_at":"2026-11-01T15:39:10.043Z"}
 {"flag_state":"FCY","start_elapsed":15394.775,"end_elapsed":16378.975,"session_id":"ad5cf6ef-11a7-4753-ac91-c9a478a3833f","id":"409335d8-03c0-4239-a8e3-5976cf50f272","created_at":"2026-11-01T15:02:39.132Z"}
 {"flag_state":"GREEN","start_elapsed":391.306,"end_elapsed":580.624,"session_id":"78e1bfac-1d70-4ac2-bd2c-437c4f3f3040","id":"4096c4c1-8e07-449f-a409-9e4196d4bf8e","created_at":"2026-11-01T15:27:33.866Z"}
+{"session_id":"101cb558-a44d-4d2b-983a-4bcb70164b47","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1825.502,"id":"40b40d23-cb23-4504-bebd-00f1e44bd09e","created_at":"2026-11-01T19:41:30.981Z"}
 {"flag_state":"FCY","start_elapsed":28505.47,"end_elapsed":28800,"session_id":"45704374-95ba-4878-a899-e83e35d8c1cf","id":"40b8ecef-36eb-4d2c-8a74-7c8f7cadf0b7","created_at":"2026-11-01T15:22:00.772Z"}
 {"flag_state":"FCY","start_elapsed":708.029,"end_elapsed":982.947,"session_id":"44b0bfc0-67dd-4c4a-aedf-7206ef3d6222","id":"40fc59b5-b081-4a63-92e1-315f5fd15a74","created_at":"2026-11-01T15:33:52.968Z"}
 {"flag_state":"RED","start_elapsed":2712.912,"end_elapsed":2730.094,"session_id":"2975fad1-b47c-4062-a0b9-9f939ab357c9","id":"41031a8c-c0b3-44fd-8e64-be2b7754f6d1","created_at":"2026-11-01T15:34:26.523Z"}
@@ -540,6 +558,7 @@
 {"flag_state":"YELLOW","start_elapsed":115.289,"end_elapsed":166.223,"session_id":"fa5c2d48-ddf6-4306-905b-00ae5d67f4e1","id":"463321c6-9af6-4010-ac09-38db161a2f7e","created_at":"2026-11-01T15:28:33.390Z"}
 {"flag_state":"GREEN","start_elapsed":2023.664,"end_elapsed":2784.996,"session_id":"63a0b223-d5bf-444d-a5bb-d15f70635a6f","id":"4640c482-9bae-4d92-b1ef-13aa533d824f","created_at":"2026-11-01T15:38:18.036Z"}
 {"flag_state":"FCY","start_elapsed":1624.692,"end_elapsed":2157.391,"session_id":"eff46dd1-e562-4af1-8f6d-27a96f98dd80","id":"4641d8de-3c09-44d4-8d3d-2a4b29caccf5","created_at":"2026-11-01T15:33:57.824Z"}
+{"session_id":"d9a1d6e3-57b3-4021-a00a-c4104c03e9aa","flag_state":"GREEN","start_elapsed":1715.678,"end_elapsed":2018.678,"id":"467c49a8-b19b-45c3-9004-11403201c368","created_at":"2026-11-01T19:41:29.811Z"}
 {"flag_state":"GREEN","start_elapsed":9949.913,"end_elapsed":10034.414,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"469306b2-014a-45ed-b13c-be09e2bc0c7b","created_at":"2026-11-01T15:03:40.087Z"}
 {"session_id":"63a0d7cb-bceb-45b2-a868-dac2e48910d7","flag_state":"GREEN","start_elapsed":807.005,"end_elapsed":1524.005,"id":"46a9a785-b884-4f3c-a564-02eb53215864","created_at":"2026-11-01T19:41:24.554Z"}
 {"session_id":"fa41ce60-05f8-4c29-aa3b-89bcd435ae5b","flag_state":"CHEQUERED","start_elapsed":5908.462,"end_elapsed":5933.379,"id":"46d5c092-05e3-45a0-bd2e-9b0ae32c2b20","created_at":"2026-11-01T19:41:24.895Z"}
@@ -551,6 +570,7 @@
 {"flag_state":"FCY","start_elapsed":6338.87,"end_elapsed":6634.277,"session_id":"b608200e-892e-48f0-917e-91cbbe6946d7","id":"4772dcb2-2bb0-45a0-98dd-d05184f56c36","created_at":"2026-11-01T15:27:55.957Z"}
 {"flag_state":"GREEN","start_elapsed":3972.87,"end_elapsed":3974,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"477b8672-1646-4e7b-af27-19c2a45bd937","created_at":"2026-11-01T15:13:32.054Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":164.667,"session_id":"e1caa2eb-b990-4912-88f7-947f89b5620c","id":"47a79742-a292-4a84-a8a4-0b2f40028278","created_at":"2026-11-01T15:02:45.442Z"}
+{"session_id":"5a008564-ff73-4ac1-bb01-457002a19211","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1730.643,"id":"47abb2df-03a5-42a7-86d9-cbc3a76c3edb","created_at":"2026-11-01T19:41:30.281Z"}
 {"flag_state":"FCY","start_elapsed":1261.346,"end_elapsed":2033.466,"session_id":"28552eec-2d81-4658-9920-291d61e8d417","id":"47c8df5c-5bfd-4434-9695-99df674ae3fb","created_at":"2026-11-01T15:05:20.944Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1767.126,"session_id":"ae50b5b8-4ec1-4cf4-967f-98ce07678013","id":"47d3f76f-420a-42e3-b6f9-6cc283eadcdb","created_at":"2026-11-01T15:38:17.631Z"}
 {"flag_state":"YELLOW","start_elapsed":4831.016,"end_elapsed":5237.417,"session_id":"2065fea0-770c-43e6-9847-becfb37790cb","id":"47eb56d6-c49f-4d51-ae52-11a544a237f7","created_at":"2026-11-01T15:13:27.013Z"}
@@ -573,6 +593,7 @@
 {"flag_state":"GREEN","start_elapsed":18000,"end_elapsed":18493.088,"session_id":"841b549b-79e4-4b26-9cbd-3a2111d72f26","id":"4aab471f-d2fd-4703-a30e-638b4b43f79c","created_at":"2026-11-01T15:03:17.099Z"}
 {"flag_state":"GREEN","start_elapsed":2350.988,"end_elapsed":2835.241,"session_id":"53a61d99-b421-4327-bbda-b3b59e33537c","id":"4ab9bfef-400a-436d-b1f4-57abddf74cae","created_at":"2026-11-01T15:37:45.003Z"}
 {"flag_state":"FCY","start_elapsed":5144.808,"end_elapsed":5882.719,"session_id":"7ee9a37d-d971-4f73-ad12-68fd9b327469","id":"4acbdc26-555e-481f-a339-a1222b57fc20","created_at":"2026-11-01T15:02:39.100Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"GREEN","start_elapsed":0,"end_elapsed":3253.677,"id":"4afc1550-071e-4311-9c43-10b9028f64a0","created_at":"2026-11-01T19:41:31.274Z"}
 {"session_id":"7482c2f2-b5ff-4c35-8f49-f4623798bfce","flag_state":"SC","start_elapsed":4995.918,"end_elapsed":5370.918,"id":"4afdba6a-2fc1-4d38-bec4-cb0a30eeb143","created_at":"2026-11-01T19:41:19.398Z"}
 {"flag_state":"GREEN","start_elapsed":3692.142,"end_elapsed":4780.047,"session_id":"c32c0bc1-4d9a-4ecc-8cd1-d93754f831a5","id":"4b0b1e36-4388-4241-81ae-8b5d0f79422d","created_at":"2026-11-01T15:17:13.638Z"}
 {"flag_state":"GREEN","start_elapsed":3125.634,"end_elapsed":3126.086,"session_id":"c419b073-6593-462d-8d01-c12d805f1aa1","id":"4b35c976-492c-4fc2-92fd-1be28bf33f8e","created_at":"2026-11-01T15:13:38.663Z"}
@@ -599,6 +620,7 @@
 {"flag_state":"FCY","start_elapsed":703.795,"end_elapsed":1394.279,"session_id":"e1caa2eb-b990-4912-88f7-947f89b5620c","id":"4d065ad3-8dad-4658-b884-2864d99538d8","created_at":"2026-11-01T15:02:45.442Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2789.778,"session_id":"fbb6ab69-b3db-4db0-a892-2c84b23417d0","id":"4d09b6ba-e197-4b93-b289-1b2a37f9ca10","created_at":"2026-11-01T15:33:27.792Z"}
 {"flag_state":"GREEN","start_elapsed":11408.089,"end_elapsed":11408.903,"session_id":"8c72ed9b-998f-4295-897c-b81d364062ef","id":"4d14884a-fd9d-4992-9d13-7bb7520b99f8","created_at":"2026-11-01T15:13:10.595Z"}
+{"session_id":"d9a1d6e3-57b3-4021-a00a-c4104c03e9aa","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1256.678,"id":"4d2f238e-8210-4d98-be4f-d27f1ac8a28f","created_at":"2026-11-01T19:41:29.811Z"}
 {"flag_state":"FCY","start_elapsed":651.564,"end_elapsed":1111.868,"session_id":"820d8141-09d2-4cf4-912e-36880caab43d","id":"4d54eeb7-4623-4e15-9cac-88a149a75725","created_at":"2026-11-01T15:27:16.880Z"}
 {"flag_state":"YELLOW","start_elapsed":4197.776,"end_elapsed":4204.129,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"4d660e6e-01b1-412d-8559-be3607bceaad","created_at":"2026-11-01T15:03:40.087Z"}
 {"flag_state":"YELLOW","start_elapsed":10800,"end_elapsed":11408.089,"session_id":"8c72ed9b-998f-4295-897c-b81d364062ef","id":"4d6acbe5-d259-4221-9e39-618529a6ae31","created_at":"2026-11-01T15:13:10.595Z"}
@@ -628,6 +650,7 @@
 {"flag_state":"FCY","start_elapsed":2226.804,"end_elapsed":3354.719,"session_id":"75fbd6c9-12db-40d6-9746-96f7a51f2438","id":"5030ffe6-9fc1-4345-9f07-298a8bc5b4df","created_at":"2026-11-01T15:22:00.631Z"}
 {"flag_state":"GREEN","start_elapsed":5111.429,"end_elapsed":5112.42,"session_id":"90068233-8c34-46e0-be59-96e2dc2391c1","id":"5048d877-835f-409a-829c-3783b71431d3","created_at":"2026-11-01T15:14:04.142Z"}
 {"flag_state":"GREEN","start_elapsed":2515.469,"end_elapsed":2759.011,"session_id":"22f36d2f-5bfe-4f02-a280-da74da279cc3","id":"50663a5f-c2d5-4567-b2f9-c3b7dfcedc5e","created_at":"2026-11-01T15:33:47.261Z"}
+{"session_id":"1537714b-7d88-438d-a5a2-a624c6239ddc","flag_state":"CHEQUERED","start_elapsed":5195.24,"end_elapsed":5263.643,"id":"50fe12ee-e905-4007-a2ee-416ba364f966","created_at":"2026-11-01T19:41:30.660Z"}
 {"session_id":"0479ced6-012b-4f97-b407-b205f387e9fb","flag_state":"CHEQUERED","start_elapsed":5708.973,"end_elapsed":5795.222,"id":"514e7ad4-c447-4b86-a271-0aea83840940","created_at":"2026-11-01T19:41:19.196Z"}
 {"flag_state":"YELLOW","start_elapsed":28703.948,"end_elapsed":28800,"session_id":"f803e997-8a81-48bc-a973-8bc5dce066ea","id":"516088d9-1cb9-4cd1-9103-ff29f5a61de9","created_at":"2026-11-01T15:14:04.301Z"}
 {"flag_state":"FCY","start_elapsed":162.712,"end_elapsed":281.196,"session_id":"71521ba2-f750-4070-8ce5-88d336c0bde9","id":"516d3149-c53f-47e7-94ee-470ac83c35e9","created_at":"2026-11-01T15:38:34.361Z"}
@@ -637,7 +660,9 @@
 {"flag_state":"GREEN","start_elapsed":75600,"end_elapsed":78591.257,"session_id":"4b218383-51f7-47db-8a18-fb62f698caf9","id":"51ebd8b1-2946-4882-99f6-2ebbd9a11537","created_at":"2026-11-01T15:02:55.006Z"}
 {"flag_state":"FCY","start_elapsed":21000.928,"end_elapsed":21413.743,"session_id":"ea23b658-a8f7-4e71-9a01-d7696b5321fe","id":"520c3992-c72b-4e97-9e5d-bc91ae32a898","created_at":"2026-11-01T15:02:42.519Z"}
 {"flag_state":"YELLOW","start_elapsed":7012.108,"end_elapsed":7230.316,"session_id":"f1152131-a782-4ae0-91d7-d351c1864432","id":"520f6bd2-44a1-444d-b5e4-75755977a811","created_at":"2026-11-01T15:28:39.254Z"}
+{"session_id":"da3050d0-100d-4e0f-aebd-2f90954345d0","flag_state":"CHEQUERED","start_elapsed":5083.511,"end_elapsed":5193.489,"id":"5216a0f9-b4b5-4ec3-8dbe-2292477af037","created_at":"2026-11-01T19:41:30.850Z"}
 {"flag_state":"GREEN","start_elapsed":10800,"end_elapsed":11358.756,"session_id":"ff4a27ac-37ef-4840-8c51-49965029d845","id":"52216a43-171a-4ce2-87f4-030437b936c9","created_at":"2026-11-01T15:13:32.961Z"}
+{"session_id":"8547adc5-5532-4690-9b31-4949e10bf6d5","flag_state":"CHEQUERED","start_elapsed":4986.117,"end_elapsed":5067.817,"id":"522b23cf-aa67-47eb-80be-6eb80ced8b28","created_at":"2026-11-01T19:41:29.643Z"}
 {"flag_state":"GREEN","start_elapsed":575.721,"end_elapsed":1073.688,"session_id":"ba4b4364-f1bc-42ff-a708-56a13c50a8fe","id":"524e2159-09d8-4bd4-83a1-09e8ce630000","created_at":"2026-11-01T15:17:25.675Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1424.436,"session_id":"9eef2f1b-11be-4bba-9803-a310124a9b3e","id":"52511ba1-5d45-4c16-beb3-69ae3a919979","created_at":"2026-11-01T15:17:21.980Z"}
 {"flag_state":"GREEN","start_elapsed":41296.974,"end_elapsed":43408.603,"session_id":"be07c3fa-8264-4254-a0cc-017c665d0232","id":"526ba7c6-faeb-472b-b36b-5b9d6ccb66f5","created_at":"2026-11-01T15:02:38.378Z"}
@@ -692,6 +717,7 @@
 {"flag_state":"GREEN","start_elapsed":2610.668,"end_elapsed":2743.176,"session_id":"459c9e8a-f77c-45eb-8c64-33d616645af5","id":"586777e2-ccde-4c3f-b742-2b30107e3df3","created_at":"2026-11-01T15:34:08.718Z"}
 {"flag_state":"YELLOW","start_elapsed":11732.894,"end_elapsed":12001.07,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"58794626-f546-4863-b69f-b4560ba10557","created_at":"2026-11-01T15:14:02.745Z"}
 {"flag_state":"FCY","start_elapsed":949.591,"end_elapsed":1960.373,"session_id":"9bf210cd-8e45-45f5-9872-d9815b85f0e2","id":"589b43ed-f161-46f4-927e-99f033b4fef7","created_at":"2026-11-01T15:03:08.047Z"}
+{"session_id":"1537714b-7d88-438d-a5a2-a624c6239ddc","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5195.24,"id":"58d615ba-2468-4bcd-9895-eeed59ba1c75","created_at":"2026-11-01T19:41:30.660Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":3399.399,"session_id":"fe92e207-836d-4d51-b16c-5ba95ece7153","id":"58dc2496-5e5c-4897-8e17-b29cda0c0491","created_at":"2026-11-01T15:27:29.144Z"}
 {"flag_state":"FCY","start_elapsed":4064.354,"end_elapsed":4998.048,"session_id":"85b94853-612c-44bb-b1c3-26fe6f981a4f","id":"592da40d-6b08-4044-9221-0d935e8ac668","created_at":"2026-11-01T15:17:40.435Z"}
 {"flag_state":"FCY","start_elapsed":2226.804,"end_elapsed":3354.719,"session_id":"a5c41410-34a0-429a-93d8-698c049a02d2","id":"596c4b72-cabb-4781-be3d-c7e0fd2dab50","created_at":"2026-11-01T15:21:59.477Z"}
@@ -761,6 +787,7 @@
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":621.262,"session_id":"3e46b5de-6177-496b-8029-cc0e1024c27f","id":"61029735-3b7e-47af-bec8-3cbdd0d0c507","created_at":"2026-11-01T15:38:48.586Z"}
 {"session_id":"140afb1f-9193-4a78-996f-352adb8fd706","flag_state":"CHEQUERED","start_elapsed":4794.811,"end_elapsed":4885.915,"id":"6104d768-8ace-4bec-b4fe-520b83b37c5f","created_at":"2026-11-01T19:41:18.809Z"}
 {"flag_state":"GREEN","start_elapsed":4615.279,"end_elapsed":4616.904,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"6111387f-5236-473a-9e8d-dcb2f9e0c498","created_at":"2026-11-01T15:03:40.087Z"}
+{"session_id":"3b11e439-31fa-4a44-8efa-be621cb412f6","flag_state":"CHEQUERED","start_elapsed":6674.642,"end_elapsed":6754.211,"id":"6119e7c8-0755-4fce-be18-ed714f9891f9","created_at":"2026-11-01T19:41:31.124Z"}
 {"flag_state":"GREEN","start_elapsed":16378.975,"end_elapsed":18000,"session_id":"ad5cf6ef-11a7-4753-ac91-c9a478a3833f","id":"612c82ee-6232-4ec8-9031-b20a540b7506","created_at":"2026-11-01T15:02:39.132Z"}
 {"session_id":"25957f99-b4ec-4bbc-9624-d07c5efce050","flag_state":"GREEN","start_elapsed":2752.9,"end_elapsed":4846.9,"id":"614b00b0-8d8f-4726-8455-0fb7551bdaa9","created_at":"2026-11-01T19:41:18.404Z"}
 {"session_id":"a4db8cff-e708-4dc4-ba5e-c21cb8f8aaad","flag_state":"GREEN","start_elapsed":5573.604,"end_elapsed":6125.604,"id":"61560906-22bd-4dda-bb44-fc04f98e67c9","created_at":"2026-11-01T19:41:23.423Z"}
@@ -821,6 +848,7 @@
 {"flag_state":"RED","start_elapsed":2796.346,"end_elapsed":2802.675,"session_id":"9b570410-9712-4883-a666-17900cddc0ba","id":"6822af80-b9f9-47e8-ac35-57a92ad11de3","created_at":"2026-11-01T15:34:26.020Z"}
 {"flag_state":"FCY","start_elapsed":11053.63,"end_elapsed":11706.635,"session_id":"9aa7bc44-89c4-4146-9aa5-cfc835a0d880","id":"682f535f-e5bd-4b4f-875c-b3229aeb81f4","created_at":"2026-11-01T15:27:51.588Z"}
 {"flag_state":"FCY","start_elapsed":1947.958,"end_elapsed":3419.011,"session_id":"fa3f4b6b-cb43-4892-b898-39cbdcedb430","id":"68420fd1-5607-4ea8-b0bf-f9f943e8626c","created_at":"2026-11-01T15:17:18.196Z"}
+{"session_id":"7229a010-25c6-40ed-9438-d82fcaa38122","flag_state":"GREEN","start_elapsed":1429.65,"end_elapsed":5594.65,"id":"6870201f-18e6-4f7d-ac98-c40d0b9740fe","created_at":"2026-11-01T19:41:29.907Z"}
 {"flag_state":"GREEN","start_elapsed":2247.529,"end_elapsed":2505.904,"session_id":"a5cdbc5a-1bcd-4187-a914-b33c7cc37c36","id":"6887c5e7-d489-498b-9729-f7b93adc3a34","created_at":"2026-11-01T15:34:03.271Z"}
 {"session_id":"623304f0-9c20-419c-baae-07ca782cc7fe","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1622.98,"id":"6894cfc0-3212-463d-9cbd-23638c33f56b","created_at":"2026-11-01T19:41:19.556Z"}
 {"flag_state":"FCY","start_elapsed":3158.156,"end_elapsed":3600,"session_id":"5ec04ea7-68e6-434e-999d-6b95d487b8ca","id":"689f5e12-ff78-42fb-869a-ce6c3a75be6e","created_at":"2026-11-01T15:17:35.972Z"}
@@ -869,6 +897,7 @@
 {"flag_state":"GREEN","start_elapsed":396.95,"end_elapsed":2434.19,"session_id":"c32c0bc1-4d9a-4ecc-8cd1-d93754f831a5","id":"6ca1bbf0-b540-487d-bb49-68ecbc8fbd16","created_at":"2026-11-01T15:17:13.638Z"}
 {"flag_state":"RED","start_elapsed":2761.173,"end_elapsed":2763.442,"session_id":"8a59a349-258e-4220-8f2a-5e449b0908c8","id":"6cb49ba1-d0ea-42bb-88bc-0ce7b183c7c0","created_at":"2026-11-01T15:39:16.354Z"}
 {"flag_state":"GREEN","start_elapsed":2562.836,"end_elapsed":2793.15,"session_id":"eff46dd1-e562-4af1-8f6d-27a96f98dd80","id":"6cf353cb-6185-498f-96f8-6744931ad899","created_at":"2026-11-01T15:33:57.824Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"GREEN","start_elapsed":1635.334,"end_elapsed":5125.334,"id":"6cff67b2-769d-4455-bbc2-35c3396a0f33","created_at":"2026-11-01T19:41:31.353Z"}
 {"flag_state":"YELLOW","start_elapsed":3236.91,"end_elapsed":3394.588,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"6d1f08ba-44b6-46d6-a822-a7638bd86a9f","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"FCY","start_elapsed":2187.422,"end_elapsed":2476.537,"session_id":"959b26c3-3367-459b-a10c-5e31871931af","id":"6d75a4bc-8b24-4036-9f34-17be50eab881","created_at":"2026-11-01T15:33:53.386Z"}
 {"flag_state":"YELLOW","start_elapsed":4603.779,"end_elapsed":4616.695,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"6d794c6c-7619-4556-b50a-35c03a18b4e5","created_at":"2026-11-01T15:14:02.745Z"}
@@ -884,10 +913,13 @@
 {"flag_state":"YELLOW","start_elapsed":3219.2,"end_elapsed":3233.059,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"6f4c707d-098b-43d6-850e-1bf40fe4b229","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"GREEN","start_elapsed":9948.444,"end_elapsed":9949.913,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"6f8ee6e5-124e-4cd3-881d-37c546504740","created_at":"2026-11-01T15:03:40.087Z"}
 {"flag_state":"YELLOW","start_elapsed":16559.614,"end_elapsed":18000,"session_id":"4c4a6026-dede-41f5-a757-597e709cdb35","id":"6f92c61a-5bc0-45c4-83b7-ac2dcb7b6c64","created_at":"2026-11-01T15:13:45.207Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"GREEN","start_elapsed":6019.334,"end_elapsed":6434.334,"id":"6fa016da-a374-44f4-adcb-7d4ffe8ae972","created_at":"2026-11-01T19:41:31.353Z"}
+{"session_id":"255c1ad2-23f8-4bd8-9028-ddae0e32a233","flag_state":"CHEQUERED","start_elapsed":5294.716,"end_elapsed":5364.358,"id":"6fee5ad7-3c31-4e50-ad20-78c482c069a2","created_at":"2026-11-01T19:41:30.349Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":204.587,"session_id":"57008bc0-ef22-4baa-b4a5-386d86274cdf","id":"6ffc6e68-57af-4a12-a559-2e76f6ee9918","created_at":"2026-11-01T15:28:26.812Z"}
 {"flag_state":"GREEN","start_elapsed":7342.194,"end_elapsed":9744.055,"session_id":"9bf210cd-8e45-45f5-9872-d9815b85f0e2","id":"707373b6-691e-405b-b1e6-e7acfea9046a","created_at":"2026-11-01T15:03:08.047Z"}
 {"session_id":"cb735b7a-ce0d-444a-b97a-105c234e8c75","flag_state":"SC","start_elapsed":3910.505,"end_elapsed":4194.505,"id":"70822ccc-1675-4657-8c92-83521b93c306","created_at":"2026-11-01T19:41:19.620Z"}
 {"flag_state":"FCY","start_elapsed":5261.884,"end_elapsed":6302.695,"session_id":"8e6f197e-f574-4306-b6b6-07854f1f7472","id":"709074e0-756f-4862-97f2-be0a28128085","created_at":"2026-11-01T15:02:49.175Z"}
+{"session_id":"7229a010-25c6-40ed-9438-d82fcaa38122","flag_state":"CHEQUERED","start_elapsed":5594.65,"end_elapsed":5682.834,"id":"70993475-73a1-4223-b496-d511aa3f57c0","created_at":"2026-11-01T19:41:29.907Z"}
 {"flag_state":"GREEN","start_elapsed":2146.744,"end_elapsed":5261.884,"session_id":"6a7a9f52-e57c-408b-bb84-7e8162dbbe62","id":"70d2f36d-7aeb-41ab-9b23-977485c19a99","created_at":"2026-11-01T15:02:48.397Z"}
 {"flag_state":"FCY","start_elapsed":2307.121,"end_elapsed":2307.907,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"70f115c7-8824-4cf9-a90c-e7a2a34c74e2","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"FCY","start_elapsed":13029.246,"end_elapsed":14064.275,"session_id":"5a6a2d26-f95d-4654-803f-57dbd68c45ea","id":"7107280a-a59d-482e-a2b2-ca01609a245f","created_at":"2026-11-01T15:17:34.810Z"}
@@ -920,6 +952,7 @@
 {"flag_state":"GREEN","start_elapsed":1167.226,"end_elapsed":2458.83,"session_id":"c419b073-6593-462d-8d01-c12d805f1aa1","id":"744d227b-d6e9-498a-aa4f-0261849b1e54","created_at":"2026-11-01T15:13:38.663Z"}
 {"flag_state":"GREEN","start_elapsed":8222.063,"end_elapsed":9099.183,"session_id":"69235ac4-96bf-4b34-8568-5fcb7ba42158","id":"74589fd3-d6bc-43d3-912e-4ae14299caf1","created_at":"2026-11-01T15:02:42.462Z"}
 {"flag_state":"GREEN","start_elapsed":32400,"end_elapsed":36000,"session_id":"a6ad4408-742b-490a-aff8-0af39e352508","id":"746afccb-ce57-45bc-b706-643ed2d6e4fe","created_at":"2026-11-01T15:13:10.720Z"}
+{"session_id":"94556403-de78-4102-b8c1-a0dd80063e5c","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1754.895,"id":"746cba5d-ddf5-43cd-a3c8-f9e20323f7a3","created_at":"2026-11-01T19:41:30.104Z"}
 {"flag_state":"RED","start_elapsed":14400,"end_elapsed":14657.279,"session_id":"34501e0c-63c9-431d-b92c-6f332ba064a9","id":"74812085-c620-4f38-9c61-310fcd5bc147","created_at":"2026-11-01T15:14:04.222Z"}
 {"flag_state":"GREEN","start_elapsed":846.338,"end_elapsed":1947.958,"session_id":"6c22de21-14b6-4c43-bf3a-206a64931d9e","id":"74adda91-4025-41ec-9b6e-aa0c15959018","created_at":"2026-11-01T15:17:17.496Z"}
 {"flag_state":"GREEN","start_elapsed":3176.103,"end_elapsed":3176.792,"session_id":"3cda274a-427f-42ee-8035-b5d7ed48601e","id":"74d1963a-fc05-4985-bcb5-ab4acb1058ee","created_at":"2026-11-01T15:28:49.775Z"}
@@ -935,6 +968,7 @@
 {"flag_state":"GREEN","start_elapsed":12617.256,"end_elapsed":12617.347,"session_id":"0055d055-51b7-4739-ae5c-98362f2f8597","id":"76bb2880-7852-43ce-bdbd-d125441a894f","created_at":"2026-11-01T15:28:32.535Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1194.351,"session_id":"85b94853-612c-44bb-b1c3-26fe6f981a4f","id":"76c46c03-c00b-468a-bc04-484184e608f0","created_at":"2026-11-01T15:17:40.435Z"}
 {"flag_state":"YELLOW","start_elapsed":1945.68,"end_elapsed":3600,"session_id":"2be14f6e-e9ff-4526-bb2f-106d18de395e","id":"76e56683-e5b3-4493-b103-aecadc4b6830","created_at":"2026-11-01T15:13:32.833Z"}
+{"session_id":"2ee8f4a5-74cd-4642-8a02-850b6976a791","flag_state":"GREEN","start_elapsed":873.673,"end_elapsed":2387.673,"id":"76e75df9-6d85-4957-ace2-6e55c9a45ca0","created_at":"2026-11-01T19:41:31.417Z"}
 {"flag_state":"YELLOW","start_elapsed":120.503,"end_elapsed":316.488,"session_id":"882f6c76-4028-4403-a891-84644dd42f38","id":"76eff4e7-90c7-4fe4-921e-4d36ae95fb5f","created_at":"2026-11-01T15:34:32.565Z"}
 {"flag_state":"GREEN","start_elapsed":3524.695,"end_elapsed":3600,"session_id":"4fd4618f-da28-4bef-95f7-133a87cedc30","id":"77191dd7-8dfb-4184-9877-ab07630def6b","created_at":"2026-11-01T15:27:51.512Z"}
 {"flag_state":"RED","start_elapsed":14424.436,"end_elapsed":14427.06,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"7741c8ab-29f8-42f4-be53-419724e29481","created_at":"2026-11-01T15:03:40.087Z"}
@@ -1004,6 +1038,7 @@
 {"flag_state":"YELLOW","start_elapsed":34860.202,"end_elapsed":34873.469,"session_id":"2e19b987-e84e-4047-8cb6-4a2532a38db7","id":"800af4ae-9c4a-40a8-ba04-b9790eea6f52","created_at":"2026-11-01T15:14:04.359Z"}
 {"flag_state":"GREEN","start_elapsed":37.605,"end_elapsed":208.233,"session_id":"2065fea0-770c-43e6-9847-becfb37790cb","id":"8049741b-ce8e-4c9b-8d31-0729ee35af5d","created_at":"2026-11-01T15:13:27.013Z"}
 {"flag_state":"YELLOW","start_elapsed":6449.053,"end_elapsed":6449.088,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"805a8e43-a74c-4c7c-85ea-b927d3aca795","created_at":"2026-11-01T15:13:09.264Z"}
+{"session_id":"255c1ad2-23f8-4bd8-9028-ddae0e32a233","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5294.716,"id":"807be500-9a62-46cc-93e5-09127160e3eb","created_at":"2026-11-01T19:41:30.349Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":55.232,"session_id":"cbecca4d-05a1-44a3-bde2-f5c2e9791704","id":"80837d56-14e9-4625-b663-534ca9aed959","created_at":"2026-11-01T15:34:14.642Z"}
 {"flag_state":"FCY","start_elapsed":25618.997,"end_elapsed":27008.561,"session_id":"bac6dd79-727f-4aeb-9f7c-eefa0bb5eebb","id":"8085e665-ca78-47e9-9f0c-b88e01b532f3","created_at":"2026-11-01T15:02:54.764Z"}
 {"session_id":"382cbde5-374f-47ee-8872-fbb5a7f674a0","flag_state":"GREEN","start_elapsed":0,"end_elapsed":605.387,"id":"80880ba9-f02c-4207-96e3-4f93ff01f8e3","created_at":"2026-11-01T19:41:17.770Z"}
@@ -1033,7 +1068,9 @@
 {"session_id":"47e05929-aff9-44b3-81f1-bdbd6f5ee564","flag_state":"VSC","start_elapsed":4729.116,"end_elapsed":4824.116,"id":"8402b0b3-3eee-49d6-bc53-08a7c738a786","created_at":"2026-11-01T19:41:17.835Z"}
 {"session_id":"c398f91f-b156-4c5c-bf28-81fb4cf522c4","flag_state":"SC","start_elapsed":103.52,"end_elapsed":507.52,"id":"8414bded-837e-4a2e-b71d-32d5ce9fcc7c","created_at":"2026-11-01T19:41:25.515Z"}
 {"flag_state":"GREEN","start_elapsed":6175.98,"end_elapsed":6234.647,"session_id":"0eb1e796-8baa-474b-9128-338d2a8dafa2","id":"843db839-7e68-4eab-82e9-518a1d3997fc","created_at":"2026-11-01T15:05:20.960Z"}
+{"session_id":"7229a010-25c6-40ed-9438-d82fcaa38122","flag_state":"GREEN","start_elapsed":0,"end_elapsed":963.65,"id":"847301dd-efa8-4303-8b91-6a65a68764fd","created_at":"2026-11-01T19:41:29.907Z"}
 {"session_id":"382cbde5-374f-47ee-8872-fbb5a7f674a0","flag_state":"CHEQUERED","start_elapsed":4841.387,"end_elapsed":4931.521,"id":"84734699-2a4e-4be3-9856-8dc10bb7d29f","created_at":"2026-11-01T19:41:17.770Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"GREEN","start_elapsed":4042.677,"end_elapsed":4128.677,"id":"847f8f19-ceb6-4119-95f6-7021daffda28","created_at":"2026-11-01T19:41:31.274Z"}
 {"flag_state":"GREEN","start_elapsed":10800,"end_elapsed":12036.948,"session_id":"0d6632e7-c344-4a00-896b-da3468a9cd9c","id":"84b471da-8592-4866-a8e0-71f610a6b12b","created_at":"2026-11-01T15:28:33.461Z"}
 {"flag_state":"GREEN","start_elapsed":3403.416,"end_elapsed":8607.405,"session_id":"9eef2f1b-11be-4bba-9803-a310124a9b3e","id":"84bf0125-1011-4e93-9689-a8cfeb643963","created_at":"2026-11-01T15:17:21.980Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1881.558,"session_id":"2e2286f5-51c9-47f3-83d1-adc54e88711e","id":"84c889b5-9634-4663-8dce-be3fb909d522","created_at":"2026-11-01T15:02:41.980Z"}
@@ -1044,6 +1081,7 @@
 {"flag_state":"GREEN","start_elapsed":6070.374,"end_elapsed":8969.224,"session_id":"c901f9b7-9588-489f-bf8b-10c73988e046","id":"85b95d8f-e320-4f8b-aa37-0a3790f0043d","created_at":"2026-11-01T15:27:11.382Z"}
 {"flag_state":"GREEN","start_elapsed":7800.429,"end_elapsed":7801.118,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"85bd8053-2b22-470c-885c-a4abcf4da8c4","created_at":"2026-11-01T15:13:09.264Z"}
 {"flag_state":"GREEN","start_elapsed":682.315,"end_elapsed":1727.729,"session_id":"f9797b67-a527-4c71-9e4d-18c713283213","id":"85c72049-6e8b-406e-a8cc-275780e2c650","created_at":"2026-11-01T15:37:57.589Z"}
+{"session_id":"ed2df1db-4d73-4602-8010-4881085b5578","flag_state":"CHEQUERED","start_elapsed":6120.345,"end_elapsed":6211.532,"id":"864638aa-b681-4113-9b81-ad5180f2077d","created_at":"2026-11-01T19:41:31.487Z"}
 {"flag_state":"YELLOW","start_elapsed":809.5,"end_elapsed":830.919,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"8648ec6b-0675-48da-ba92-fce73977eb3d","created_at":"2026-11-01T15:13:32.054Z"}
 {"session_id":"640e8e50-187d-44e3-b3ec-bd3799bd8264","flag_state":"VSC","start_elapsed":2340.455,"end_elapsed":2560.455,"id":"865b01dd-3864-4085-bffd-fc0b142f8803","created_at":"2026-11-01T19:41:24.073Z"}
 {"flag_state":"FCY","start_elapsed":8600.918,"end_elapsed":9559.14,"session_id":"f9823291-edc8-4e47-a9ca-68f50f428098","id":"865c3d36-8629-40ab-9946-3e11cc3fefc6","created_at":"2026-11-01T15:02:44.913Z"}
@@ -1055,6 +1093,7 @@
 {"flag_state":"GREEN","start_elapsed":2898.845,"end_elapsed":2899.052,"session_id":"b7eb8091-db07-4d75-9df0-eb43cf1f3c0a","id":"875abbae-cc76-45c3-9991-b0e62635afd2","created_at":"2026-11-01T15:28:44.585Z"}
 {"flag_state":"GREEN","start_elapsed":4389.099,"end_elapsed":4451.835,"session_id":"9bf210cd-8e45-45f5-9872-d9815b85f0e2","id":"877551c9-dc4b-4144-a784-8547fef28f04","created_at":"2026-11-01T15:03:08.047Z"}
 {"flag_state":"YELLOW","start_elapsed":20570.367,"end_elapsed":20612.182,"session_id":"23309cae-a138-429f-8dbf-25ca8172412b","id":"877cb4e7-a241-4665-88a0-68525e2092b8","created_at":"2026-11-01T15:13:45.245Z"}
+{"session_id":"da3050d0-100d-4e0f-aebd-2f90954345d0","flag_state":"GREEN","start_elapsed":597.511,"end_elapsed":5083.511,"id":"8796c23b-c74b-4c41-89b4-f8c8b53f3565","created_at":"2026-11-01T19:41:30.850Z"}
 {"flag_state":"GREEN","start_elapsed":26608.517,"end_elapsed":26608.897,"session_id":"f803e997-8a81-48bc-a973-8bc5dce066ea","id":"87cdb7d5-70d7-49a4-aad3-d5bda44b5307","created_at":"2026-11-01T15:14:04.301Z"}
 {"session_id":"06d49728-20e0-479c-a3ea-60da63255c6e","flag_state":"CHEQUERED","start_elapsed":4945.958,"end_elapsed":5037.107,"id":"8810c012-bf41-46ab-a7ea-a9e740f610ca","created_at":"2026-11-01T19:41:18.693Z"}
 {"flag_state":"GREEN","start_elapsed":3600,"end_elapsed":7200,"session_id":"0d2aeff8-d487-49e4-899a-f682fd5e5193","id":"88165d5d-d6ae-4264-a4e0-65700f46d77e","created_at":"2026-11-01T15:17:18.219Z"}
@@ -1067,6 +1106,7 @@
 {"flag_state":"YELLOW","start_elapsed":125.601,"end_elapsed":142.451,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"88b562ef-c3d4-4246-a9ba-9fc672e65fab","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"GREEN","start_elapsed":42200.673,"end_elapsed":43200,"session_id":"cccf9987-47b4-4303-a0e5-f9a7dd572037","id":"88e42010-5d04-4567-8f5e-5aec34386110","created_at":"2026-11-01T15:13:10.763Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2221.723,"session_id":"2b14b93d-5caf-4390-a843-c1887eddedf7","id":"88f39092-e1ae-457d-a069-ea0185e1e894","created_at":"2026-11-01T15:37:45.515Z"}
+{"session_id":"d886e6da-5b0a-453f-b288-8d8a4f6562ce","flag_state":"SC","start_elapsed":2048.338,"end_elapsed":2841.338,"id":"88f82ac0-4092-4db8-a86a-7796ee77ff7a","created_at":"2026-11-01T19:41:30.010Z"}
 {"flag_state":"GREEN","start_elapsed":27726.925,"end_elapsed":27728.923,"session_id":"f803e997-8a81-48bc-a973-8bc5dce066ea","id":"89532bc2-1b90-4530-a49f-3103c0a65e0a","created_at":"2026-11-01T15:14:04.301Z"}
 {"flag_state":"YELLOW","start_elapsed":7509.984,"end_elapsed":7517.252,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"8971e2ac-84f9-4e00-a928-2390d52bb4c3","created_at":"2026-11-01T15:03:40.087Z"}
 {"flag_state":"YELLOW","start_elapsed":39904.951,"end_elapsed":43200,"session_id":"66eecc16-7f6e-493b-8130-aa6a8ca94b7a","id":"89984c9c-9878-4248-96f2-44344259766b","created_at":"2026-11-01T15:03:17.246Z"}
@@ -1079,6 +1119,7 @@
 {"flag_state":"GREEN","start_elapsed":2639.916,"end_elapsed":2811.589,"session_id":"2b14b93d-5caf-4390-a843-c1887eddedf7","id":"8a5c4e2c-ee48-4efd-8d25-7dbda6c08ec6","created_at":"2026-11-01T15:37:45.515Z"}
 {"session_id":"993c7d20-68bf-4c1c-bb94-5105ba3d65f9","flag_state":"SC","start_elapsed":573.311,"end_elapsed":1041.311,"id":"8a73fdbd-5d48-4b2f-905a-60ce85f40608","created_at":"2026-11-01T19:41:25.716Z"}
 {"flag_state":"FCY","start_elapsed":79200,"end_elapsed":79910.636,"session_id":"a443c203-4f13-40c0-902a-064dfeed02cc","id":"8aa497ab-651d-44f6-a5b3-397fa421208f","created_at":"2026-11-01T15:02:55.023Z"}
+{"session_id":"d52f4e53-8712-4076-8789-2fb26784a82e","flag_state":"GREEN","start_elapsed":0,"end_elapsed":492.071,"id":"8aac265a-7a14-4eb2-8ed5-1fa709850248","created_at":"2026-11-01T19:41:30.194Z"}
 {"flag_state":"GREEN","start_elapsed":18.232,"end_elapsed":2208.289,"session_id":"2df60832-89e2-4740-b1c5-6e0d882d5655","id":"8aecaa05-aaaf-4a34-93e7-5bdb20c60b43","created_at":"2026-11-01T15:03:40.324Z"}
 {"flag_state":"GREEN","start_elapsed":1631.957,"end_elapsed":2708.929,"session_id":"861f1053-9a78-49eb-8604-f1e2bcb30129","id":"8b01de27-2d9e-4189-b24c-838ef73b5f6f","created_at":"2026-11-01T15:34:46.551Z"}
 {"session_id":"fa41ce60-05f8-4c29-aa3b-89bcd435ae5b","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1720.462,"id":"8b11df44-7010-4fe3-ad8b-b88bbe5ded6e","created_at":"2026-11-01T19:41:24.895Z"}
@@ -1115,6 +1156,7 @@
 {"flag_state":"GREEN","start_elapsed":13642.204,"end_elapsed":13642.453,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"8f34d295-e3bc-4260-8521-a7fed67e0f41","created_at":"2026-11-01T15:13:32.054Z"}
 {"flag_state":"RED","start_elapsed":36048.026,"end_elapsed":36050.624,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"8f396329-3bc4-46fd-a44d-d2c5bb8a1423","created_at":"2026-11-01T15:14:02.745Z"}
 {"session_id":"f93d4e92-452a-4f56-a586-7940b755ec93","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5453.894,"id":"8f4688a5-4195-4c92-aa5c-62206ef62b61","created_at":"2026-11-01T19:41:23.649Z"}
+{"session_id":"5a008564-ff73-4ac1-bb01-457002a19211","flag_state":"CHEQUERED","start_elapsed":1730.643,"end_elapsed":1799.338,"id":"8f4a51cb-a3b6-4545-b27c-e065be4951b0","created_at":"2026-11-01T19:41:30.281Z"}
 {"flag_state":"RED","start_elapsed":2738.603,"end_elapsed":2744.106,"session_id":"882f6c76-4028-4403-a891-84644dd42f38","id":"8f531f28-aed0-4314-bef6-0a493ce5988e","created_at":"2026-11-01T15:34:32.565Z"}
 {"session_id":"288a110a-4fc0-41a2-91da-66b6a1606545","flag_state":"GREEN","start_elapsed":2124.703,"end_elapsed":2621.703,"id":"8f563a1c-bb1f-45f1-901e-0b9c3c6eda94","created_at":"2026-11-01T19:41:18.141Z"}
 {"flag_state":"GREEN","start_elapsed":3976.405,"end_elapsed":4197.776,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"8f840faf-39f7-402a-8550-240b9f511cc4","created_at":"2026-11-01T15:03:40.087Z"}
@@ -1183,6 +1225,7 @@
 {"flag_state":"FCY","start_elapsed":8681.538,"end_elapsed":9682.089,"session_id":"35e2769c-a3be-45ca-83fd-8c4acd2a0b45","id":"97bf388b-b9b3-4a9d-9dea-4b761eedeff6","created_at":"2026-11-01T15:03:05.601Z"}
 {"flag_state":"YELLOW","start_elapsed":5334.873,"end_elapsed":6194.575,"session_id":"90068233-8c34-46e0-be59-96e2dc2391c1","id":"97d818f7-b730-488e-97a3-a358649fab70","created_at":"2026-11-01T15:14:04.142Z"}
 {"flag_state":"FCY","start_elapsed":4246.823,"end_elapsed":4557.67,"session_id":"7640c71e-f6e5-41f4-8a28-975ad497b375","id":"97e7d144-e870-41c1-8a3d-bca1a61249a6","created_at":"2026-11-01T15:27:46.964Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"CHEQUERED","start_elapsed":5880.677,"end_elapsed":5923.289,"id":"97f0db11-6a84-481b-9380-82eaba8b6179","created_at":"2026-11-01T19:41:31.274Z"}
 {"flag_state":"GREEN","start_elapsed":3600,"end_elapsed":3816.97,"session_id":"382c3765-1922-4541-bc12-96b61423b04e","id":"987fe550-6c06-4fc6-bf47-f3b18bd1d3db","created_at":"2026-11-01T15:27:51.536Z"}
 {"flag_state":"YELLOW","start_elapsed":27434.813,"end_elapsed":28997.874,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"9882cbbb-cc49-43da-be3c-f585b42be9ed","created_at":"2026-11-01T15:13:09.264Z"}
 {"session_id":"a4db8cff-e708-4dc4-ba5e-c21cb8f8aaad","flag_state":"CHEQUERED","start_elapsed":6125.604,"end_elapsed":6166.725,"id":"98a885fa-e4d3-46e6-84c4-0816a6f06069","created_at":"2026-11-01T19:41:23.423Z"}
@@ -1192,6 +1235,7 @@
 {"flag_state":"GREEN","start_elapsed":1474.661,"end_elapsed":3600,"session_id":"812cc315-16d6-4d83-8ef7-05d5ce5d155d","id":"98cb206e-b2c8-4096-a24e-6f88f8935f5a","created_at":"2026-11-01T15:03:17.030Z"}
 {"flag_state":"GREEN","start_elapsed":8030.132,"end_elapsed":11460.699,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"98d38ba4-eb87-482f-ae82-274bb90b3a98","created_at":"2026-11-01T15:16:49.272Z"}
 {"flag_state":"GREEN","start_elapsed":16411.392,"end_elapsed":16412.824,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"98d9bc80-c28b-42ad-a98f-3a5b9be7f42d","created_at":"2026-11-01T15:13:44.342Z"}
+{"session_id":"2ee8f4a5-74cd-4642-8a02-850b6976a791","flag_state":"SC","start_elapsed":145.673,"end_elapsed":873.673,"id":"98dc4a60-17d8-4c68-ac8e-55f9b6ce9ee1","created_at":"2026-11-01T19:41:31.417Z"}
 {"flag_state":"FCY","start_elapsed":3816.97,"end_elapsed":4403.392,"session_id":"a77bd1e6-98f7-4552-8b0f-29e0be30f2f4","id":"991cd4a9-8732-40aa-bffc-dd5c365ec09d","created_at":"2026-11-01T15:27:50.982Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":20.427,"session_id":"bf249293-cfc2-4ca3-9673-9c97d61dbe71","id":"99433552-cf7d-4101-8c5c-ba896241c70c","created_at":"2026-11-01T15:14:04.113Z"}
 {"flag_state":"YELLOW","start_elapsed":2085.704,"end_elapsed":3352.994,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"99458128-d288-4c05-989a-50ea5b9bbb20","created_at":"2026-11-01T15:13:44.342Z"}
@@ -1297,6 +1341,7 @@
 {"session_id":"5f850b00-39bd-442d-a481-56e21e3528f6","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1865.139,"id":"a5eab7c9-c0a1-42d1-80c9-b4eb328a3d6e","created_at":"2026-11-01T19:41:19.139Z"}
 {"flag_state":"GREEN","start_elapsed":10800,"end_elapsed":14400,"session_id":"45069be5-971b-42ae-9108-4e7f10da7d6d","id":"a5ff7999-4573-4e40-bb50-94da5b062cf7","created_at":"2026-11-01T15:02:39.121Z"}
 {"flag_state":"RED","start_elapsed":7254.713,"end_elapsed":7255.33,"session_id":"fe4d63b6-1f2f-4bf5-9a54-1e685c9c1ae5","id":"a62c5095-2ac2-4e3b-bcff-fc94a2e0ba38","created_at":"2026-11-01T15:29:05.026Z"}
+{"session_id":"d19d4cd6-af1e-4eb7-8f04-af6db435c8d0","flag_state":"CHEQUERED","start_elapsed":5715.877,"end_elapsed":5811.591,"id":"a64b8370-efc2-44b7-847a-e6c5290fecda","created_at":"2026-11-01T19:41:31.557Z"}
 {"flag_state":"GREEN","start_elapsed":14111.965,"end_elapsed":14400,"session_id":"8c72ed9b-998f-4295-897c-b81d364062ef","id":"a68adb28-3478-434b-a5c9-89a547966da5","created_at":"2026-11-01T15:13:10.595Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":1.431,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"a68dd403-a2d6-43df-a1d7-c3c44a26da72","created_at":"2026-11-01T15:23:07.016Z"}
 {"session_id":"c398f91f-b156-4c5c-bf28-81fb4cf522c4","flag_state":"GREEN","start_elapsed":803.52,"end_elapsed":5519.52,"id":"a6964eab-d7b4-45a4-9f24-01ecbda036ba","created_at":"2026-11-01T19:41:25.515Z"}
@@ -1319,6 +1364,7 @@
 {"flag_state":"FCY","start_elapsed":20170.236,"end_elapsed":21411.225,"session_id":"6743122d-403b-4a25-9569-e43bf4ffc5cb","id":"a86866ce-bfda-4411-b2ac-d58477d6f1af","created_at":"2026-11-01T15:02:54.742Z"}
 {"flag_state":"FCY","start_elapsed":2600.102,"end_elapsed":3109.67,"session_id":"5a6a2d26-f95d-4654-803f-57dbd68c45ea","id":"a87af34b-b630-4101-8a72-938934c6ee5f","created_at":"2026-11-01T15:17:34.810Z"}
 {"session_id":"6679c5e5-25a1-4bce-9e6e-9ea102193650","flag_state":"SC","start_elapsed":55.791,"end_elapsed":746.791,"id":"a8bae35a-5c43-4a1e-a9f4-9ea550f95da1","created_at":"2026-11-01T19:41:19.263Z"}
+{"session_id":"e6d4a625-496b-4cd0-a1af-8527af45edf8","flag_state":"CHEQUERED","start_elapsed":5547.582,"end_elapsed":5626.067,"id":"a8eba64b-a9e3-4677-baec-fac32e0690ab","created_at":"2026-11-01T19:41:30.586Z"}
 {"flag_state":"YELLOW","start_elapsed":1206.922,"end_elapsed":1596.698,"session_id":"969aaee4-5add-49d7-b16a-561b71425a7c","id":"a8fc04fc-8bf6-455b-b2ac-f00d9a38ac7e","created_at":"2026-11-01T15:39:21.475Z"}
 {"flag_state":"YELLOW","start_elapsed":20612.182,"end_elapsed":20957.932,"session_id":"23309cae-a138-429f-8dbf-25ca8172412b","id":"a8fc4dfa-4b2e-42e5-a5d6-0537c21fc17a","created_at":"2026-11-01T15:13:45.245Z"}
 {"flag_state":"GREEN","start_elapsed":8002.453,"end_elapsed":9117.497,"session_id":"8e0618b9-a3b1-4000-ad72-ce4efed414bd","id":"a90dc349-11a6-43d9-902e-217f4d549aab","created_at":"2026-11-01T15:03:40.087Z"}
@@ -1367,11 +1413,13 @@
 {"flag_state":"GREEN","start_elapsed":18000,"end_elapsed":21600,"session_id":"6e9656e0-4cab-4da6-a413-cae003b67647","id":"ad9b192b-4b41-4fa3-a7e8-fba5aaa26067","created_at":"2026-11-01T15:17:42.199Z"}
 {"flag_state":"YELLOW","start_elapsed":28800,"end_elapsed":29551.436,"session_id":"47db1785-a9a3-4709-9c93-68a31a8ca5f4","id":"ade22e1a-4e75-4926-a46b-36a989c185c5","created_at":"2026-11-01T15:14:04.327Z"}
 {"session_id":"b5590dc3-1e05-47fe-a24f-7c931e3473ec","flag_state":"CHEQUERED","start_elapsed":5604.87,"end_elapsed":5702.796,"id":"ae0110e1-10e0-4189-b5ab-1dc3f045179f","created_at":"2026-11-01T19:41:25.081Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"CHEQUERED","start_elapsed":6434.334,"end_elapsed":6464.036,"id":"ae064eaa-7e11-4e9b-883d-de5efe8906f2","created_at":"2026-11-01T19:41:31.353Z"}
 {"flag_state":"GREEN","start_elapsed":3974,"end_elapsed":4568.502,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"ae3e79f8-934d-4b87-99fd-b128313327a1","created_at":"2026-11-01T15:13:32.054Z"}
 {"flag_state":"GREEN","start_elapsed":32400,"end_elapsed":36000,"session_id":"db2f5ce5-83da-4c53-b3f4-458de61e5d35","id":"ae40a539-d4e2-457e-8905-6fa56c1955c9","created_at":"2026-11-01T15:03:17.167Z"}
 {"flag_state":"FCY","start_elapsed":334.84,"end_elapsed":783.138,"session_id":"be07c3fa-8264-4254-a0cc-017c665d0232","id":"ae539075-2089-4103-827f-1b17b28a9aa9","created_at":"2026-11-01T15:02:38.378Z"}
 {"flag_state":"YELLOW","start_elapsed":69410.08,"end_elapsed":70844.883,"session_id":"77586c21-8f39-4716-b15b-dda7415a3f5a","id":"ae673733-c46f-457e-bb5e-46ec99c23faf","created_at":"2026-11-01T15:03:17.382Z"}
 {"flag_state":"GREEN","start_elapsed":8263.543,"end_elapsed":9731.652,"session_id":"c8bc7b1f-ba35-481c-abb1-4100cb588806","id":"ae913662-f5dc-4143-ba18-6ace8470ef71","created_at":"2026-11-01T15:17:30.409Z"}
+{"session_id":"49106886-37c3-43bc-a2d3-e7407ff0ead5","flag_state":"GREEN","start_elapsed":0,"end_elapsed":1571.938,"id":"aeea31fb-7089-4d19-a3a1-c1167d07aeb2","created_at":"2026-11-01T19:41:30.721Z"}
 {"flag_state":"YELLOW","start_elapsed":9024.132,"end_elapsed":9053.329,"session_id":"e23c5590-30a8-437d-a8bb-3d3f23b0b788","id":"af06039a-f275-4faa-90fe-5d65d663dccc","created_at":"2026-11-01T15:13:32.885Z"}
 {"flag_state":"FCY","start_elapsed":5349.714,"end_elapsed":6175.98,"session_id":"309c8248-efdc-460a-ae8a-68f83ad4510a","id":"af187a34-3712-42d5-a593-5d8705ed6190","created_at":"2026-11-01T15:05:20.633Z"}
 {"flag_state":"GREEN","start_elapsed":2358.436,"end_elapsed":2361.664,"session_id":"c488d27d-1a78-44e7-a240-394ee4edcbb2","id":"afa712bb-bdb4-4eb8-a716-9174e8da494d","created_at":"2026-11-01T15:34:15.223Z"}
@@ -1387,6 +1435,7 @@
 {"session_id":"183ee055-cd30-44f4-95ca-71a195cf1d0a","flag_state":"VSC","start_elapsed":4640.418,"end_elapsed":4698.418,"id":"b09356e2-8dff-4554-a027-367835061020","created_at":"2026-11-01T19:41:18.633Z"}
 {"flag_state":"GREEN","start_elapsed":4940.565,"end_elapsed":7374.095,"session_id":"fe92e207-836d-4d51-b16c-5ba95ece7153","id":"b09c70d9-f0fd-4a85-8c3a-50a43f9d83ec","created_at":"2026-11-01T15:27:29.144Z"}
 {"flag_state":"GREEN","start_elapsed":2601.814,"end_elapsed":2603.212,"session_id":"882f6c76-4028-4403-a891-84644dd42f38","id":"b1121386-f700-407d-a724-b40ad6619a5f","created_at":"2026-11-01T15:34:32.565Z"}
+{"session_id":"39b4e107-d7b6-419b-b4b6-86a6fe02fdd0","flag_state":"GREEN","start_elapsed":4501.677,"end_elapsed":5880.677,"id":"b14d1aee-ff08-43ca-9d28-ec30cf5e66c9","created_at":"2026-11-01T19:41:31.274Z"}
 {"flag_state":"GREEN","start_elapsed":2178.601,"end_elapsed":2759.504,"session_id":"d68a5fd6-70f2-4937-b725-e843b21276ff","id":"b160dbe3-cb2c-43c3-979c-d22cb689ba34","created_at":"2026-11-01T15:34:20.849Z"}
 {"flag_state":"GREEN","start_elapsed":21411.225,"end_elapsed":21600,"session_id":"6743122d-403b-4a25-9569-e43bf4ffc5cb","id":"b18fb986-a960-48be-9fcf-38c71436fce8","created_at":"2026-11-01T15:02:54.742Z"}
 {"flag_state":"GREEN","start_elapsed":583.507,"end_elapsed":4809.971,"session_id":"2065fea0-770c-43e6-9847-becfb37790cb","id":"b1b1f151-ef8b-4fc4-a1e5-b2fa69c572b6","created_at":"2026-11-01T15:13:27.013Z"}
@@ -1396,11 +1445,14 @@
 {"flag_state":"RED","start_elapsed":6052.77,"end_elapsed":6130.851,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"b22bc629-3332-438b-adfa-f24d9aa6a326","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"GREEN","start_elapsed":281.196,"end_elapsed":1772.158,"session_id":"71521ba2-f750-4070-8ce5-88d336c0bde9","id":"b22ef4d9-4fcd-4061-b0c5-70dd1d153a09","created_at":"2026-11-01T15:38:34.361Z"}
 {"flag_state":"FCY","start_elapsed":43471.014,"end_elapsed":44933.917,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"b24ef8b4-82c0-4c0f-8770-a35a13046561","created_at":"2026-11-01T15:02:53.195Z"}
+{"session_id":"715b29f8-b16a-4376-ac61-2746a0fe1e50","flag_state":"GREEN","start_elapsed":5241.473,"end_elapsed":5285.473,"id":"b27e9a84-31d4-40a8-8e80-2e98c683d85a","created_at":"2026-11-01T19:41:30.458Z"}
 {"session_id":"ff428607-c90d-4f09-a7f1-c4a93764f6ff","flag_state":"CHEQUERED","start_elapsed":4480.067,"end_elapsed":4561.966,"id":"b28315eb-0ed7-4ce1-a132-228b84a0f5bf","created_at":"2026-11-01T19:41:18.927Z"}
+{"session_id":"62afd12a-2f6a-4b5d-92d8-68fb9513872c","flag_state":"CHEQUERED","start_elapsed":5995.173,"end_elapsed":6062.174,"id":"b29a3a45-12c7-45fe-adae-8a483084aabe","created_at":"2026-11-01T19:41:30.917Z"}
 {"flag_state":"GREEN","start_elapsed":5327.658,"end_elapsed":7200,"session_id":"a9c8da80-3684-48b7-8dc9-f3da890947fa","id":"b2a08802-acac-4db4-b6b6-8f8d2accb655","created_at":"2026-11-01T15:13:32.855Z"}
 {"flag_state":"FCY","start_elapsed":67196.244,"end_elapsed":67954.858,"session_id":"8508340f-407c-413f-a89b-fefb5eda8c51","id":"b2bb05ba-95f0-49b0-831d-a418fcaff93a","created_at":"2026-11-01T15:02:54.942Z"}
 {"session_id":"c9c8c5fa-e2ec-44de-a772-52f2183a5a6c","flag_state":"GREEN","start_elapsed":0,"end_elapsed":3139.276,"id":"b2f1c60c-c7bc-4a8d-ac86-830c115cb5a8","created_at":"2026-11-01T19:41:23.787Z"}
 {"flag_state":"GREEN","start_elapsed":39600,"end_elapsed":40432.553,"session_id":"d07b49c6-91e6-4e93-ab92-4d190530835f","id":"b32164e1-ee75-4a4e-846e-0dca5ee8a766","created_at":"2026-11-01T15:02:39.207Z"}
+{"session_id":"2ee8f4a5-74cd-4642-8a02-850b6976a791","flag_state":"GREEN","start_elapsed":0,"end_elapsed":145.673,"id":"b34e8ddd-48bc-4e99-a4ee-c22f6f313ea6","created_at":"2026-11-01T19:41:31.417Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":162.712,"session_id":"71521ba2-f750-4070-8ce5-88d336c0bde9","id":"b3925971-6840-4b1e-85c3-6e71f9df8c60","created_at":"2026-11-01T15:38:34.361Z"}
 {"flag_state":"YELLOW","start_elapsed":1139.508,"end_elapsed":2373.153,"session_id":"b7eb8091-db07-4d75-9df0-eb43cf1f3c0a","id":"b3e59ed2-468e-4f61-8ff3-d783d698eeb0","created_at":"2026-11-01T15:28:44.585Z"}
 {"flag_state":"GREEN","start_elapsed":16079.982,"end_elapsed":18000,"session_id":"bbeaaa68-f42a-44b3-b7b8-9ae96d631688","id":"b453030b-4d99-4b23-9409-020b40e99873","created_at":"2026-11-01T15:17:42.166Z"}
@@ -1428,6 +1480,7 @@
 {"flag_state":"FCY","start_elapsed":4451.835,"end_elapsed":5044.292,"session_id":"9bf210cd-8e45-45f5-9872-d9815b85f0e2","id":"b79e67b2-6310-40cd-b7a1-26f92b9669c9","created_at":"2026-11-01T15:03:08.047Z"}
 {"flag_state":"FCY","start_elapsed":9099.183,"end_elapsed":10225.472,"session_id":"69235ac4-96bf-4b34-8568-5fcb7ba42158","id":"b7ac13a6-2338-476a-8e92-74bf2603546c","created_at":"2026-11-01T15:02:42.462Z"}
 {"flag_state":"GREEN","start_elapsed":28997.874,"end_elapsed":28998.883,"session_id":"55e9e70d-ea1b-494f-b7e8-e9e4f89e2f0e","id":"b7c26317-1fb0-4f21-a240-523b4d3adcdb","created_at":"2026-11-01T15:13:09.264Z"}
+{"session_id":"d19d4cd6-af1e-4eb7-8f04-af6db435c8d0","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5715.877,"id":"b7c8191b-7d1b-42cb-affc-33f683e79293","created_at":"2026-11-01T19:41:31.557Z"}
 {"session_id":"0479ced6-012b-4f97-b407-b205f387e9fb","flag_state":"GREEN","start_elapsed":628.973,"end_elapsed":5708.973,"id":"b7cffc97-df3c-464c-8233-c431045cae76","created_at":"2026-11-01T19:41:19.196Z"}
 {"flag_state":"YELLOW","start_elapsed":39904.951,"end_elapsed":63510.655,"session_id":"1b5b118d-e30b-4760-a125-c7eee7bee01b","id":"b7d888b3-9d67-46a3-9ebb-4bfb98cf9ee5","created_at":"2026-11-01T15:03:15.594Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2876.747,"session_id":"ac10d6fe-8030-46a2-89fc-71c34d75c7dd","id":"b7e3598e-b1f6-40b1-ba13-c126479b0a76","created_at":"2026-11-01T15:38:43.372Z"}
@@ -1442,6 +1495,7 @@
 {"flag_state":"YELLOW","start_elapsed":9024.132,"end_elapsed":9053.329,"session_id":"8bd56463-d47e-4278-a9b6-f149dcba1ac8","id":"b9330643-fbe0-4a1a-abc8-09541a89b6e8","created_at":"2026-11-01T15:13:32.054Z"}
 {"flag_state":"FCY","start_elapsed":10011.158,"end_elapsed":10800,"session_id":"61cc9246-df15-4be4-98b9-3029065c6f35","id":"b933c54b-1fa8-45ba-9ca3-7fa2b8ef55fe","created_at":"2026-11-01T15:22:00.669Z"}
 {"flag_state":"FCY","start_elapsed":4683.368,"end_elapsed":5608.175,"session_id":"7af96667-c873-4a20-b1bf-4c2905f65676","id":"b9369048-e83f-465d-8e2d-f7622fa43a48","created_at":"2026-11-01T15:02:42.445Z"}
+{"session_id":"94556403-de78-4102-b8c1-a0dd80063e5c","flag_state":"CHEQUERED","start_elapsed":1754.895,"end_elapsed":1844.599,"id":"b9967645-abb2-4a05-8d2a-6f65e860461a","created_at":"2026-11-01T19:41:30.104Z"}
 {"flag_state":"FCY","start_elapsed":4667.291,"end_elapsed":5212.679,"session_id":"382c3765-1922-4541-bc12-96b61423b04e","id":"b9ab5b47-6e45-466c-8aba-1de7d991f6d3","created_at":"2026-11-01T15:27:51.536Z"}
 {"flag_state":"GREEN","start_elapsed":4053.377,"end_elapsed":4603.779,"session_id":"90068233-8c34-46e0-be59-96e2dc2391c1","id":"b9cf61c1-9076-4beb-b5a7-5da423f7e295","created_at":"2026-11-01T15:14:04.142Z"}
 {"flag_state":"FCY","start_elapsed":334.84,"end_elapsed":783.138,"session_id":"84674d26-8ae1-46dd-895f-53cc59e3f182","id":"ba03720f-78f8-4084-9647-e2613be329ba","created_at":"2026-11-01T15:02:39.084Z"}
@@ -1454,6 +1508,7 @@
 {"flag_state":"GREEN","start_elapsed":1724.876,"end_elapsed":1725.212,"session_id":"6dcd5a53-db89-40e2-a302-baad441f608d","id":"baa0fd64-631c-4f58-a054-7215b74fca45","created_at":"2026-11-01T15:34:20.344Z"}
 {"flag_state":"GREEN","start_elapsed":9949.913,"end_elapsed":10034.414,"session_id":"27c07d51-7144-47e7-973d-a8ceed9a1e23","id":"bab96374-df93-4296-b52e-b2270077eb2d","created_at":"2026-11-01T15:03:40.350Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":0.001,"session_id":"0055d055-51b7-4739-ae5c-98362f2f8597","id":"bae67f7e-c5fc-4827-a0bd-84291a1fa36b","created_at":"2026-11-01T15:28:32.535Z"}
+{"session_id":"256065d0-1339-49a8-bfca-0f17b865ebbb","flag_state":"CHEQUERED","start_elapsed":7484.052,"end_elapsed":7554.861,"id":"bb049e68-04de-481f-8f63-61064d4a3341","created_at":"2026-11-01T19:41:31.047Z"}
 {"flag_state":"FCY","start_elapsed":6963.839,"end_elapsed":7427.948,"session_id":"b608200e-892e-48f0-917e-91cbbe6946d7","id":"bb0aed0d-3a42-4966-af2a-1942befc12f2","created_at":"2026-11-01T15:27:55.957Z"}
 {"flag_state":"GREEN","start_elapsed":18858.951,"end_elapsed":18860.567,"session_id":"4c8feea7-a781-4f35-9f55-80a497ad86b3","id":"bb231949-a416-4792-aeab-635b496a458b","created_at":"2026-11-01T15:14:04.249Z"}
 {"flag_state":"GREEN","start_elapsed":3655.765,"end_elapsed":5048.049,"session_id":"db1a6efe-3c51-4878-b0db-796d0c4e2e68","id":"bb40853c-5fac-4206-9587-fce07d124a64","created_at":"2026-11-01T15:17:04.260Z"}
@@ -1482,6 +1537,7 @@
 {"flag_state":"GREEN","start_elapsed":25200,"end_elapsed":28800,"session_id":"d663746a-f731-4336-9df5-2e463497771c","id":"bd8ee9e8-8c44-4c32-a01f-666c69552c9f","created_at":"2026-11-01T15:02:49.263Z"}
 {"flag_state":"YELLOW","start_elapsed":29640.563,"end_elapsed":29679.616,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"bd964757-b358-4610-94e2-eb6f43a619bb","created_at":"2026-11-01T15:14:02.745Z"}
 {"flag_state":"YELLOW","start_elapsed":16559.614,"end_elapsed":18893.366,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"bd996c03-d8bd-4b1f-a18e-b3ccff66e4cb","created_at":"2026-11-01T15:13:44.342Z"}
+{"session_id":"da3050d0-100d-4e0f-aebd-2f90954345d0","flag_state":"SC","start_elapsed":92.511,"end_elapsed":597.511,"id":"be072912-6879-4feb-9140-06fe6c8bea8f","created_at":"2026-11-01T19:41:30.850Z"}
 {"flag_state":"YELLOW","start_elapsed":37856.13,"end_elapsed":37871.835,"session_id":"3430aed6-18c4-4471-85b8-9c6bd9250e25","id":"be1e06d7-e3da-4eb4-8985-11c410a54ea1","created_at":"2026-11-01T15:13:10.741Z"}
 {"flag_state":"GREEN","start_elapsed":3600,"end_elapsed":7200,"session_id":"8548b22d-9dcd-4f9b-8898-12e6db8fb8bf","id":"be223e02-6b4f-45b2-aedc-72a0dc9948ab","created_at":"2026-11-01T15:28:33.415Z"}
 {"flag_state":"GREEN","start_elapsed":36000,"end_elapsed":39600,"session_id":"5c4ad81c-d533-44c7-bc26-6d06136d32e1","id":"be4f6769-90d9-4820-8c6a-c39d69d3e6a1","created_at":"2026-11-01T15:02:39.195Z"}
@@ -1521,6 +1577,7 @@
 {"flag_state":"GREEN","start_elapsed":67954.858,"end_elapsed":68400,"session_id":"8508340f-407c-413f-a89b-fefb5eda8c51","id":"c3321094-850a-4032-bc27-4d6694350c03","created_at":"2026-11-01T15:02:54.942Z"}
 {"session_id":"382cbde5-374f-47ee-8872-fbb5a7f674a0","flag_state":"GREEN","start_elapsed":1011.387,"end_elapsed":4841.387,"id":"c3531144-d08a-4868-9630-0f8e33c90740","created_at":"2026-11-01T19:41:17.770Z"}
 {"flag_state":"YELLOW","start_elapsed":15835.865,"end_elapsed":15863.031,"session_id":"4c4a6026-dede-41f5-a757-597e709cdb35","id":"c397d644-ff5a-4d11-82b9-05e898b31651","created_at":"2026-11-01T15:13:45.207Z"}
+{"session_id":"715b29f8-b16a-4376-ac61-2746a0fe1e50","flag_state":"SC","start_elapsed":5285.473,"end_elapsed":8610.473,"id":"c3ba4851-64e5-414d-93b2-c198e1c989dc","created_at":"2026-11-01T19:41:30.458Z"}
 {"session_id":"288a110a-4fc0-41a2-91da-66b6a1606545","flag_state":"GREEN","start_elapsed":3156.703,"end_elapsed":5450.703,"id":"c3c7c172-6ac7-4020-80d4-54dccd50d1a7","created_at":"2026-11-01T19:41:18.141Z"}
 {"flag_state":"YELLOW","start_elapsed":692.891,"end_elapsed":693.003,"session_id":"3635e93b-9098-40c0-b2cb-f5c7400a84f5","id":"c3d03669-cae7-468b-b777-53037dfadf07","created_at":"2026-11-01T15:13:44.342Z"}
 {"flag_state":"GREEN","start_elapsed":29552.282,"end_elapsed":29640.563,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"c40123c6-6f05-409b-b89b-e976638abe40","created_at":"2026-11-01T15:14:02.745Z"}
@@ -1570,12 +1627,14 @@
 {"flag_state":"FCY","start_elapsed":11053.63,"end_elapsed":11706.635,"session_id":"a77bd1e6-98f7-4552-8b0f-29e0be30f2f4","id":"c8c2ac9a-8ada-449f-a47e-990a48d2a7f5","created_at":"2026-11-01T15:27:50.982Z"}
 {"session_id":"c398f91f-b156-4c5c-bf28-81fb4cf522c4","flag_state":"CHEQUERED","start_elapsed":5519.52,"end_elapsed":5590.769,"id":"c8caa1bc-d42c-4598-929b-9fd1f85a401d","created_at":"2026-11-01T19:41:25.515Z"}
 {"flag_state":"GREEN","start_elapsed":18000,"end_elapsed":20170.236,"session_id":"6743122d-403b-4a25-9569-e43bf4ffc5cb","id":"c8dc21c0-0c39-4056-8942-d649cbe9fe6f","created_at":"2026-11-01T15:02:54.742Z"}
+{"session_id":"7229a010-25c6-40ed-9438-d82fcaa38122","flag_state":"SC","start_elapsed":963.65,"end_elapsed":1429.65,"id":"c93a0a19-abbb-45c5-957c-f9d2ab3ee823","created_at":"2026-11-01T19:41:29.907Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2906.855,"session_id":"968eacde-4893-4189-ac1a-b90a115f1d87","id":"c9538e32-3bfc-480d-9d77-7805432ccadf","created_at":"2026-11-01T15:38:27.838Z"}
 {"flag_state":"GREEN","start_elapsed":510.267,"end_elapsed":3600,"session_id":"fa5c2d48-ddf6-4306-905b-00ae5d67f4e1","id":"c97e4be1-ea6d-4ff1-97af-35b65a880d50","created_at":"2026-11-01T15:28:33.390Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":24.176,"session_id":"3cda274a-427f-42ee-8035-b5d7ed48601e","id":"c981c981-c90e-4910-8e5f-9b2d65b36ea8","created_at":"2026-11-01T15:28:49.775Z"}
 {"flag_state":"FCY","start_elapsed":7200,"end_elapsed":7669.971,"session_id":"61cc9246-df15-4be4-98b9-3029065c6f35","id":"c99ded50-e9ca-413e-a826-2a66a715ea36","created_at":"2026-11-01T15:22:00.669Z"}
 {"flag_state":"GREEN","start_elapsed":17951.356,"end_elapsed":18000,"session_id":"faab3e50-aaf1-4dec-9cb1-9932598d5499","id":"c9a1a64e-a80f-474e-b878-bd960d1798d2","created_at":"2026-11-01T15:02:42.499Z"}
 {"flag_state":"YELLOW","start_elapsed":2154.071,"end_elapsed":2712.762,"session_id":"2975fad1-b47c-4062-a0b9-9f939ab357c9","id":"c9aa2314-2e24-4be2-b192-ec68350c6ee3","created_at":"2026-11-01T15:34:26.523Z"}
+{"session_id":"3b11e439-31fa-4a44-8efa-be621cb412f6","flag_state":"GREEN","start_elapsed":0,"end_elapsed":197.642,"id":"c9b7c09a-6373-4cc4-b1a4-4191b14e94a7","created_at":"2026-11-01T19:41:31.124Z"}
 {"session_id":"f80ee5d4-5ded-42d4-9cd2-f56661f692bb","flag_state":"CHEQUERED","start_elapsed":5330.438,"end_elapsed":5422.032,"id":"c9bcee62-020b-4363-b0f6-c9ec8c4e654e","created_at":"2026-11-01T19:41:23.984Z"}
 {"flag_state":"GREEN","start_elapsed":3126.086,"end_elapsed":9611.607,"session_id":"c419b073-6593-462d-8d01-c12d805f1aa1","id":"ca10d7ef-7a31-4e5c-899d-931a9a2b68c7","created_at":"2026-11-01T15:13:38.663Z"}
 {"flag_state":"RED","start_elapsed":7321.553,"end_elapsed":7324.685,"session_id":"3cda274a-427f-42ee-8035-b5d7ed48601e","id":"ca12221b-e15a-4f62-9d98-6b10c3e7aee1","created_at":"2026-11-01T15:28:49.775Z"}
@@ -1599,6 +1658,7 @@
 {"session_id":"26fb8766-cdd5-4840-9c50-b09c966077d6","flag_state":"GREEN","start_elapsed":255.513,"end_elapsed":5191.513,"id":"cc3d1a15-e9c1-4825-b32c-be02a83d0619","created_at":"2026-11-01T19:41:19.690Z"}
 {"flag_state":"FCY","start_elapsed":40432.553,"end_elapsed":41296.974,"session_id":"be07c3fa-8264-4254-a0cc-017c665d0232","id":"cc7006d1-949c-4d15-a196-2392490fe260","created_at":"2026-11-01T15:02:38.378Z"}
 {"flag_state":"GREEN","start_elapsed":28997.874,"end_elapsed":28998.883,"session_id":"95042253-3788-4662-8c91-18001dd57d34","id":"ccc097c3-fc1a-4119-870f-dcd1fe91dff4","created_at":"2026-11-01T15:13:10.701Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"SC","start_elapsed":5125.334,"end_elapsed":6019.334,"id":"ccd910f5-ddb7-42b9-9ce7-91a3a1d0ad5a","created_at":"2026-11-01T19:41:31.353Z"}
 {"flag_state":"YELLOW","start_elapsed":18893.366,"end_elapsed":18893.493,"session_id":"23309cae-a138-429f-8dbf-25ca8172412b","id":"ccf704ea-012e-4e4f-af29-b2aae4f97984","created_at":"2026-11-01T15:13:45.245Z"}
 {"flag_state":"GREEN","start_elapsed":365.819,"end_elapsed":367.387,"session_id":"861f1053-9a78-49eb-8604-f1e2bcb30129","id":"cd8a3516-180a-440e-9c74-62db8d49bc81","created_at":"2026-11-01T15:34:46.551Z"}
 {"flag_state":"GREEN","start_elapsed":3354.719,"end_elapsed":3600,"session_id":"75fbd6c9-12db-40d6-9746-96f7a51f2438","id":"cdb0ad38-e531-4383-ac97-3999ae28adc6","created_at":"2026-11-01T15:22:00.631Z"}
@@ -1628,6 +1688,7 @@
 {"session_id":"b6a9e6e8-5cf7-48fd-b357-711c45c41b27","flag_state":"CHEQUERED","start_elapsed":5880.913,"end_elapsed":5964.365,"id":"d0ff9ff4-5f01-48f1-b682-61ebe8068114","created_at":"2026-11-01T19:41:18.752Z"}
 {"session_id":"cb735b7a-ce0d-444a-b97a-105c234e8c75","flag_state":"GREEN","start_elapsed":0,"end_elapsed":59.505,"id":"d1499951-b127-4f6e-9e77-063553c08463","created_at":"2026-11-01T19:41:19.620Z"}
 {"flag_state":"FCY","start_elapsed":2786.81,"end_elapsed":3373.187,"session_id":"820d8141-09d2-4cf4-912e-36880caab43d","id":"d15438b0-6a1c-42cd-8e50-1f5d3dd1e007","created_at":"2026-11-01T15:27:16.880Z"}
+{"session_id":"49106886-37c3-43bc-a2d3-e7407ff0ead5","flag_state":"CHEQUERED","start_elapsed":1571.938,"end_elapsed":1663.869,"id":"d19fe171-6ee7-4bad-8d9f-e265636fecfc","created_at":"2026-11-01T19:41:30.721Z"}
 {"session_id":"c398f91f-b156-4c5c-bf28-81fb4cf522c4","flag_state":"GREEN","start_elapsed":0,"end_elapsed":103.52,"id":"d1a59ba7-78b2-43b3-a626-b7821eed0be4","created_at":"2026-11-01T19:41:25.515Z"}
 {"flag_state":"GREEN","start_elapsed":2237.237,"end_elapsed":2795.245,"session_id":"3e46b5de-6177-496b-8029-cc0e1024c27f","id":"d1a5f28a-c4b7-410c-a3de-54e76971c44a","created_at":"2026-11-01T15:38:48.586Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":8.302,"session_id":"9d405d88-feed-44e7-af65-19afa0007b47","id":"d1ddb4b4-916e-47e5-b967-c46f939f2be9","created_at":"2026-11-01T15:28:22.205Z"}
@@ -1649,6 +1710,7 @@
 {"flag_state":"GREEN","start_elapsed":368.172,"end_elapsed":369.454,"session_id":"cbecca4d-05a1-44a3-bde2-f5c2e9791704","id":"d4994431-159f-418c-add5-c3c08fa8f58a","created_at":"2026-11-01T15:34:14.642Z"}
 {"flag_state":"YELLOW","start_elapsed":1545.275,"end_elapsed":1724.876,"session_id":"6dcd5a53-db89-40e2-a302-baad441f608d","id":"d49c9e74-9c0c-46a7-9ad1-ed27a0556f8a","created_at":"2026-11-01T15:34:20.344Z"}
 {"flag_state":"GREEN","start_elapsed":21485.725,"end_elapsed":21691.259,"session_id":"f9823291-edc8-4e47-a9ca-68f50f428098","id":"d4b6cf2a-b532-447f-8473-a95601526fd5","created_at":"2026-11-01T15:02:44.913Z"}
+{"session_id":"b6c2b77a-9d6d-4070-b158-011bdc8e173c","flag_state":"SC","start_elapsed":1155.334,"end_elapsed":1635.334,"id":"d4db3078-38a1-4310-9085-2ac009f9c6ab","created_at":"2026-11-01T19:41:31.353Z"}
 {"flag_state":"GREEN","start_elapsed":15950.489,"end_elapsed":15953.606,"session_id":"684136f8-1ff1-4a9b-9304-1dd7ab40aa18","id":"d4f44881-a08a-4bdb-9602-e0b3b1b537c0","created_at":"2026-11-01T15:13:10.617Z"}
 {"flag_state":"GREEN","start_elapsed":5044.292,"end_elapsed":6368.458,"session_id":"9bf210cd-8e45-45f5-9872-d9815b85f0e2","id":"d54023bb-122f-4c55-8687-fc40fc39cf3d","created_at":"2026-11-01T15:03:08.047Z"}
 {"flag_state":"GREEN","start_elapsed":2157.391,"end_elapsed":2256.69,"session_id":"eff46dd1-e562-4af1-8f6d-27a96f98dd80","id":"d5c01391-3e7c-4147-88ec-79fdd276e2d7","created_at":"2026-11-01T15:33:57.824Z"}
@@ -1691,6 +1753,7 @@
 {"session_id":"183ee055-cd30-44f4-95ca-71a195cf1d0a","flag_state":"GREEN","start_elapsed":4698.418,"end_elapsed":5062.418,"id":"d9319f87-44ad-4f29-95d9-958ab2bee98b","created_at":"2026-11-01T19:41:18.633Z"}
 {"flag_state":"FCY","start_elapsed":5600.694,"end_elapsed":5601.575,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"d936c58b-e82b-4c82-9a5d-3933da4ff40c","created_at":"2026-11-01T15:23:07.016Z"}
 {"flag_state":"FCY","start_elapsed":1902.232,"end_elapsed":2307.534,"session_id":"4dd8c6e8-8f29-4714-b8eb-f234656d98f2","id":"d954c058-4305-4c1b-a874-fbaf68e47d05","created_at":"2026-11-01T15:33:47.615Z"}
+{"session_id":"d886e6da-5b0a-453f-b288-8d8a4f6562ce","flag_state":"GREEN","start_elapsed":0,"end_elapsed":2048.338,"id":"d962f14c-9a4a-4ea1-a974-9ab681ea68e3","created_at":"2026-11-01T19:41:30.010Z"}
 {"flag_state":"YELLOW","start_elapsed":2145.873,"end_elapsed":3176.103,"session_id":"3cda274a-427f-42ee-8035-b5d7ed48601e","id":"d99b0abc-6f57-49f4-81b2-37c1773082d1","created_at":"2026-11-01T15:28:49.775Z"}
 {"flag_state":"FCY","start_elapsed":3801.636,"end_elapsed":4335.431,"session_id":"f0f7cea9-ed95-462a-a14f-c20105418003","id":"d9a41ea6-5757-4c78-8485-efdc7952f86e","created_at":"2026-11-01T15:03:03.252Z"}
 {"flag_state":"FCY","start_elapsed":20170.236,"end_elapsed":21411.225,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"d9c604ef-58ed-40df-ad4d-a0bde26dbb26","created_at":"2026-11-01T15:02:53.195Z"}
@@ -1718,8 +1781,10 @@
 {"session_id":"df0db185-d017-44d0-b4df-0cd4322f4960","flag_state":"SC","start_elapsed":69.502,"end_elapsed":402.502,"id":"dd12a0e6-7a2d-4536-87f0-645f6927c755","created_at":"2026-11-01T19:41:18.080Z"}
 {"flag_state":"FCY","start_elapsed":65939.396,"end_elapsed":67105.22,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"dd1faab1-9d8b-4fe9-b24a-d6cb04178e9a","created_at":"2026-11-01T15:02:53.195Z"}
 {"flag_state":"FCY","start_elapsed":897.388,"end_elapsed":1579.216,"session_id":"459c9e8a-f77c-45eb-8c64-33d616645af5","id":"dd31529a-db8f-477e-9557-e75da13cb831","created_at":"2026-11-01T15:34:08.718Z"}
+{"session_id":"715b29f8-b16a-4376-ac61-2746a0fe1e50","flag_state":"SC","start_elapsed":4609.473,"end_elapsed":5241.473,"id":"dd5bfc57-2325-43bb-8504-d08393345599","created_at":"2026-11-01T19:41:30.458Z"}
 {"flag_state":"GREEN","start_elapsed":2111.812,"end_elapsed":2113.353,"session_id":"57008bc0-ef22-4baa-b4a5-386d86274cdf","id":"dd7f83b3-fb42-4dbb-a4f8-84252616fa8b","created_at":"2026-11-01T15:28:26.812Z"}
 {"flag_state":"YELLOW","start_elapsed":10178.958,"end_elapsed":10792.991,"session_id":"27c07d51-7144-47e7-973d-a8ceed9a1e23","id":"dd95b098-9b45-4d93-9e59-c5759214fcc6","created_at":"2026-11-01T15:03:40.350Z"}
+{"session_id":"715b29f8-b16a-4376-ac61-2746a0fe1e50","flag_state":"GREEN","start_elapsed":0,"end_elapsed":4609.473,"id":"dd965b3d-ede5-40f7-a443-4438ea301c24","created_at":"2026-11-01T19:41:30.458Z"}
 {"flag_state":"RED","start_elapsed":86480.107,"end_elapsed":86483.018,"session_id":"1b5b118d-e30b-4760-a125-c7eee7bee01b","id":"dda6eda8-b11e-4326-9751-191d1c675d11","created_at":"2026-11-01T15:03:15.594Z"}
 {"flag_state":"GREEN","start_elapsed":32400,"end_elapsed":34860.202,"session_id":"2e19b987-e84e-4047-8cb6-4a2532a38db7","id":"dde2b83e-4199-4c89-a704-c2686cb34b6b","created_at":"2026-11-01T15:14:04.359Z"}
 {"flag_state":"FCY","start_elapsed":25618.997,"end_elapsed":27008.561,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"de09ad76-72ba-46d6-9ca0-3806b52c145d","created_at":"2026-11-01T15:02:53.195Z"}
@@ -1793,6 +1858,8 @@
 {"flag_state":"GREEN","start_elapsed":47388.296,"end_elapsed":47765.855,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"e526cef3-e9a3-41c7-8138-e4593f632f7a","created_at":"2026-11-01T15:16:49.272Z"}
 {"flag_state":"FCY","start_elapsed":7693.862,"end_elapsed":9072.438,"session_id":"7aa49b9b-e76c-4948-b1cb-1a7da89bff9e","id":"e536dc84-0fbb-4845-9db1-fcdf5b1108a4","created_at":"2026-11-01T15:02:53.195Z"}
 {"flag_state":"YELLOW","start_elapsed":882.175,"end_elapsed":1504.837,"session_id":"ccd5c97f-c8c7-400b-8303-509bc1586789","id":"e545c438-461c-40dd-9f11-ff9bf5efee0f","created_at":"2026-11-01T15:34:38.760Z"}
+{"session_id":"8547adc5-5532-4690-9b31-4949e10bf6d5","flag_state":"GREEN","start_elapsed":0,"end_elapsed":4986.117,"id":"e5689d9b-8af0-4493-a98b-85a3060db9ee","created_at":"2026-11-01T19:41:29.643Z"}
+{"session_id":"0a1fa1d6-a063-4bb4-ae1c-e9b71d446397","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5663.355,"id":"e5707a4d-769f-4cf6-ba0a-12d8c0f9d918","created_at":"2026-11-01T19:41:31.199Z"}
 {"flag_state":"FCY","start_elapsed":2969.452,"end_elapsed":3810.725,"session_id":"26f12405-df83-45ea-a60e-18348c1fbbbd","id":"e5774625-f64a-45b9-8809-104c15f53d22","created_at":"2026-11-01T15:16:49.272Z"}
 {"flag_state":"GREEN","start_elapsed":369.454,"end_elapsed":2742.252,"session_id":"cbecca4d-05a1-44a3-bde2-f5c2e9791704","id":"e59c2192-5717-4ab9-8cec-609e4271e299","created_at":"2026-11-01T15:34:14.642Z"}
 {"flag_state":"FCY","start_elapsed":1244.39,"end_elapsed":2146.744,"session_id":"128fd475-1b8d-49b2-8117-ef29f85de8ff","id":"e5a089c0-582c-494d-b369-8608a5eae887","created_at":"2026-11-01T15:02:49.162Z"}
@@ -1804,10 +1871,12 @@
 {"flag_state":"YELLOW","start_elapsed":10165.931,"end_elapsed":10178.958,"session_id":"27c07d51-7144-47e7-973d-a8ceed9a1e23","id":"e65cb118-b4fe-45c8-ba68-c8b4a498ca80","created_at":"2026-11-01T15:03:40.350Z"}
 {"flag_state":"YELLOW","start_elapsed":10550.7,"end_elapsed":11847.274,"session_id":"1b5b118d-e30b-4760-a125-c7eee7bee01b","id":"e6707e3d-df35-47ca-a308-ca8055384050","created_at":"2026-11-01T15:03:15.594Z"}
 {"flag_state":"YELLOW","start_elapsed":2308.13,"end_elapsed":3070.379,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"e69b1583-00f4-4c71-a0ab-aa07e9e6f8a6","created_at":"2026-11-01T15:23:07.016Z"}
+{"session_id":"d9a1d6e3-57b3-4021-a00a-c4104c03e9aa","flag_state":"SC","start_elapsed":1256.678,"end_elapsed":1715.678,"id":"e6a16cb8-6d4e-4ed9-9ba3-e10fba7e01c2","created_at":"2026-11-01T19:41:29.811Z"}
 {"flag_state":"GREEN","start_elapsed":13028.539,"end_elapsed":14616.175,"session_id":"309c8248-efdc-460a-ae8a-68f83ad4510a","id":"e6a8333d-ab71-41a3-93ee-59b320d1d864","created_at":"2026-11-01T15:05:20.633Z"}
 {"flag_state":"YELLOW","start_elapsed":3600,"end_elapsed":3975.455,"session_id":"e45a92ec-9ddc-47d8-bd16-f40dadb68a13","id":"e6aeca78-8e36-46e0-a61c-c09f4066c20b","created_at":"2026-11-01T15:03:40.338Z"}
 {"flag_state":"FCY","start_elapsed":3130.91,"end_elapsed":4008.696,"session_id":"28de4624-2902-4f3a-a1b5-b17ba302eea1","id":"e6d0d6a4-5280-478b-8511-7d9b6a5ba820","created_at":"2026-11-01T15:28:13.235Z"}
 {"flag_state":"GREEN","start_elapsed":17966.863,"end_elapsed":21060.73,"session_id":"f9823291-edc8-4e47-a9ca-68f50f428098","id":"e6d79f16-27bb-47bb-90f8-f99a650f7e43","created_at":"2026-11-01T15:02:44.913Z"}
+{"session_id":"d52f4e53-8712-4076-8789-2fb26784a82e","flag_state":"SC","start_elapsed":492.071,"end_elapsed":1290.071,"id":"e6e79b03-a97a-42f1-9134-1809a76bbdb9","created_at":"2026-11-01T19:41:30.194Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":4795.183,"session_id":"769de71f-1eb0-4ba2-b988-d607ba258498","id":"e6f7211e-0c65-4caf-bde3-2bec5c3750d8","created_at":"2026-11-01T15:28:00.185Z"}
 {"flag_state":"FCY","start_elapsed":27038.346,"end_elapsed":28465.777,"session_id":"bac6dd79-727f-4aeb-9f7c-eefa0bb5eebb","id":"e70ceb6c-b7d8-421c-b2f6-baae4d986233","created_at":"2026-11-01T15:02:54.764Z"}
 {"flag_state":"YELLOW","start_elapsed":55.232,"end_elapsed":368.172,"session_id":"cbecca4d-05a1-44a3-bde2-f5c2e9791704","id":"e729d528-eda3-4e76-b608-080f84650e6d","created_at":"2026-11-01T15:34:14.642Z"}
@@ -1856,14 +1925,17 @@
 {"session_id":"cb735b7a-ce0d-444a-b97a-105c234e8c75","flag_state":"SC","start_elapsed":59.505,"end_elapsed":516.505,"id":"ec09a822-fd95-4ddb-966d-b92a95f68c24","created_at":"2026-11-01T19:41:19.620Z"}
 {"flag_state":"RED","start_elapsed":7326.622,"end_elapsed":7394.146,"session_id":"12c86724-8589-43fd-8bfb-cdb92e27eb9c","id":"ec5b7e76-bd36-49be-8e15-162884e132fe","created_at":"2026-11-01T15:28:54.351Z"}
 {"flag_state":"GREEN","start_elapsed":1421.291,"end_elapsed":2154.071,"session_id":"2975fad1-b47c-4062-a0b9-9f939ab357c9","id":"ec9907f7-6bdb-485e-92b5-3fa95b51e7f0","created_at":"2026-11-01T15:34:26.523Z"}
+{"session_id":"d9a1d6e3-57b3-4021-a00a-c4104c03e9aa","flag_state":"CHEQUERED","start_elapsed":2018.678,"end_elapsed":2042.151,"id":"ecaa55c2-fc9e-465e-9b6b-a5f77972e28b","created_at":"2026-11-01T19:41:29.811Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2870.443,"session_id":"2d8d65a4-60ce-4bfd-9578-9c8b37f026c2","id":"eccc80d7-9607-4e3c-9d31-99340fa03dc8","created_at":"2026-11-01T15:33:22.684Z"}
 {"flag_state":"FCY","start_elapsed":3070.379,"end_elapsed":3144.884,"session_id":"b77d395b-fbb1-41a9-9f95-32fe89f9283a","id":"ed107066-9cec-4828-8f52-190a69b7a677","created_at":"2026-11-01T15:23:07.016Z"}
+{"session_id":"0a1fa1d6-a063-4bb4-ae1c-e9b71d446397","flag_state":"CHEQUERED","start_elapsed":5663.355,"end_elapsed":5759.634,"id":"ed1aad67-13be-4ed6-8217-5799e3ef8823","created_at":"2026-11-01T19:41:31.199Z"}
 {"flag_state":"GREEN","start_elapsed":26608.897,"end_elapsed":26977.9,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"ed5212a2-621c-4d43-959c-f84b7a97d82b","created_at":"2026-11-01T15:14:02.745Z"}
 {"flag_state":"GREEN","start_elapsed":11748.836,"end_elapsed":13574.05,"session_id":"789f0538-e5ab-4366-81ca-468b502d1ae8","id":"ed616048-5e2f-45b6-a46c-dba2cd93d49a","created_at":"2026-11-01T15:02:42.482Z"}
 {"flag_state":"GREEN","start_elapsed":28998.883,"end_elapsed":32400,"session_id":"95042253-3788-4662-8c91-18001dd57d34","id":"eda3845c-b7cb-4c60-b155-29a6b8a7b18e","created_at":"2026-11-01T15:13:10.701Z"}
 {"flag_state":"FCY","start_elapsed":14754.983,"end_elapsed":15635.541,"session_id":"faab3e50-aaf1-4dec-9cb1-9932598d5499","id":"edd55cbc-bfc2-4dda-9e66-793ac970d45e","created_at":"2026-11-01T15:02:42.499Z"}
 {"flag_state":"GREEN","start_elapsed":10800,"end_elapsed":14400,"session_id":"72d352be-9cf4-44e1-b9cd-657aa0ac9443","id":"edef5855-a6d2-4035-a719-fa43a3334a76","created_at":"2026-11-01T15:17:42.141Z"}
 {"flag_state":"YELLOW","start_elapsed":6501.722,"end_elapsed":6874.643,"session_id":"12c86724-8589-43fd-8bfb-cdb92e27eb9c","id":"edfbd6c1-19bb-4478-bdb1-8028d95ab330","created_at":"2026-11-01T15:28:54.351Z"}
+{"session_id":"e6d4a625-496b-4cd0-a1af-8527af45edf8","flag_state":"GREEN","start_elapsed":0,"end_elapsed":5547.582,"id":"ee7e0a21-20aa-4175-8b9f-002c7315dd83","created_at":"2026-11-01T19:41:30.586Z"}
 {"session_id":"fa41ce60-05f8-4c29-aa3b-89bcd435ae5b","flag_state":"GREEN","start_elapsed":4649.462,"end_elapsed":5226.462,"id":"eebd00b7-af5a-4e15-b133-9c5409a268f8","created_at":"2026-11-01T19:41:24.895Z"}
 {"flag_state":"GREEN","start_elapsed":9528.702,"end_elapsed":10691.711,"session_id":"22312590-43d4-4f7c-9278-ecf5c7bd4082","id":"eec1980b-cdba-4a2f-aaf8-7a69c95b5957","created_at":"2026-11-01T15:13:45.153Z"}
 {"flag_state":"YELLOW","start_elapsed":693.003,"end_elapsed":720.713,"session_id":"d5d50dc1-c74d-4637-9b3c-5534745516e8","id":"ef0bce17-c6ce-4384-9a33-6827e35d3e02","created_at":"2026-11-01T15:13:45.079Z"}
@@ -1935,6 +2007,7 @@
 {"flag_state":"GREEN","start_elapsed":15684.83,"end_elapsed":16550.235,"session_id":"80a44962-2703-4053-a9b6-93f91f52734c","id":"f84c92b5-e489-45bb-9001-c47b92e2a4fe","created_at":"2026-11-01T15:14:02.745Z"}
 {"flag_state":"FCY","start_elapsed":2505.904,"end_elapsed":2748.532,"session_id":"a5cdbc5a-1bcd-4187-a914-b33c7cc37c36","id":"f856d469-2963-4798-9af4-f32d256fa7a6","created_at":"2026-11-01T15:34:03.271Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":120.503,"session_id":"882f6c76-4028-4403-a891-84644dd42f38","id":"f88dfdaa-9641-4805-8395-f454987aaadc","created_at":"2026-11-01T15:34:32.565Z"}
+{"session_id":"3b11e439-31fa-4a44-8efa-be621cb412f6","flag_state":"SC","start_elapsed":197.642,"end_elapsed":6674.642,"id":"f8a56150-8e81-489d-93cb-3d54c966ffae","created_at":"2026-11-01T19:41:31.124Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2225.468,"session_id":"a77bd1e6-98f7-4552-8b0f-29e0be30f2f4","id":"f8ffe4da-7e21-4f72-a616-736dcb5922e6","created_at":"2026-11-01T15:27:50.982Z"}
 {"flag_state":"GREEN","start_elapsed":0,"end_elapsed":2224.819,"session_id":"f6b7e0a3-4479-4f64-9009-c225d257950d","id":"f960d2ad-8982-482c-9da4-eab32e3c5e6e","created_at":"2026-11-01T15:39:15.865Z"}
 {"session_id":"288a110a-4fc0-41a2-91da-66b6a1606545","flag_state":"CHEQUERED","start_elapsed":5450.703,"end_elapsed":5525.921,"id":"f982a8ef-8dad-43b4-a76b-9fad80130331","created_at":"2026-11-01T19:41:18.141Z"}
