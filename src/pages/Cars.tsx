@@ -5,11 +5,11 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { classRank } from "@/lib/insights";
 import { Eyebrow, Note, Page, Skeleton } from "@/site/ui";
-import { carLabel, countBy, isWin, plural, tally, useRecordBook, type Entry } from "@/site/records";
+import { plural, useRecordIndex } from "@/site/records";
 import { Chip, RecordCard, SearchField } from "@/site/record-ui";
 
 export default function Cars() {
-  const book = useRecordBook();
+  const book = useRecordIndex();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") || "";
   const series = params.get("series") || "";
@@ -23,14 +23,12 @@ export default function Cars() {
 
   const rows = useMemo(() => {
     if (!book) return [];
-    return [...book.byCar.entries()]
-      .map(([id, list]) => {
-        const t = tally(list);
-        const primary = countBy(list, (e) => e.className)[0]?.key ?? null;
-        const hero: Entry | undefined = [...list].reverse().find((e) => isWin(e) && e.livery) || [...list].reverse().find((e) => e.livery) || list[list.length - 1];
-        return { id, car: book.cars[id], label: carLabel(book.cars[id]), list, t, primary, hero, teams: new Set(list.map((e) => e.teamId)).size };
-      })
-      .filter((r) => r.car && r.t.starts > 0);
+    const short = new Map(book.series.map((s) => [s.id, s.short]));
+    return book.cars.map((r) => ({
+      ...r,
+      label: [r.manufacturer, r.model_name].map((x) => (x || "").trim()).filter(Boolean).join(" "),
+      seriesShort: r.series.map((id) => short.get(id) || ""),
+    }));
   }, [book]);
 
   const groups = useMemo(() => {
@@ -38,22 +36,31 @@ export default function Cars() {
     const m = new Map<string, typeof rows>();
     for (const r of rows) {
       if (n && !r.label.toLocaleLowerCase().includes(n)) continue;
-      if (series && !r.list.some((e) => e.seriesId === series)) continue;
-      const k = r.primary || "Other";
+      if (series && !r.series.includes(series)) continue;
+      // Classed cars group by class; cars from single-class series by series.
+      const k = r.primary || (r.seriesShort.length === 1 ? r.seriesShort[0] : "Other");
       if (!m.has(k)) m.set(k, []);
       m.get(k)!.push(r);
     }
     return [...m.entries()]
-      .map(([cls, list]) => ({ cls, color: list[0].hero?.classColor, list: list.sort((a, b) => b.t.wins - a.t.wins || b.t.starts - a.t.starts || a.label.localeCompare(b.label)) }))
-      .sort((a, b) => classRank(a.cls) - classRank(b.cls));
+      .map(([cls, list]) => ({
+        cls,
+        color: list[0].primary ? list[0].hero?.color : undefined,
+        list: list.sort((a, b) => {
+          const sa = series ? a.bySeries[series] || [0, 0, 0] : [a.starts, a.wins];
+          const sb = series ? b.bySeries[series] || [0, 0, 0] : [b.starts, b.wins];
+          return sb[1] - sa[1] || sb[0] - sa[0] || a.label.localeCompare(b.label);
+        }),
+      }))
+      .sort((a, b) => classRank(a.cls) - classRank(b.cls) || a.cls.localeCompare(b.cls));
   }, [rows, dq, series]);
 
-  const makers = new Set(rows.map((r) => (r.car.manufacturer || "").trim()).filter(Boolean)).size;
+  const makers = new Set(rows.map((r) => (r.manufacturer || "").trim()).filter(Boolean)).size;
   const count = groups.reduce((n, g) => n + g.list.length, 0);
 
   return (
     <div className="min-h-screen">
-      <SEOHead title="Cars – Track Records" description="Every car on the record: entries, class wins, teams and liveries for each model." canonical="/cars" />
+      <SEOHead title="Cars – Track Records" description="Every car on the record, in every series: entries, wins, teams and liveries for each model." canonical="/cars" />
       <Header />
       <Page className="pt-6 sm:pt-10">
         <Eyebrow>
@@ -66,7 +73,7 @@ export default function Cars() {
         <div className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
           {book ? (
             <>
-              {plural(rows.length, "model")} from {plural(makers, "manufacturer")}, grouped by the class they race in. Each record holds every livery, every team and every result.
+              {plural(rows.length, "model")} from {plural(makers, "manufacturer")}, grouped by the class (or series) they race in. Each record holds every livery, every team and every result.
             </>
           ) : (
             <Skeleton className="h-6 w-80" />
@@ -116,16 +123,20 @@ export default function Cars() {
                       <RecordCard
                         key={r.id}
                         to={`/car/${r.id}`}
-                        livery={r.hero?.livery}
+                        livery={r.hero?.livery ?? undefined}
                         number={r.hero?.carNumber}
-                        tint={r.hero?.classColor}
-                        eyebrow={(r.car.manufacturer || "").trim() || "Car"}
-                        title={r.car.model_name.trim()}
-                        tags={<span className="text-xs text-ink-3">{plural(r.teams, "team")} · {r.t.series.join(", ")}</span>}
+                        tint={r.hero?.color}
+                        eyebrow={(r.manufacturer || "").trim() || "Car"}
+                        title={r.model_name.trim()}
+                        tags={
+                          <span className="text-xs text-ink-3">
+                            {plural(r.teams, "team")} · {r.seriesShort.join(", ")}
+                          </span>
+                        }
                         stats={[
-                          { label: "Starts", value: r.t.starts },
-                          { label: "Wins", value: r.t.wins },
-                          { label: "Podiums", value: r.t.podiums },
+                          { label: "Starts", value: series ? r.bySeries[series]?.[0] ?? 0 : r.starts },
+                          { label: "Wins", value: series ? r.bySeries[series]?.[1] ?? 0 : r.wins },
+                          { label: "Podiums", value: series ? r.bySeries[series]?.[2] ?? 0 : r.podiums },
                         ]}
                       />
                     ))}

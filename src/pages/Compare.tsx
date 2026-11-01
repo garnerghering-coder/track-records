@@ -8,7 +8,7 @@ import FlagImage from "@/components/FlagImage";
 import { cn } from "@/lib/utils";
 import { cleanName, lastName } from "@/site/data";
 import { ClassTag, Eyebrow, Note, Page, SectionHead, Skeleton } from "@/site/ui";
-import { fmtDayShort, isStart, plural, raceTitle, shapeAxes, tally, teammatesOf, useRecordBook, type Entry, type RecordBook, type Tally } from "@/site/records";
+import { fmtDayShort, isStart, plural, raceTitle, shapeAxes, tally, teammatesOf, useRecordIndex, useRecords, type Entry, type RecordBook, type RecordIndex, type Tally } from "@/site/records";
 import { ResultCell, ResultMark, ShapeRadar, ShareButton, TONE_A, TONE_B } from "@/site/record-ui";
 
 /* ── Head-to-head maths ───────────────────────────────────────── */
@@ -55,10 +55,17 @@ function meetings(book: RecordBook, a: string, b: string) {
 /* ── Page ─────────────────────────────────────────────────────── */
 
 export default function Compare() {
-  const book = useRecordBook();
   const [params, setParams] = useSearchParams();
   const a = params.get("a") || "";
   const b = params.get("b") || "";
+  const ix = useRecordIndex();
+  const rec = useRecords("drivers", [a, b]);
+  // The two drivers' records, plus every driver's name from the directory (picker, suggestions).
+  const book = useMemo<RecordBook | undefined>(() => {
+    if (!ix || !rec) return undefined;
+    const drivers = Object.fromEntries(ix.drivers.map((d) => [d.id, { id: d.id, full_name: d.name, nationality: d.nationality, date_of_birth: null }]));
+    return { ...rec, drivers: { ...drivers, ...rec.drivers } };
+  }, [ix, rec]);
   const da = book?.drivers[a];
   const db = book?.drivers[b];
 
@@ -110,7 +117,7 @@ export default function Compare() {
         ) : (
           <>
             <div className="mt-10 grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]">
-              <Picker book={book} side="a" value={a} other={b} onChange={(v) => set("a", v)} />
+              <Picker book={book} ix={ix!} side="a" value={a} other={b} onChange={(v) => set("a", v)} />
               <div className="flex items-center justify-center">
                 <button
                   type="button"
@@ -122,7 +129,7 @@ export default function Compare() {
                   <ArrowLeftRight className="h-4 w-4" />
                 </button>
               </div>
-              <Picker book={book} side="b" value={b} other={a} onChange={(v) => set("b", v)} />
+              <Picker book={book} ix={ix!} side="b" value={b} other={a} onChange={(v) => set("b", v)} />
             </div>
             {da && db && a !== b ? (
               <HeadToHead book={book} a={a} b={b} />
@@ -131,7 +138,7 @@ export default function Compare() {
                 Pick someone else on one side to see a head to head.
               </Note>
             ) : (
-              <Suggestions book={book} a={a} onPick={(x, y) => setParams(new URLSearchParams({ a: x, b: y }))} />
+              <Suggestions book={book} ix={ix!} a={a} onPick={(x, y) => setParams(new URLSearchParams({ a: x, b: y }))} />
             )}
           </>
         )}
@@ -145,12 +152,14 @@ export default function Compare() {
 
 function Picker({
   book,
+  ix,
   side,
   value,
   other,
   onChange,
 }: {
   book: RecordBook;
+  ix: RecordIndex;
   side: "a" | "b";
   value: string;
   other: string;
@@ -166,14 +175,10 @@ function Picker({
 
   const all = useMemo(
     () =>
-      Object.values(book.drivers)
-        .map((x) => ({
-          ...x,
-          name: cleanName(x.full_name),
-          starts: (book.byDriver.get(x.id) || []).filter(isStart).length,
-        }))
+      ix.drivers
+        .map((x) => ({ id: x.id, nationality: x.nationality, name: cleanName(x.name), starts: x.starts }))
         .sort((x, y) => y.starts - x.starts || x.name.localeCompare(y.name)),
-    [book],
+    [ix],
   );
   const mates = useMemo(() => (other ? teammatesOf(other, book.byDriver.get(other) || []).map((m) => m.id) : []), [book, other]);
   const options = useMemo(() => {
@@ -325,26 +330,9 @@ function Picker({
 
 /* ── Suggestions when the pair is incomplete ─────────────────── */
 
-function Suggestions({ book, a, onPick }: { book: RecordBook; a: string; onPick: (a: string, b: string) => void }) {
-  const pairs = useMemo(() => {
-    // Rivals: top two winners in each class, plus the most frequent co-driver pair.
-    const winners = new Map<string, Map<string, number>>();
-    for (const e of book.entries)
-      if (e.status === "finished" && e.pic === 1 && e.className)
-        for (const d of e.driverIds) {
-          if (!winners.has(e.className)) winners.set(e.className, new Map());
-          const m = winners.get(e.className)!;
-          m.set(d, (m.get(d) || 0) + 1);
-        }
-    const out: { a: string; b: string; why: string }[] = [];
-    for (const [cls, m] of winners) {
-      const top = [...m.entries()].sort((x, y) => y[1] - x[1]);
-      const x = top[0]?.[0];
-      const y = top.find(([id]) => id !== x && !(book.byDriver.get(x) || []).some((e) => e.driverIds.includes(id)))?.[0];
-      if (x && y) out.push({ a: x, b: y, why: `${cls} winners` });
-    }
-    return out.slice(0, 6);
-  }, [book]);
+function Suggestions({ book, ix, a, onPick }: { book: RecordBook; ix: RecordIndex; a: string; onPick: (a: string, b: string) => void }) {
+  // Rivals: the top two winners of each class (or series), precomputed with the directory.
+  const pairs = ix.rivalries.slice(0, 6);
 
   return (
     <div className="mt-16">
