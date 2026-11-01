@@ -1075,10 +1075,13 @@ async function fetchOfficialPoints(
  * null for every entry when the session/series does not score. Official
  * points win over computed ones when a matching official session exists.
  */
-function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: PointsRules, official: OfficialPointsCandidates | null): (number | null)[] {
+function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: PointsRules, official: OfficialPointsCandidates | null, slot?: number | null): (number | null)[] {
   const placements = assignClassPositions(entries);
   const computed = placements.map((p) => computedPointsFor(p, kind, rules));
-  const candidates = official?.[kind] || [];
+  let candidates = official?.[kind] || [];
+  // Several races in a weekend ("Race 1", "Race 2"): the official sessions come in weekend order,
+  // so "Race N" takes the N-th. Without computed points to compare (MX-5 Cup) they would tie.
+  if (slot != null && candidates.length > 1) candidates = candidates[slot] ? [candidates[slot]] : [];
   const carCands = candidates.filter((c) => c.keyType === "car");
   const driverCands = candidates.filter((c) => c.keyType === "driver");
   const byCar = carCands.map((c) => c.points);
@@ -1113,7 +1116,8 @@ function buildResultRows(
   hourNumber?: number,
   timeCardMap?: Map<string, Map<number, string>>,
   pointsRules?: PointsRules,
-  officialPoints?: OfficialPointsCandidates | null
+  officialPoints?: OfficialPointsCandidates | null,
+  sessionName?: string,
 ): { raceRows: any[]; qualifyingRows: any[]; practiceRows: any[] } {
   const raceRows: any[] = [];
   const qualifyingRows: any[] = [];
@@ -1127,7 +1131,9 @@ function buildResultRows(
   // snapshot) and for qualifying; null where the series does not score.
   const rules = pointsRules ?? getPointsRules("none");
   const pointsKind: "race" | "qualifying" | null = isRace && !hourNumber ? "race" : sessionType === "qualifying" ? "qualifying" : null;
-  const sessionPoints = pointsKind ? sessionPointsFor(entries, pointsKind, rules, officialPoints ?? null) : entries.map(() => null);
+  const nth = (sessionName || "").match(/\b(\d+)\s*$/);
+  const slot = nth ? Number(nth[1]) - 1 : null;
+  const sessionPoints = pointsKind ? sessionPointsFor(entries, pointsKind, rules, officialPoints ?? null, slot) : entries.map(() => null);
 
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
     const entry = entries[entryIndex];
@@ -1642,11 +1648,11 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
 
   const insertResults = async (
     sessionId: string, entries: any[], sessionType: string, isOverallEndurance: boolean,
-    hourNumber?: number, timeCardMap?: Map<string, Map<number, string>>
+    hourNumber?: number, timeCardMap?: Map<string, Map<number, string>>, sessionName?: string
   ) => {
     const { raceRows, qualifyingRows, practiceRows } = buildResultRows(
       sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary,
-      hourNumber, timeCardMap, pointsRules, officialPoints
+      hourNumber, timeCardMap, pointsRules, officialPoints, sessionName
     );
     // Batch insert all at once
     const inserts: Promise<any>[] = [];
@@ -2054,7 +2060,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
       const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
       const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
       if (!sessionId) continue;
-      await insertResults(sessionId, entries, sessionInfo.type, false);
+      await insertResults(sessionId, entries, sessionInfo.type, false, undefined, undefined, sessionInfo.name);
       // Process weather for this session
       const weatherUrl = weatherUrlForSession(f.url);
       if (weatherUrl) await processImWeather(sessionId, weatherUrl);
@@ -2389,7 +2395,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
       const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
       const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
       if (!sessionId) continue;
-      await insertResults(sessionId, entries, sessionInfo.type, false);
+      await insertResults(sessionId, entries, sessionInfo.type, false, undefined, undefined, sessionInfo.name);
 
       // Process weather for this session
       const weatherUrl = weatherUrlForSession(f.url);
