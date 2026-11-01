@@ -1,11 +1,15 @@
+{"alias":"Korthoff Competition Motors","canonical":"40f24d3e-76d4-4234-8136-bfc974a47775","entity_type":"team","id":"0191d901-117d-47e2-9a56-fa0aa7754245"}
 {"id":"01962bd1-7c94-48fd-a912-d4805aeacab7","alias":"Alpine Renault","canonical":"48dee9b7-e511-43d5-b775-779c9555bf8c","entity_type":"team"}
 {"id":"07122a43-4400-4200-bc75-ee3b3c594d7a","alias":"NASCAR","canonical":"NASCAR Cup Series","entity_type":"series"}
 {"id":"09841e4b-18bc-4f21-9961-62455e69db18","alias":"Robert Michaelian","canonical":"cb3c614b-62a0-44ef-8d9f-3364c92d8128","entity_type":"driver"}
+{"alias":"Ford Multimatic Motorsports","canonical":"ed012660-dab4-4cf9-b8e0-cac0822c1754","entity_type":"team","id":"0c84eb79-5fac-4adb-b906-29ecd85b9bca"}
 {"id":"0cdb4074-3e66-49c2-a35f-2ae08d96b294","alias":"McLaren Mercedes","canonical":"290f24b1-d2f0-4eb6-bdb7-92dbd20d4fe7","entity_type":"team"}
+{"alias":"Unitronic/JDC Miller MotorSports","canonical":"621185f9-1e99-4a40-81aa-66cfd1199986","entity_type":"team","id":"0e21bc46-538f-4f44-8c3f-febb70c775f3"}
 {"id":"1600b76e-52f3-4a87-af5c-5b79b3d737ea","alias":"Aston Martin Mercedes","canonical":"b71f56b6-d88e-4e9a-9372-74a7d9f76911","entity_type":"team"}
 {"id":"1e579e71-b1a7-4ce3-a9ac-f507a6557579","alias":"Bathurst","canonical":"Mount Panorama Circuit","entity_type":"circuit"}
 {"id":"2831e82c-f94f-499d-9f68-a680ab73733c","alias":"FastMD with Remstar","canonical":"b91c9fc4-4143-403a-8382-3fff47d597b2","entity_type":"team"}
 {"id":"2baca0e7-0206-46e0-9247-25f92f5e5333","alias":"Monza","canonical":"Autodromo Nazionale Monza","entity_type":"circuit"}
+{"alias":"Team ACP by Random Vandals","canonical":"daac4ebc-5f7b-4429-beb4-879099e534ee","entity_type":"team","id":"350558d5-115b-4939-9c88-d3934ad6105f"}
 {"id":"36e7d0c1-a565-49cf-84df-df9754bdc5f2","alias":"AlphaTauri RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
 {"id":"37413705-0b29-42ad-8bcc-15d9efc7fd58","alias":"Albert Costa Balboa","canonical":"891152ec-034b-4475-a176-0735543bebe5","entity_type":"driver"}
 {"id":"381197f6-c90f-47f2-aeb5-40c20bba5ca6","alias":"Spa","canonical":"Circuit de Spa-Francorchamps","entity_type":"circuit"}
@@ -14,8 +18,11 @@
 {"id":"41795e72-33b1-4afb-ad4c-b137297dffb0","alias":"Red Bull Racing Honda RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
 {"id":"4408dbc3-eccb-4d76-b532-383dfc715521","alias":"Le Mans","canonical":"24 Hours of Le Mans","entity_type":"event"}
 {"id":"507b2641-e7be-4cb4-9bc0-1eb0ca810374","alias":"F4","canonical":"Formula 4","entity_type":"series"}
+{"alias":"Heart of Racing Team","canonical":"c3481689-d466-4f43-acea-aa6e2f6f3f39","entity_type":"team","id":"53b66d6a-f527-4391-98a9-ba6941279996"}
 {"id":"599f5e1e-4a17-4f58-8902-01ee98425525","alias":"Saito Motorsport Group","canonical":"95676562-b015-4d9a-9aa2-43276b824d3d","entity_type":"team"}
 {"id":"5a2e380c-4875-4a97-9473-929dbabc5baf","alias":"Haas Ferrari","canonical":"fa840789-c223-4e17-9683-a0f6e66ce7a0","entity_type":"team"}
+{"alias":"CarBahn with Peregrine racing","canonical":"ab8240d6-b531-4584-8e80-eed53b94754c","entity_type":"team","id":"5bea521f-181d-48f5-aaca-b305128d3b45"}
+{"alias":"Ruben Caceres-Martos","canonical":"d916d124-4c3f-4671-9917-d181743b4bba","entity_type":"driver","id":"5d842ab0-20f9-4dd8-9593-743c114dbb76"}
 {"id":"5f5340e5-25d2-47bb-8ca1-818ec1259db0","alias":"Indy 500","canonical":"Indianapolis 500","entity_type":"event"}
 {"id":"6804167e-1dc0-48d6-bde8-38272b2fc5f8","alias":"Alfa Romeo Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
 {"id":"69c1f981-8b52-43ca-8258-5ffbe11acfa6","alias":"Eduardo Barrichello","canonical":"929f8d42-75b5-4667-b34c-93f66bcc43e7","entity_type":"driver"}
@@ -32,14 +39,19 @@
 {"id":"c1f9e1e6-37fb-4a64-9a2b-0c80eed80cd5","alias":"Daytona","canonical":"Rolex 24 At Daytona","entity_type":"event"}
 {"id":"c4cff68f-d0fd-4c4d-8558-daa230631663","alias":"Ferdinand Habsburg-Lothringen","canonical":"a4b20873-9572-4f83-bbbf-65b994c77592","entity_type":"driver"}
 {"id":"c57147e2-80a5-4fbf-a30b-77698ed1417d","alias":"WEC","canonical":"World Endurance Championship","entity_type":"series"}
+{"alias":"Whelen Engineering Cadillac Racing","canonical":"645397cf-e7ba-4b74-94e6-3f601f8783aa","entity_type":"team","id":"d04343a1-d1f9-4fb7-8588-a592b4e675af"}
 {"id":"d0aa2d5c-672e-41f8-a505-7dcd76b0cb8f","alias":"Nurburgring","canonical":"Nürburgring","entity_type":"circuit"}
+{"alias":"CSM","canonical":"6b0844d7-95bd-4175-b982-3c06a488cff8","entity_type":"team","id":"d0c9794b-d0e5-4785-87d8-5b72cf52d4ca"}
 {"id":"d161534d-da1e-44fa-b70c-10f43d14c644","alias":"F3","canonical":"Formula 3","entity_type":"series"}
 {"id":"d16a5610-3eae-4e45-8c87-5ae54715ed88","alias":"Aston Martin Aramco Mercedes","canonical":"b71f56b6-d88e-4e9a-9372-74a7d9f76911","entity_type":"team"}
 {"id":"d4bb572e-5a98-442d-a26e-a13ed516309a","alias":"Williams Mercedes","canonical":"761d041f-f3b7-4fbe-b191-1b5664d8f30e","entity_type":"team"}
 {"id":"d5122043-4829-4d80-b4a1-9b82e4aa4276","alias":"AlphaTauri Honda RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
 {"id":"d521d057-4f04-4f9c-ac4e-b525e77e5955","alias":"GT4","canonical":"GT4","entity_type":"car"}
 {"id":"d5d56d7b-000d-4e53-b101-c24749300b8c","alias":"GT3","canonical":"GT World Challenge","entity_type":"series"}
+{"alias":"ASTON MARTIN THOR Team","canonical":"c3481689-d466-4f43-acea-aa6e2f6f3f39","entity_type":"team","id":"d6e025d0-0470-4af1-a49d-a2d622a421b6"}
 {"id":"e144bcb4-0d48-4f1f-82bc-3c0dc1cafa7a","alias":"Kick Sauber Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
+{"alias":"CarBAhn Motorsports","canonical":"ab8240d6-b531-4584-8e80-eed53b94754c","entity_type":"team","id":"e195342b-8e8b-4049-a614-3fcbcf4c2906"}
+{"alias":"MMG","canonical":"e21321b2-8f63-4217-b2e7-457d185ec632","entity_type":"team","id":"e4119712-da06-4b99-b1b7-7e3bd15365fe"}
 {"id":"eed26529-a3d3-45f6-8584-23352079ae81","alias":"RB Honda RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
 {"id":"f36e7660-79be-4aa7-9213-b37aaa474091","alias":"Rafa Martinez","canonical":"a83ddf9c-3444-4015-ae34-0301470d83cb","entity_type":"driver"}
 {"id":"f9072a64-698e-4a21-a9ce-1e935f01a353","alias":"LMDh","canonical":"LMDh","entity_type":"car"}
