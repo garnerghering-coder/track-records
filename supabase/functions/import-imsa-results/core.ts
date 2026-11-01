@@ -125,9 +125,15 @@ const country3to2: Record<string, string> = {
   VIN:"VC",YEM:"YE",ZAM:"ZM",ZIM:"ZW",
 };
 
-/** Removes the "(R)" rookie marker some series (MX-5 Cup) append to driver names. */
+/** Removes the "(R)" rookie / "(V)" visiting-driver markers some series (MX-5 Cup) append to driver names. */
 function stripRookieMark(name: string): string {
-  return name.replace(/\s*\(R\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+  return name.replace(/\s*\([RV]\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Team name key that ignores case, accents, spacing, punctuation and "w/" vs "with":
+ *  "TeamTGM" = "Team TGM", "Bryan Herta Autosport w Curb Agajanian" = "… with Curb Agajanian". */
+function teamKey(name: string): string {
+  return normaliseName(name).replace(/\bw\b/g, "with").replace(/\s+/g, "");
 }
 
 /** "Firstname Surname" of an Al Kamel driver entry, without a rookie marker. */
@@ -182,6 +188,12 @@ function matchTeam(
   for (const t of existingTeams) {
     if (t.full_name.toLowerCase() === normalized) return t.id;
     if (t.short_name && t.short_name.toLowerCase() === normalized) return t.id;
+  }
+  const key = teamKey(teamName);
+  if (key) {
+    for (const t of existingTeams) {
+      if (teamKey(t.full_name) === key || (t.short_name && teamKey(t.short_name) === key)) return t.id;
+    }
   }
   for (const a of seasonAliases) {
     if (a.display_name.toLowerCase() === normalized) return a.team_id;
@@ -255,6 +267,20 @@ function parseStatus(status: string, notFinished: boolean, cause: string): strin
 /** v2_sessions.date is a timestamptz: store a calendar date the way the database returns it. */
 function sessionDateValue(date: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T00:00:00+00:00` : date;
+}
+
+/** Local scheduled start "HH:MM" from an Al Kamel session folder ("…/202503151010_Race/…"), or null. */
+function folderStartTime(url: string | null | undefined): string | null {
+  if (!url) return null;
+  let path = url;
+  try {
+    path = decodeURIComponent(url);
+  } catch {
+    /* keep raw */
+  }
+  const m = path.match(/\/\d{8}(\d{2})(\d{2})_[^/]+\//);
+  if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
+  return `${m[1]}:${m[2]}`;
 }
 
 function extractHourNumber(url: string): number | null {
@@ -1502,12 +1528,14 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
     }
   };
 
-  /** Parse session_date "22/01/2026 10:05" (or "22-01-2026 10:05") → { date: "2026-01-22", startTime: null }
-   * Note: We only extract the date; start times from IMSA data are unreliable and are omitted.
+  /** Parse session_date "22/01/2026 10:05" (or "22-01-2026 10:05") → { date: "2026-01-22", startTime }
+   * The time in session_date is unreliable (a 12-hour clock without AM/PM: "02:10" for 14:10),
+   * so the start time comes from the session folder name instead, which carries the local
+   * scheduled start on a 24-hour clock: ".../202503151010_Race/..." → "10:10".
    */
-  const parseSessionDateTime = (sessionData: any): { date: string | null; startTime: string | null } => {
+  const parseSessionDateTime = (sessionData: any, jsonUrl?: string): { date: string | null; startTime: string | null } => {
     // Feeds use "22/01/2026 10:05" or "31-07-2026 03:45" depending on series/year.
-    return { date: parseAlKamelSessionDate(sessionData.session_date), startTime: null };
+    return { date: parseAlKamelSessionDate(sessionData.session_date), startTime: folderStartTime(jsonUrl) };
   };
 
   const createSession = async (
@@ -1947,7 +1975,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
       if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
       const entries = f.data.classification || [];
       if (entries.length === 0) continue;
-      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData);
+      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
       const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
       if (!sessionId) continue;
       await insertResults(sessionId, entries, sessionInfo.type, false);
@@ -2011,12 +2039,20 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
       const overallData = fetchedResults.find(f => f.kind === "overall");
       const raceDataSource = overallData || (sortedHourLinks.length > 0 ? sortedHourLinks[sortedHourLinks.length - 1] : null);
       if (raceDataSource) {
-        const parsed = parseSessionDateTime(raceDataSource.data.session || {});
+        const parsed = parseSessionDateTime(raceDataSource.data.session || {}, raceDataSource.url);
         raceDate = parsed.date;
         raceStartTime = parsed.startTime;
       }
 
       parentSessionId = await createSession(raceSessionName, "endurance_race", url, raceDate, raceStartTime, null);
+      // Scheduled end of an endurance race: start + number of hour folders.
+      const raceHours = sortedHourLinks.length ? sortedHourLinks[sortedHourLinks.length - 1].hour || 0 : 0;
+      if (parentSessionId && raceStartTime && raceHours > 0) {
+        const [h, m] = raceStartTime.split(":").map(Number);
+        const end = (h * 60 + m + raceHours * 60) % 1440;
+        const raceEnd = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+        await adminClient.from("v2_sessions").update({ end_time: raceEnd } as any).eq("id", parentSessionId);
+      }
       if (parentSessionId && raceDataSource) {
         const entries = raceDataSource.data.classification || [];
         await insertResults(parentSessionId, entries, "endurance_race", true);
@@ -2274,7 +2310,7 @@ export async function importEvent(request: ImportRequest, client: any, deps: Imp
       if (existingSessionNames.has(sessionInfo.name)) { summary.sessions_skipped++; continue; }
       const entries = f.data.classification || [];
       if (entries.length === 0) continue;
-      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData);
+      const { date: sessionDate, startTime } = parseSessionDateTime(sessionData, f.url);
       const sessionId = await createSession(sessionInfo.name, sessionInfo.type, f.url, sessionDate, startTime, null);
       if (!sessionId) continue;
       await insertResults(sessionId, entries, sessionInfo.type, false);

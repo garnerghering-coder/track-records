@@ -15,6 +15,7 @@
 {"id":"5f5340e5-25d2-47bb-8ca1-818ec1259db0","alias":"Indy 500","canonical":"Indianapolis 500","entity_type":"event"}
 {"id":"6804167e-1dc0-48d6-bde8-38272b2fc5f8","alias":"Alfa Romeo Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
 {"id":"762c6cf2-3487-46c0-9392-84bf7448cb2f","alias":"IMSA","canonical":"IMSA SportsCar Championship","entity_type":"series"}
+{"id":"7f17a8da-eae6-4c8f-8589-020098ce02ff","alias":"Turner Motorpsort","canonical":"fad258bc-ecd9-4e1c-ad1f-6168c0297564","entity_type":"team"}
 {"id":"82c20884-91f8-4d24-aa9c-d3a92be5297e","alias":"Kimi Antonelli","canonical":"17f22941-9dee-4d47-92d4-48904435d66a","entity_type":"driver"}
 {"id":"8aa3902a-cd6a-43ac-8d5c-c3ee77c87913","alias":"F1","canonical":"Formula 1","entity_type":"series"}
 {"id":"9027c00f-edaa-4645-a1bd-468aa3ec263e","alias":"F2","canonical":"Formula 2","entity_type":"series"}

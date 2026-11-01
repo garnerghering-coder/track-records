@@ -3,6 +3,7 @@
 {"id":"1a6e000f-6e77-4bcc-8bae-452914f8aa2d","model_name":"Artura GT4","manufacturer":"McLaren","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:24.952196+00:00"}
 {"id":"1ad4a6f1-7839-4ed9-a379-56008f986ca9","model_name":"SC63","manufacturer":"Lamborghini","created_at":"2026-02-22T17:00:36.597728+00:00","updated_at":"2026-02-24T20:28:18.528985+00:00"}
 {"id":"1f7a21c7-29a2-410c-bd5c-4ed463f16e85","model_name":"Leon VZ TCR","manufacturer":"Cupra","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:52.015928+00:00"}
+{"model_name":"Vantage GT4","manufacturer":"Aston Martin","id":"323ad665-4800-4009-b896-eb5136092fa4","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
 {"id":"37e4b7f1-9199-46a6-8e52-c3c33c80a43f","model_name":"Mustang GT3","manufacturer":"Ford","created_at":"2026-02-22T12:42:28.474547+00:00","updated_at":"2026-02-22T14:59:52.087068+00:00"}
 {"id":"39b3b17e-f521-4e09-ada3-0ffa8c43ee07","model_name":"720S GT3 EVO","manufacturer":"McLaren","created_at":"2026-02-22T12:42:27.573032+00:00","updated_at":"2026-02-22T15:00:09.144795+00:00"}
 {"id":"42666022-325a-471d-9cb9-3326b4b383c7","model_name":"Elantra N TCR","manufacturer":"Hyundai","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:13.4725+00:00"}
