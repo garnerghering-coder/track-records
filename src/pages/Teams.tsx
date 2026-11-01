@@ -1,184 +1,163 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useDeferredValue, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import FlagImage from "@/components/FlagImage";
 import SEOHead from "@/components/SEOHead";
-import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
-import { Count, Segmented, Toolbar } from "@/components/browse/Segmented";
-import { fetchTeamSeasonCars, uniqSorted } from "@/components/browse/directory-data";
+import { classRank } from "@/lib/insights";
+import { ClassTag, Eyebrow, Note, Page, Skeleton, Tabs } from "@/site/ui";
+import { plural, tally, useRecordBook, type Entry, type Tally } from "@/site/records";
+import { Chip, RecordCard, SearchField } from "@/site/record-ui";
 
-interface TeamRow {
-  id: string;
-  name: string;
-  shortName: string | null;
-  nationality: string | null;
-  series: { id: string; label: string }[];
-  cars: { id: string; label: string }[];
-  years: number[];
-}
+type Sort = "wins" | "entries" | "az";
 
-const TeamsPage = () => {
-  const [teams, setTeams] = useState<TeamRow[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [seriesFilter, setSeriesFilter] = useState("all");
+export default function Teams() {
+  const book = useRecordBook();
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") || "";
+  const series = params.get("series") || "";
+  const cls = params.get("class") || "";
+  const sort = (params.get("sort") as Sort) || "wins";
+  const dq = useDeferredValue(q);
+  const set = (k: string, v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set(k, v);
+    else next.delete(k);
+    setParams(next, { replace: true });
+  };
 
-  useEffect(() => {
-    Promise.all([
-      supabase.from("v2_teams").select("id, full_name, short_name, nationality").order("full_name"),
-      supabase.from("v2_cars").select("id, manufacturer, model_name"),
-      fetchTeamSeasonCars(),
-    ]).then(([{ data: t }, { data: c }, links]) => {
-      const carLabel = Object.fromEntries(((c || []) as any[]).map((x) => [x.id, [x.manufacturer?.trim(), x.model_name].filter(Boolean).join(" ")]));
-      setTeams(
-        ((t || []) as any[]).map((team) => {
-          const mine = links.filter((l) => l.teamId === team.id);
-          const series = new Map<string, string>();
-          for (const l of mine) if (l.seriesId) series.set(l.seriesId, l.seriesShort || "");
-          return {
-            id: team.id,
-            name: team.full_name,
-            shortName: team.short_name,
-            nationality: team.nationality,
-            series: [...series.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label)),
-            cars: uniqSorted(mine.map((l) => l.carId)).map((id) => ({ id, label: carLabel[id] || "Unknown car" })),
-            years: uniqSorted(mine.map((l) => l.year), (a, b) => b - a),
-          };
-        }),
-      );
-    });
-  }, []);
+  const rows = useMemo(() => {
+    if (!book) return [];
+    return [...book.byTeam.entries()]
+      .map(([id, list]) => ({ id, name: book.teams[id]?.full_name || "Unknown team", list, t: tally(list) as Tally, last: list[list.length - 1] as Entry }))
+      .filter((r) => r.t.starts > 0);
+  }, [book]);
 
-  const seriesOptions = useMemo(() => {
-    const m = new Map<string, { label: string; n: number }>();
-    for (const t of teams || []) for (const s of t.series) m.set(s.id, { label: s.label, n: (m.get(s.id)?.n || 0) + 1 });
-    return [...m.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label));
-  }, [teams]);
+  const classes = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of book?.entries || []) if (e.className && (!series || e.seriesId === series)) m.set(e.className, e.classColor);
+    return [...m.entries()].sort((a, b) => classRank(a[0]) - classRank(b[0]));
+  }, [book, series]);
 
-  const filtered = useMemo(() => {
-    let list = teams || [];
-    if (seriesFilter !== "all") list = list.filter((t) => t.series.some((s) => s.id === seriesFilter));
-    const q = search.trim().toLowerCase();
-    if (q)
-      list = list.filter(
-        (t) =>
-          t.name.toLowerCase().includes(q) ||
-          (t.shortName || "").toLowerCase().includes(q) ||
-          t.cars.some((c) => c.label.toLowerCase().includes(q)),
-      );
-    return list;
-  }, [teams, search, seriesFilter]);
+  const shown = useMemo(() => {
+    const n = dq.trim().toLocaleLowerCase();
+    const out = rows.filter(
+      (r) => (!n || r.name.toLocaleLowerCase().includes(n)) && (!series || r.list.some((e) => e.seriesId === series)) && (!cls || r.t.classes.includes(cls)),
+    );
+    if (sort === "az") return out.sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === "entries") return out.sort((a, b) => b.t.starts - a.t.starts || a.name.localeCompare(b.name));
+    return out.sort((a, b) => b.t.wins - a.t.wins || b.t.podiums - a.t.podiums || b.t.starts - a.t.starts || a.name.localeCompare(b.name));
+  }, [rows, dq, series, cls, sort]);
+
+  const winners = rows.filter((r) => r.t.wins > 0).length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead title="Teams" description="Every team in the database, with the series they race in and the cars they run." canonical="/teams" />
+    <div className="min-h-screen">
+      <SEOHead title="Teams – Track Records" description="Every team on the record, with car entries, class wins, podiums and the cars they ran." canonical="/teams" />
       <Header />
-      <PageHeader
-        kicker="Directory"
-        title="Teams"
-        meta={
-          teams && (
+      <Page className="pt-6 sm:pt-10">
+        <Eyebrow>
+          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-ink-2">Teams</span>
+          <span>{book ? `${rows.length} with race entries` : "Loading"}</span>
+        </Eyebrow>
+        <h1 className="display mt-5 max-w-4xl text-[3.4rem] leading-[0.9] sm:text-[5rem] lg:text-[6.2rem]">
+          The teams <em>behind the cars.</em>
+        </h1>
+        <div className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
+          {book ? (
             <>
-              <span>
-                <span className="num text-foreground">{teams.length}</span> teams
-              </span>
-              <span>
-                <span className="num text-foreground">{seriesOptions.length}</span> series
-              </span>
+              {plural(rows.length, "team")} have entered a car; {winners} of them have won their class. Open one for line-ups by season and every result.
             </>
-          )
-        }
-      />
-
-      <main className="container py-8">
-        <Toolbar>
-          <FilterInput value={search} onChange={setSearch} placeholder="Filter by team or car…" className="flex-1" />
-          {seriesOptions.length > 1 && (
-            <Segmented
-              label="Series"
-              value={seriesFilter}
-              onChange={setSeriesFilter}
-              options={[{ value: "all", label: "All" }, ...seriesOptions.map(([id, s]) => ({ value: id, label: s.label, count: s.n }))]}
-            />
-          )}
-        </Toolbar>
-
-        <div className="mt-6">
-          {!teams ? (
-            <RowsSkeleton rows={10} />
-          ) : filtered.length === 0 ? (
-            <EmptyState title="No teams found">{search ? <>Nothing matches “{search}”.</> : "Try another series."}</EmptyState>
           ) : (
-            <>
-              <div className="mb-2 flex justify-end">
-                <Count n={filtered.length} label={filtered.length === 1 ? "team" : "teams"} />
-              </div>
-              <div className="overflow-hidden rounded border bg-card">
-                <table className="data-table table-fixed">
-                  <thead>
-                    <tr>
-                      <th>Team</th>
-                      <th className="hidden w-40 md:table-cell">Series</th>
-                      <th className="hidden lg:table-cell">Cars</th>
-                      <th className="w-28 text-right sm:w-32">Seasons</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((t) => (
-                      <tr key={t.id} className="group">
-                        <td className="py-2">
-                          <Link to={`/team/${t.id}`} className="flex min-w-0 items-center gap-2 font-medium text-foreground group-hover:text-primary">
-                            {t.nationality && <FlagImage nationality={t.nationality} size={16} />}
-                            <span className="truncate">{t.name}</span>
-                          </Link>
-                          {(t.series.length > 0 || t.cars.length > 0) && (
-                            <div className="mt-0.5 truncate text-xs text-muted-foreground lg:hidden">
-                              <span className="md:hidden">{t.series.map((s) => s.label).join(", ")}</span>
-                              {t.series.length > 0 && t.cars.length > 0 && <span className="md:hidden"> · </span>}
-                              {t.cars.map((c) => c.label).join(", ")}
-                            </div>
-                          )}
-                        </td>
-                        <td className="hidden md:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {t.series.length ? (
-                              t.series.map((s) => (
-                                <Link key={s.id} to={`/series/${s.id}`} className="label-caps rounded-sm border px-1.5 py-0.5 hover:border-foreground/30 hover:text-foreground">
-                                  {s.label}
-                                </Link>
-                              ))
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="hidden truncate text-muted-foreground lg:table-cell">
-                          {t.cars.length
-                            ? t.cars.map((c, i) => (
-                                <span key={c.id}>
-                                  {i > 0 && ", "}
-                                  <Link to={`/car/${c.id}`} className="hover:text-foreground">
-                                    {c.label}
-                                  </Link>
-                                </span>
-                              ))
-                            : "—"}
-                        </td>
-                        <td className="num whitespace-nowrap text-right text-xs text-muted-foreground">{t.years.length ? t.years.join(" · ") : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <Skeleton className="h-6 w-80" />
           )}
         </div>
-      </main>
+
+        <section className="mt-12 sm:mt-16">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <SearchField value={q} onChange={(v) => set("q", v)} placeholder="Search teams" className="lg:max-w-md lg:flex-1" />
+            <Tabs<Sort>
+              value={sort}
+              onChange={(v) => set("sort", v === "wins" ? "" : v)}
+              items={[
+                { value: "wins", label: "Most wins" },
+                { value: "entries", label: "Most entries" },
+                { value: "az", label: "A–Z" },
+              ]}
+              className="self-start lg:ml-auto lg:self-auto"
+            />
+          </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+            <Chip active={!series} onClick={() => setParams(drop(params, ["series", "class"]), { replace: true })}>
+              All series
+            </Chip>
+            {book?.series.map((s) => (
+              <Chip key={s.id} active={series === s.id} onClick={() => setParams(drop(params, ["class"], { series: series === s.id ? "" : s.id }), { replace: true })}>
+                {s.short}
+              </Chip>
+            ))}
+            <span className="mx-1 w-px shrink-0 self-stretch bg-rule" aria-hidden />
+            {classes.map(([c, col]) => (
+              <Chip key={c} active={cls === c} onClick={() => set("class", cls === c ? "" : c)} dot={col}>
+                {c}
+              </Chip>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-10">
+          {!book ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} className="h-80 rounded-3xl" />
+              ))}
+            </div>
+          ) : shown.length === 0 ? (
+            <Note title="No teams match">
+              Try another spelling, or{" "}
+              <button type="button" className="underline underline-offset-4 hover:text-ink" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+                clear the filters
+              </button>
+              .
+            </Note>
+          ) : (
+            <>
+              <p className="mb-6 text-sm text-ink-3">{plural(shown.length, "team")}</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {shown.map((r) => (
+                  <RecordCard
+                    key={r.id}
+                    to={`/team/${r.id}`}
+                    livery={r.last.livery}
+                    number={r.last.carNumber}
+                    tint={r.last.classColor}
+                    eyebrow={`${r.t.series.join(" · ")} · ${r.t.years.length > 1 ? `${r.t.years[0]}–${r.t.years[r.t.years.length - 1]}` : r.t.years[0]}`}
+                    title={r.name}
+                    tags={r.t.classes.map((c) => (
+                      <ClassTag key={c} name={c} color={r.t.classColors[c]} />
+                    ))}
+                    stats={[
+                      { label: "Entries", value: r.t.starts },
+                      { label: "Wins", value: r.t.wins },
+                      { label: "Podiums", value: r.t.podiums },
+                    ]}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      </Page>
       <Footer />
     </div>
   );
-};
+}
 
-export default TeamsPage;
+function drop(p: URLSearchParams, keys: string[], add: Record<string, string> = {}) {
+  const next = new URLSearchParams(p);
+  for (const k of keys) next.delete(k);
+  for (const [k, v] of Object.entries(add)) {
+    if (v) next.set(k, v);
+    else next.delete(k);
+  }
+  return next;
+}

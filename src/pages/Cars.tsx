@@ -1,170 +1,142 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useDeferredValue, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
-import { Count, Segmented, Toolbar } from "@/components/browse/Segmented";
-import { fetchTeamSeasonCars, uniqSorted } from "@/components/browse/directory-data";
+import { classRank } from "@/lib/insights";
+import { Eyebrow, Note, Page, Skeleton } from "@/site/ui";
+import { carLabel, countBy, isWin, plural, tally, useRecordBook, type Entry } from "@/site/records";
+import { Chip, RecordCard, SearchField } from "@/site/record-ui";
 
-interface CarRow {
-  id: string;
-  manufacturer: string;
-  model: string;
-  series: { id: string; label: string }[];
-  teams: number;
-  years: number[];
-}
+export default function Cars() {
+  const book = useRecordBook();
+  const [params, setParams] = useSearchParams();
+  const q = params.get("q") || "";
+  const series = params.get("series") || "";
+  const dq = useDeferredValue(q);
+  const set = (k: string, v: string) => {
+    const next = new URLSearchParams(params);
+    if (v) next.set(k, v);
+    else next.delete(k);
+    setParams(next, { replace: true });
+  };
 
-const CarsPage = () => {
-  const [cars, setCars] = useState<CarRow[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [seriesFilter, setSeriesFilter] = useState("all");
-
-  useEffect(() => {
-    Promise.all([supabase.from("v2_cars").select("*").order("model_name"), fetchTeamSeasonCars()]).then(([{ data }, links]) => {
-      setCars(
-        ((data || []) as any[])
-          .map((c) => {
-            const mine = links.filter((l) => l.carId === c.id);
-            const series = new Map<string, string>();
-            for (const l of mine) if (l.seriesId) series.set(l.seriesId, l.seriesShort || "");
-            return {
-              id: c.id,
-              manufacturer: (c.manufacturer || "").trim() || "Other",
-              model: c.model_name,
-              series: [...series.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label)),
-              teams: new Set(mine.map((l) => l.teamId)).size,
-              years: uniqSorted(mine.map((l) => l.year), (a, b) => b - a),
-            };
-          })
-          .sort((a, b) => a.manufacturer.localeCompare(b.manufacturer) || a.model.localeCompare(b.model)),
-      );
-    });
-  }, []);
-
-  const seriesOptions = useMemo(() => {
-    const m = new Map<string, { label: string; n: number }>();
-    for (const c of cars || []) for (const s of c.series) m.set(s.id, { label: s.label, n: (m.get(s.id)?.n || 0) + 1 });
-    return [...m.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label));
-  }, [cars]);
-
-  const filtered = useMemo(() => {
-    let list = cars || [];
-    if (seriesFilter !== "all") list = list.filter((c) => c.series.some((s) => s.id === seriesFilter));
-    const q = search.trim().toLowerCase();
-    if (q) list = list.filter((c) => c.model.toLowerCase().includes(q) || c.manufacturer.toLowerCase().includes(q));
-    return list;
-  }, [cars, search, seriesFilter]);
+  const rows = useMemo(() => {
+    if (!book) return [];
+    return [...book.byCar.entries()]
+      .map(([id, list]) => {
+        const t = tally(list);
+        const primary = countBy(list, (e) => e.className)[0]?.key ?? null;
+        const hero: Entry | undefined = [...list].reverse().find((e) => isWin(e) && e.livery) || [...list].reverse().find((e) => e.livery) || list[list.length - 1];
+        return { id, car: book.cars[id], label: carLabel(book.cars[id]), list, t, primary, hero, teams: new Set(list.map((e) => e.teamId)).size };
+      })
+      .filter((r) => r.car && r.t.starts > 0);
+  }, [book]);
 
   const groups = useMemo(() => {
-    const m = new Map<string, CarRow[]>();
-    for (const c of filtered) {
-      if (!m.has(c.manufacturer)) m.set(c.manufacturer, []);
-      m.get(c.manufacturer)!.push(c);
+    const n = dq.trim().toLocaleLowerCase();
+    const m = new Map<string, typeof rows>();
+    for (const r of rows) {
+      if (n && !r.label.toLocaleLowerCase().includes(n)) continue;
+      if (series && !r.list.some((e) => e.seriesId === series)) continue;
+      const k = r.primary || "Other";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(r);
     }
-    return [...m.entries()];
-  }, [filtered]);
+    return [...m.entries()]
+      .map(([cls, list]) => ({ cls, color: list[0].hero?.classColor, list: list.sort((a, b) => b.t.wins - a.t.wins || b.t.starts - a.t.starts || a.label.localeCompare(b.label)) }))
+      .sort((a, b) => classRank(a.cls) - classRank(b.cls));
+  }, [rows, dq, series]);
 
-  const makes = useMemo(() => new Set((cars || []).map((c) => c.manufacturer)).size, [cars]);
+  const makers = new Set(rows.map((r) => (r.car.manufacturer || "").trim()).filter(Boolean)).size;
+  const count = groups.reduce((n, g) => n + g.list.length, 0);
 
   return (
-    <div className="min-h-screen bg-background">
-      <SEOHead title="Cars" description="Every car model in the database, by manufacturer, with the series and teams that race it." canonical="/cars" />
+    <div className="min-h-screen">
+      <SEOHead title="Cars – Track Records" description="Every car on the record: entries, class wins, teams and liveries for each model." canonical="/cars" />
       <Header />
-      <PageHeader
-        kicker="Directory"
-        title="Cars"
-        meta={
-          cars && (
+      <Page className="pt-6 sm:pt-10">
+        <Eyebrow>
+          <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-ink-2">Cars</span>
+          <span>{book ? `${rows.length} models` : "Loading"}</span>
+        </Eyebrow>
+        <h1 className="display mt-5 max-w-4xl text-[3.4rem] leading-[0.9] sm:text-[5rem] lg:text-[6.2rem]">
+          The <em>machines.</em>
+        </h1>
+        <div className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
+          {book ? (
             <>
-              <span>
-                <span className="num text-foreground">{cars.length}</span> models
-              </span>
-              <span>
-                <span className="num text-foreground">{makes}</span> manufacturers
-              </span>
+              {plural(rows.length, "model")} from {plural(makers, "manufacturer")}, grouped by the class they race in. Each record holds every livery, every team and every result.
             </>
-          )
-        }
-      />
-      <main className="container py-8">
-        <Toolbar>
-          <FilterInput value={search} onChange={setSearch} placeholder="Filter by manufacturer or model…" className="flex-1" />
-          {seriesOptions.length > 1 && (
-            <Segmented
-              label="Series"
-              value={seriesFilter}
-              onChange={setSeriesFilter}
-              options={[{ value: "all", label: "All" }, ...seriesOptions.map(([id, s]) => ({ value: id, label: s.label, count: s.n }))]}
-            />
-          )}
-        </Toolbar>
-
-        <div className="mt-6">
-          {!cars ? (
-            <RowsSkeleton rows={10} />
-          ) : filtered.length === 0 ? (
-            <EmptyState title="No cars found">{search ? <>Nothing matches “{search}”.</> : "Try another series."}</EmptyState>
           ) : (
-            <>
-              <div className="mb-2 flex justify-end">
-                <Count n={filtered.length} label={filtered.length === 1 ? "model" : "models"} />
-              </div>
-              <div className="overflow-hidden rounded border bg-card">
-                <table className="data-table table-fixed">
-                  <thead>
-                    <tr>
-                      <th className="hidden w-44 sm:table-cell">Manufacturer</th>
-                      <th>Model</th>
-                      <th className="hidden w-48 md:table-cell">Series</th>
-                      <th className="w-16 text-right">Teams</th>
-                      <th className="hidden w-32 text-right sm:table-cell">Seasons</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groups.map(([make, list]) =>
-                      list.map((c, i) => (
-                        <tr key={c.id} className="group">
-                          <td className={i === 0 ? "hidden font-display text-sm font-bold uppercase tracking-wide sm:table-cell" : "hidden sm:table-cell"}>
-                            {i === 0 ? make : ""}
-                          </td>
-                          <td>
-                            <Link to={`/car/${c.id}`} className="block truncate font-medium text-foreground group-hover:text-primary">
-                              <span className="mr-1.5 font-display font-bold uppercase tracking-wide text-muted-foreground sm:hidden">{make}</span>
-                              {c.model}
-                            </Link>
-                          </td>
-                          <td className="hidden md:table-cell">
-                            <div className="flex flex-wrap gap-1">
-                              {c.series.length ? (
-                                c.series.map((s) => (
-                                  <Link key={s.id} to={`/series/${s.id}`} className="label-caps rounded-sm border px-1.5 py-0.5 hover:border-foreground/30 hover:text-foreground">
-                                    {s.label}
-                                  </Link>
-                                ))
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="num text-right">{c.teams || <span className="text-muted-foreground">—</span>}</td>
-                          <td className="num hidden text-right text-xs text-muted-foreground sm:table-cell">{c.years.length ? c.years.join(" · ") : "—"}</td>
-                        </tr>
-                      )),
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <Skeleton className="h-6 w-80" />
           )}
         </div>
-      </main>
+
+        <section className="mt-12 flex flex-col gap-3 sm:mt-16 lg:flex-row lg:items-center">
+          <SearchField value={q} onChange={(v) => set("q", v)} placeholder="Search cars or makes" className="lg:max-w-md lg:flex-1" />
+          <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] lg:ml-auto lg:pb-0">
+            <Chip active={!series} onClick={() => set("series", "")}>
+              All series
+            </Chip>
+            {book?.series.map((s) => (
+              <Chip key={s.id} active={series === s.id} onClick={() => set("series", series === s.id ? "" : s.id)}>
+                {s.short}
+              </Chip>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-12">
+          {!book ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 8 }, (_, i) => (
+                <Skeleton key={i} className="h-80 rounded-3xl" />
+              ))}
+            </div>
+          ) : count === 0 ? (
+            <Note title="No cars match">
+              Try a make like “Porsche”, or{" "}
+              <button type="button" className="underline underline-offset-4 hover:text-ink" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+                clear the filters
+              </button>
+              .
+            </Note>
+          ) : (
+            <div className="space-y-16">
+              {groups.map((g) => (
+                <div key={g.cls}>
+                  <div className="mb-6 flex items-baseline gap-3 border-b border-ink/80 pb-3">
+                    <span className="h-3 w-3 shrink-0 self-center rounded-full" style={{ backgroundColor: g.color }} />
+                    <h2 className="display text-[2.4rem] leading-none">{g.cls}</h2>
+                    <span className="num text-xs text-ink-3">{plural(g.list.length, "model")}</span>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {g.list.map((r) => (
+                      <RecordCard
+                        key={r.id}
+                        to={`/car/${r.id}`}
+                        livery={r.hero?.livery}
+                        number={r.hero?.carNumber}
+                        tint={r.hero?.classColor}
+                        eyebrow={(r.car.manufacturer || "").trim() || "Car"}
+                        title={r.car.model_name.trim()}
+                        tags={<span className="text-xs text-ink-3">{plural(r.teams, "team")} · {r.t.series.join(", ")}</span>}
+                        stats={[
+                          { label: "Starts", value: r.t.starts },
+                          { label: "Wins", value: r.t.wins },
+                          { label: "Podiums", value: r.t.podiums },
+                        ]}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </Page>
       <Footer />
     </div>
   );
-};
-
-export default CarsPage;
+}
