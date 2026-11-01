@@ -1,8 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClassBadge, Pos } from "@/components/tr/primitives";
+import { getClassColor, sortClasses } from "@/lib/classes";
+import { chip, toolButton } from "@/components/event-ui";
 import { FileDown } from "lucide-react";
 import FlagImage from "@/components/FlagImage";
 import WeatherBubble from "@/components/WeatherBubble";
@@ -36,6 +35,8 @@ interface ComputedStandingsTableProps {
   event?: any;
   parentSession?: any;
   teamNameMap?: Record<string, string>;
+  /** Optional season class colors (class name → hex) */
+  classColors?: Record<string, string>;
 }
 
 export default function ComputedStandingsTable({
@@ -45,6 +46,7 @@ export default function ComputedStandingsTable({
   weather,
   event,
   parentSession,
+  classColors,
 }: ComputedStandingsTableProps) {
   const [classFilter, setClassFilter] = useState<string>("all");
   const [exporting, setExporting] = useState(false);
@@ -55,7 +57,7 @@ export default function ComputedStandingsTable({
     for (const s of standings) {
       if (s.className) set.add(s.className);
     }
-    return Array.from(set).sort();
+    return Array.from(set).sort(sortClasses);
   }, [standings]);
 
   // Filter standings by class and recompute class positions + intervals
@@ -217,109 +219,132 @@ export default function ComputedStandingsTable({
     }
   }, [filteredStandings, timeLabel, isMulticlass, weather, event, classFilter, computeGap]);
 
+  const classCounts: Record<string, number> = {};
+  for (const s of standings) if (s.className) classCounts[s.className] = (classCounts[s.className] || 0) + 1;
+
   return (
-    <div className="overflow-x-auto border border-border rounded-lg">
-      <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <h4 className="text-xs font-semibold text-card-foreground uppercase tracking-wide">
-            Standings at {timeLabel}
-          </h4>
+    <div className="overflow-hidden rounded border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 className="font-display text-lg font-bold uppercase leading-none tracking-wide text-foreground">
+            Standings at <span className="text-primary">{timeLabel}</span>
+          </h3>
           {weather && <WeatherBubble weather={weather} />}
+          <span className="label-caps">Computed from lap data</span>
         </div>
-        <div className="flex items-center gap-2">
-          {isMulticlass && classes.length > 1 && (
-            <Select value={classFilter} onValueChange={setClassFilter}>
-              <SelectTrigger className="h-7 w-[130px] text-[11px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-[11px]">All Classes</SelectItem>
-                {classes.map(cls => (
-                  <SelectItem key={cls} value={cls} className="text-[11px]">{cls}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <Badge variant="outline" className="text-[10px]">Computed from lap data</Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-[11px] gap-1"
-            onClick={handleExportPdf}
-            disabled={exporting}
-          >
-            <FileDown className="h-3 w-3" />
-            PDF
-          </Button>
-        </div>
+        <button type="button" className={toolButton} onClick={handleExportPdf} disabled={exporting}>
+          <FileDown />
+          PDF
+        </button>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/50">
-            <TableHead className="w-12">Pos</TableHead>
-            {isMulticlass && <TableHead className="w-12">PIC</TableHead>}
-            {isMulticlass && <TableHead>Class</TableHead>}
-            <TableHead className="w-14">No.</TableHead>
-            <TableHead>Driver(s)</TableHead>
-            <TableHead>Team</TableHead>
-            <TableHead>Car</TableHead>
-            <TableHead className="text-center">Laps</TableHead>
-            <TableHead>Gap</TableHead>
-            <TableHead>Int</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredStandings.map((s, i) => (
-            <TableRow key={s.carNumber} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-              <TableCell className="font-bold text-center">{classFilter !== "all" ? s.classPosition : s.position}</TableCell>
-              {isMulticlass && <TableCell className="text-xs">{s.classPosition}</TableCell>}
-              {isMulticlass && <TableCell className="text-xs">{s.className || "—"}</TableCell>}
-              <TableCell className="text-center font-mono text-xs">{s.carNumber}</TableCell>
-              <TableCell className="font-medium whitespace-nowrap">
-                {(() => {
-                  // Show current driver if available (time-specific), otherwise all
-                  if (s.currentDriver) {
-                    return (
-                      <span className="leading-[22px] whitespace-nowrap inline-flex items-center gap-1">
-                        <FlagImage nationality={s.currentDriver.nationality} size={14} />
-                        {s.currentDriver.id ? (
-                          <Link to={`/driver/${s.currentDriver.id}`} className="hover:text-primary transition-colors">
-                            {s.currentDriver.name}
-                          </Link>
-                        ) : s.currentDriver.name}
-                      </span>
-                    );
-                  }
-                  if (s.drivers.length === 0) return "—";
-                  return (
-                    <div className="flex flex-col">
-                      {s.drivers.map((d, idx) => (
-                        <span key={idx} className="leading-[22px] whitespace-nowrap inline-flex items-center gap-1">
-                          <FlagImage nationality={d.nationality} size={14} />
-                          {d.id ? (
-                            <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">
-                              {d.name}
+      {isMulticlass && classes.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto border-b bg-background/40 px-4 py-2" role="group" aria-label="Filter by class">
+          <button type="button" className={chip(classFilter === "all")} onClick={() => setClassFilter("all")}>
+            All <span className="num font-normal opacity-70">{standings.length}</span>
+          </button>
+          {classes.map((cls) => {
+            const c = getClassColor(cls, classColors);
+            const active = classFilter === cls;
+            return (
+              <button
+                key={cls}
+                type="button"
+                className={chip(active)}
+                onClick={() => setClassFilter(active ? "all" : cls)}
+                style={active ? { backgroundColor: c, borderColor: c, color: "#fff" } : undefined}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: active ? "#fff" : c }} />
+                {cls}
+                <span className="num font-normal opacity-70">{classCounts[cls] || 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="data-table [&_tbody_td]:px-2 [&_thead_th]:px-2 sm:[&_tbody_td]:px-3 sm:[&_thead_th]:px-3 [&_thead_th.text-center]:text-center [&_thead_th.text-right]:text-right">
+          <thead>
+            <tr>
+              <th className="w-12 text-center">Pos</th>
+              {isMulticlass && <th className="w-12 text-center">PIC</th>}
+              {isMulticlass && <th className="hidden w-20 md:table-cell">Class</th>}
+              <th className="w-14 text-right">No.</th>
+              <th>Driver(s)</th>
+              <th className="hidden md:table-cell">Team</th>
+              <th className="hidden lg:table-cell">Car</th>
+              <th className="text-right">Laps</th>
+              <th className="text-right">Gap</th>
+              <th className="hidden text-right sm:table-cell">Int</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredStandings.map((s, i) => (
+              <tr key={s.carNumber}>
+                <td className="text-center" style={isMulticlass && s.className ? { boxShadow: `inset 3px 0 0 ${getClassColor(s.className, classColors)}` } : undefined}>
+                  <Pos value={classFilter !== "all" ? s.classPosition : s.position} />
+                </td>
+                {isMulticlass && <td className="num text-center text-[13px] text-muted-foreground">{s.classPosition}</td>}
+                {isMulticlass && (
+                  <td className="hidden md:table-cell">{s.className ? <ClassBadge name={s.className} color={getClassColor(s.className, classColors)} /> : <span className="text-muted-foreground">—</span>}</td>
+                )}
+                <td className="num text-right font-semibold">#{s.carNumber}</td>
+                <td className="py-2">
+                  {(() => {
+                    // Show current driver if available (time-specific), otherwise all
+                    if (s.currentDriver) {
+                      return (
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium leading-5">
+                          <FlagImage nationality={s.currentDriver.nationality} size={14} />
+                          {s.currentDriver.id ? (
+                            <Link to={`/driver/${s.currentDriver.id}`} className="transition-colors hover:text-primary">
+                              {s.currentDriver.name}
                             </Link>
-                          ) : d.name}
+                          ) : (
+                            s.currentDriver.name
+                          )}
                         </span>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </TableCell>
-              <TableCell className="text-muted-foreground whitespace-nowrap">
-                {s.teamId ? (
-                  <Link to={`/team/${s.teamId}`} className="hover:text-primary transition-colors">{s.teamName}</Link>
-                ) : s.teamName || "—"}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{s.carLabel || "—"}</TableCell>
-              <TableCell className="text-center text-xs">{s.lapsCompleted}</TableCell>
-              <TableCell className="font-mono text-xs">{i === 0 && classFilter === "all" ? "Leader" : computeGap(s, i)}</TableCell>
-              <TableCell className="font-mono text-xs">{i === 0 ? "" : s.interval}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+                      );
+                    }
+                    if (s.drivers.length === 0) return "—";
+                    return (
+                      <div className="flex flex-col gap-0.5">
+                        {s.drivers.map((d, idx) => (
+                          <span key={idx} className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium leading-5">
+                            <FlagImage nationality={d.nationality} size={14} />
+                            {d.id ? (
+                              <Link to={`/driver/${d.id}`} className="transition-colors hover:text-primary">
+                                {d.name}
+                              </Link>
+                            ) : (
+                              d.name
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {s.teamName && <div className="max-w-[10rem] truncate text-xs text-muted-foreground sm:max-w-[16rem] md:hidden">{s.teamName}</div>}
+                </td>
+                <td className="hidden whitespace-nowrap text-muted-foreground md:table-cell">
+                  {s.teamId ? (
+                    <Link to={`/team/${s.teamId}`} className="transition-colors hover:text-foreground">
+                      {s.teamName}
+                    </Link>
+                  ) : (
+                    s.teamName || "—"
+                  )}
+                </td>
+                <td className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">{s.carLabel || "—"}</td>
+                <td className="num text-right text-[13px]">{s.lapsCompleted}</td>
+                <td className="num whitespace-nowrap text-right text-[13px] text-muted-foreground">
+                  {i === 0 && classFilter === "all" ? <span className="label-caps text-foreground">Leader</span> : computeGap(s, i)}
+                </td>
+                <td className="num hidden whitespace-nowrap text-right text-[13px] text-muted-foreground sm:table-cell">{i === 0 ? "" : s.interval}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

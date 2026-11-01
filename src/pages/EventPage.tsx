@@ -5,26 +5,22 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { FileDown, TriangleIcon, FileText, Play } from "lucide-react";
+import { CalendarDays, FileDown, FileText, Flag, Info, MapPin, Play, TriangleIcon } from "lucide-react";
 import { exportEventPdf, type SessionExportData } from "@/lib/pdf-export";
 import PdfExportDialog from "@/components/PdfExportDialog";
 import FlagImage from "@/components/FlagImage";
 import { parseTime } from "@/lib/time-calc";
 import WeatherBubble from "@/components/WeatherBubble";
-import PositionProgressionChart from "@/components/PositionProgressionChart";
-import TrackFingerprint from "@/components/TrackFingerprint";
-import { computeTrackMetrics } from "@/lib/track-calculations";
 import SessionBottomTabs from "@/components/SessionBottomTabs";
 import EventHeroDashboard from "@/components/EventHeroDashboard";
 import EnduranceTimeScrubber from "@/components/EnduranceTimeScrubber";
 import SessionSummaryLightbox from "@/components/SessionSummaryLightbox";
 import HighlightsLightbox from "@/components/HighlightsLightbox";
+import { ClassBadge, EmptyState, PageHeader, Pos, RowsSkeleton, SectionHeader } from "@/components/tr/primitives";
+import { chip, toolButton } from "@/components/event-ui";
+import { getClassColor, sortClasses } from "@/lib/classes";
+import { formatDateRange } from "@/lib/date-utils";
 
 export default function EventPage() {
   const { slug } = useParams();
@@ -136,11 +132,31 @@ export default function EventPage() {
     enabled: !!raceSessionForHero,
   });
 
-  if (isLoading) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Loading…</div></div>;
-  if (!event) return <div className="min-h-screen bg-background"><Header /><div className="pt-20 text-center text-muted-foreground">Event not found or not published.</div><Footer /></div>;
+  if (isLoading)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-10">
+          <div className="mb-8 h-24 animate-pulse rounded-sm bg-muted" />
+          <RowsSkeleton rows={8} />
+        </div>
+      </div>
+    );
+  if (!event)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-16">
+          <EmptyState title="Event not found">This event doesn't exist or hasn't been published yet.</EmptyState>
+        </div>
+        <Footer />
+      </div>
+    );
 
   const seriesName = event.v2_seasons?.v2_series?.name;
   const year = event.v2_seasons?.year;
+  const circuitId = (event as any).circuit_id as string | null;
+  const hasHighlights = allSessions.some((s: any) => (s as any).highlights_url);
 
   // Get child sessions for active tab (endurance race)
   const activeSession = sessions.find((s: any) => s.id === activeTab);
@@ -151,6 +167,11 @@ export default function EventPage() {
         .sort((a: any, b: any) => a.sort_order - b.sort_order)
     : [];
 
+  const selectSession = (id: string) => {
+    setActiveTab(id);
+    setActiveSubTab("race-results");
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <SEOHead
@@ -159,104 +180,165 @@ export default function EventPage() {
         canonical={`/events/${slug}`}
       />
       <Header />
-      <main className="flex-1 pt-16">
-        {/* Event Header */}
-        <div className="border-b border-border">
-          <div className="container py-8 space-y-2">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  {seriesName && <span>{seriesName}</span>}
-                  {year && <span>• {year}</span>}
-                  {event.round_number && <span>• Round {event.round_number}</span>}
-                </div>
-                <h1 className="text-3xl md:text-4xl font-bold">{event.name}</h1>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                  {event.v2_circuits?.name && <span>📍 {event.v2_circuits.name}{event.v2_circuits.country ? `, ${event.v2_circuits.country}` : ""}</span>}
-                  {event.start_date && <span>📅 {event.start_date}{event.end_date && event.end_date !== event.start_date ? ` – ${event.end_date}` : ""}</span>}
-                </div>
-                {event.description && <p className="text-sm text-muted-foreground max-w-2xl mt-2">{event.description}</p>}
-              </div>
-              <div className="flex items-center gap-2 shrink-0 pt-1">
+      <main className="flex-1">
+        {/* ── Event header ─────────────────────────────────────── */}
+        <PageHeader
+          kicker={
+            <>
+              {seriesName && <span className="text-primary">{seriesName}</span>}
+              {year && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="num normal-case tracking-normal">{year}</span>
+                </>
+              )}
+              {event.round_number && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span>Round {event.round_number}</span>
+                </>
+              )}
+            </>
+          }
+          title={event.name}
+          meta={
+            <>
+              {event.v2_circuits?.name && (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {circuitId ? (
+                      <Link to={`/circuit/${circuitId}`} className="text-foreground underline-offset-4 hover:text-primary hover:underline">
+                        {event.v2_circuits.name}
+                      </Link>
+                    ) : (
+                      <span className="text-foreground">{event.v2_circuits.name}</span>
+                    )}
+                    {event.v2_circuits.country && <>, {event.v2_circuits.country}</>}
+                  </span>
+                </span>
+              )}
+              {event.start_date && (
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                  <span className="num text-[13px]">{formatDateRange(event.start_date, event.end_date)}</span>
+                </span>
+              )}
+              {sessions.length > 0 && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Flag className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    <span className="num text-foreground">{sessions.length}</span> {sessions.length === 1 ? "session" : "sessions"}
+                  </span>
+                </span>
+              )}
+            </>
+          }
+          actions={
+            (sessions.length > 0 || hasHighlights) && (
+              <>
                 {sessions.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs"
-                    onClick={() => setSummaryOpen(true)}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    Session Summary
-                  </Button>
+                  <button type="button" className={toolButton} onClick={() => setSummaryOpen(true)}>
+                    <FileText />
+                    Session summary
+                  </button>
                 )}
-                {allSessions.some((s: any) => (s as any).highlights_url) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 text-xs"
-                    onClick={() => setHighlightsOpen(true)}
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                    Race Highlights
-                  </Button>
+                {hasHighlights && (
+                  <button type="button" className={toolButton} onClick={() => setHighlightsOpen(true)}>
+                    <Play />
+                    Highlights
+                  </button>
                 )}
+              </>
+            )
+          }
+        >
+          {event.description && <p className="mt-4 max-w-3xl text-sm text-muted-foreground">{event.description}</p>}
+        </PageHeader>
+
+        {/* ── Result summary + analysis ────────────────────────── */}
+        <EventHeroDashboard
+          event={event}
+          sessions={sessions}
+          allSessions={allSessions}
+          hourSessions={heroHourSessions}
+          teamNameMap={teamNameMap}
+          weatherMap={weatherMap}
+          isMulticlass={isMulticlass}
+          layout={(event as any).v2_circuits?.v2_circuit_layouts}
+          raceSession={raceSessionForHero || null}
+          annotationSections={heroAnnotations}
+          seasonClasses={seasonClasses}
+        />
+
+        {/* ── Session selector (sticky under the site header) ──── */}
+        {sessions.length > 0 && (
+          <div className="sticky top-14 z-40 border-y bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+            <div className="container flex items-stretch gap-4">
+              <span className="label-caps hidden shrink-0 items-center md:flex">Session</span>
+              <div role="tablist" aria-label="Sessions" className="-mb-px flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {sessions.map((s: any) => {
+                  const active = s.id === activeTab;
+                  return (
+                    <button
+                      key={s.id}
+                      role="tab"
+                      type="button"
+                      aria-selected={active}
+                      onClick={() => selectSession(s.id)}
+                      className={`relative flex h-12 shrink-0 flex-col items-start justify-center whitespace-nowrap px-3 text-left transition-colors sm:px-4 ${
+                        active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <span className="font-display text-sm font-bold uppercase tracking-wide">{s.name}</span>
+                      {showTypeLabel(s) && (
+                        <span className={`font-display text-[10px] font-semibold uppercase tracking-[0.14em] ${active ? "text-primary" : "text-muted-foreground/70"}`}>
+                          {sessionTypeLabel(s.session_type)}
+                        </span>
+                      )}
+                      <span className={`absolute inset-x-0 bottom-0 h-[3px] ${active ? "bg-signal" : "bg-transparent"}`} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Hero Dashboard */}
-        <div className="container py-6">
-          <EventHeroDashboard
-            event={event}
-            sessions={sessions}
-            allSessions={allSessions}
-            hourSessions={heroHourSessions}
-            teamNameMap={teamNameMap}
-            weatherMap={weatherMap}
-            isMulticlass={isMulticlass}
-            layout={(event as any).v2_circuits?.v2_circuit_layouts}
-            raceSession={raceSessionForHero || null}
-            annotationSections={heroAnnotations}
-            seasonClasses={seasonClasses}
-          />
-        </div>
-
-        {/* Session Tabs */}
-        <div className="container py-6">
+        <div className="container py-6 md:py-8">
           {sessions.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No published sessions yet.</p>
+            <EmptyState title="No sessions yet">Published sessions and results will appear here.</EmptyState>
           ) : (
-            <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveSubTab("race-results"); }}>
-              <TabsList className="mb-4">
-                {sessions.map((s: any) => (
-                  <TabsTrigger key={s.id} value={s.id} className="text-xs sm:text-sm">
-                    {s.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-              {sessions.map((s: any) => (
-                <TabsContent key={s.id} value={s.id}>
-                  {s.session_type === "endurance_race" ? (
-                    <EnduranceRaceView
-                      parentSession={s}
-                      hourSessions={hourSessions}
-                      event={event}
-                      teamNameMap={teamNameMap}
-                      allSessions={sessions}
-                      weatherMap={weatherMap}
-                      activeSubTab={activeSubTab}
-                      setActiveSubTab={setActiveSubTab}
-                      isMulticlass={isMulticlass}
-                      layout={(event as any).v2_circuits?.v2_circuit_layouts}
-                      seasonClasses={seasonClasses}
-                    />
-                  ) : (
-                    <SessionResults session={s} event={event} teamNameMap={teamNameMap} allSessions={sessions} weatherMap={weatherMap} isMulticlass={isMulticlass} layout={(event as any).v2_circuits?.v2_circuit_layouts} seasonClasses={seasonClasses} />
-                  )}
-                </TabsContent>
-              ))}
-            </Tabs>
+            activeSession && (
+              <div role="tabpanel" key={activeSession.id}>
+                {activeSession.session_type === "endurance_race" ? (
+                  <EnduranceRaceView
+                    parentSession={activeSession}
+                    hourSessions={hourSessions}
+                    event={event}
+                    teamNameMap={teamNameMap}
+                    allSessions={sessions}
+                    weatherMap={weatherMap}
+                    activeSubTab={activeSubTab}
+                    setActiveSubTab={setActiveSubTab}
+                    isMulticlass={isMulticlass}
+                    layout={(event as any).v2_circuits?.v2_circuit_layouts}
+                    seasonClasses={seasonClasses}
+                  />
+                ) : (
+                  <SessionResults
+                    session={activeSession}
+                    event={event}
+                    teamNameMap={teamNameMap}
+                    allSessions={sessions}
+                    weatherMap={weatherMap}
+                    isMulticlass={isMulticlass}
+                    layout={(event as any).v2_circuits?.v2_circuit_layouts}
+                    seasonClasses={seasonClasses}
+                  />
+                )}
+              </div>
+            )
           )}
         </div>
 
@@ -279,6 +361,26 @@ export default function EventPage() {
       <Footer />
     </div>
   );
+}
+
+/** Only show the type under the name when it adds information ("Race" → "Endurance") */
+function showTypeLabel(s: any): boolean {
+  const label = sessionTypeLabel(s.session_type).toLowerCase();
+  const name = String(s.name || "").toLowerCase();
+  return !name.includes(label) && !(label === "practice" && /\b(fp|p)\d/.test(name));
+}
+
+function sessionTypeLabel(t: string | null | undefined): string {
+  switch (t) {
+    case "practice": return "Practice";
+    case "warmup": return "Warm-up";
+    case "qualifying": return "Qualifying";
+    case "sprint_qualifying": return "Sprint quali";
+    case "race": return "Race";
+    case "sprint_race": return "Sprint";
+    case "endurance_race": return "Endurance";
+    default: return t ? t.replace(/_/g, " ") : "Session";
+  }
 }
 
 // ── Endurance Race View ──────────────────────────────────────────────
@@ -345,6 +447,7 @@ function EnduranceRaceView({
         weatherMap={weatherMap}
         parentSession={parentSession}
         event={event}
+        seasonClasses={seasonClasses}
       />
 
       {/* Stored results (hidden when viewing custom time standings) */}
@@ -376,18 +479,18 @@ function EnduranceRaceView({
 function PositionDelta({ racePos, qualPos }: { racePos: number | null; qualPos: number | null }) {
   if (racePos === null || qualPos === null) return null;
   const delta = qualPos - racePos;
-  if (delta === 0) return <span className="text-xs text-muted-foreground">—</span>;
+  if (delta === 0) return <span className="num text-xs text-muted-foreground/60">–</span>;
   if (delta > 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-xs font-semibold" style={{ color: "#22c55e" }}>
-        <TriangleIcon className="h-3 w-3 fill-current" />
+      <span className="num inline-flex items-center gap-0.5 text-xs font-semibold text-pb" title={`Gained ${delta}`}>
+        <TriangleIcon className="h-2.5 w-2.5 fill-current" />
         {delta}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-xs font-semibold" style={{ color: "#ef4444" }}>
-      <TriangleIcon className="h-3 w-3 fill-current rotate-180" />
+    <span className="num inline-flex items-center gap-0.5 text-xs font-semibold text-dnf" title={`Lost ${Math.abs(delta)}`}>
+      <TriangleIcon className="h-2.5 w-2.5 rotate-180 fill-current" />
       {Math.abs(delta)}
     </span>
   );
@@ -572,7 +675,7 @@ function SessionResults({
         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
       });
     }
-    return Array.from(set).sort();
+    return Array.from(set).sort(sortClasses);
   }, [results, seasonClasses]);
 
   // Filter results by class
@@ -694,34 +797,74 @@ function SessionResults({
     return r.v2_teams?.short_name || r.v2_teams?.full_name || "—";
   };
 
+  const classColorMap: Record<string, string> = {};
+  for (const sc of seasonClasses || []) if (sc?.class_name && sc?.color) classColorMap[sc.class_name] = sc.color;
+  const classColor = (cls: string | null | undefined) => getClassColor(cls, classColorMap);
+  const classCounts: Record<string, number> = {};
+  for (const r of results) {
+    const c = (r as any).extra_data?.Class;
+    if (c) classCounts[c] = (classCounts[c] || 0) + 1;
+  }
+
+  const showPic = isMulticlass || extraDataKeys.some((c) => c.key === "PIC");
+  const showClass = isMulticlass || extraDataKeys.some((c) => c.key === "Class");
+  const otherExtraCols = extraDataKeys.filter((c) => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires");
+  const showTires = extraDataKeys.some((c) => c.key === "Tires") && !isOverallEnduranceView;
+  const carLabel = (r: any) => (r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—");
+  const formatGap = (g: string | null) => {
+    if (!g) return "—";
+    const lapMatch = g.match(/^\+(\d+)\s*lap/i);
+    if (lapMatch) {
+      const n = parseInt(lapMatch[1], 10);
+      return `+${n} ${n === 1 ? "Lap" : "Laps"}`;
+    }
+    return g;
+  };
+  const lapCell = (t: string | null) => {
+    const fastest = !!t && t === fastestLapStr;
+    return (
+      <td className={`num text-right text-[13px] ${fastest ? "font-semibold text-fastest" : ""}`}>
+        {t ? (
+          <span className="inline-flex items-center justify-end gap-1">
+            {fastest && <span className="h-1.5 w-1.5 rounded-full bg-fastest" title="Fastest of the session" />}
+            {t}
+          </span>
+        ) : (
+          <span className="text-muted-foreground/50">—</span>
+        )}
+      </td>
+    );
+  };
+  const numCell = (v: any, cls = "") => (
+    <td className={`num text-right text-[13px] ${cls}`}>{v != null && v !== "" ? v : <span className="text-muted-foreground/50">—</span>}</td>
+  );
+  const sessionDate = session.date ? formatDateRange(session.date.split("T")[0]) : null;
+
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto border border-border rounded-lg">
-        <div className="px-4 py-2 border-b border-border bg-muted/30 flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <h4 className="text-xs font-semibold text-card-foreground uppercase tracking-wide">
-              {session.name}
-            </h4>
-            {!isOverallEnduranceView && <WeatherBubble weather={weatherMap[session.id] || null} />}
-            {session.date && <span className="text-[10px] text-muted-foreground">{session.date.split("T")[0]}{(session as any).start_time ? ` · ${(session as any).start_time}` : ""}</span>}
-          </div>
-          <div className="flex items-center gap-2">
-            {isMulticlass && uniqueClasses.length > 1 && (
-              <Select value={classFilter} onValueChange={setClassFilter}>
-                <SelectTrigger className="h-7 w-[130px] text-[11px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-[11px]">All Classes</SelectItem>
-                  {uniqueClasses.map(cls => (
-                    <SelectItem key={cls} value={cls} className="text-[11px]">{cls}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+    <div className="space-y-6">
+      <div className="overflow-hidden rounded border bg-card">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-4 py-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            <h2 className="font-display text-lg font-bold uppercase leading-none tracking-wide text-foreground">{session.name}</h2>
+            {(sessionDate || (session as any).start_time) && (
+              <span className="num text-xs text-muted-foreground">
+                {sessionDate}
+                {(session as any).start_time ? ` · ${(session as any).start_time}` : ""}
+              </span>
             )}
-            <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1" onClick={handleExportClick}>
-              <FileDown className="h-3 w-3" />PDF
-            </Button>
+            {!isOverallEnduranceView && <WeatherBubble weather={weatherMap[session.id] || null} />}
+          </div>
+          <div className="flex items-center gap-3">
+            {results.length > 0 && (
+              <span className="label-caps hidden sm:inline">
+                <span className="num text-foreground">{filteredResults.length}</span> {filteredResults.length === 1 ? "entry" : "entries"}
+              </span>
+            )}
+            <button type="button" className={toolButton} onClick={handleExportClick}>
+              <FileDown />
+              PDF
+            </button>
             <PdfExportDialog
               open={exportOpen}
               onOpenChange={setExportOpen}
@@ -731,157 +874,265 @@ function SessionResults({
             />
           </div>
         </div>
-        <Table>
-          <TableHeader>
-           <TableRow className="bg-muted/50">
-               <TableHead className="w-12">Pos</TableHead>
-               {isRace && hasRefData && <TableHead className="w-12">+/-</TableHead>}
-                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableHead className="w-12">PIC</TableHead>}
-                {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableHead>Class</TableHead>}
-               {hasCarNumber && <TableHead className="w-14">No.</TableHead>}
-               <TableHead>Driver</TableHead>
-               <TableHead className="w-10">Nat</TableHead>
-               {hasTeam && <TableHead>Team</TableHead>}
-               {hasCar && <TableHead>Car</TableHead>}
-               {isPractice && <>{hasBestLap && <TableHead>Best Lap</TableHead>}{hasGapP1 && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasPracticeLaps && <TableHead>Laps</TableHead>}</>}
-               {isQual && <>{hasQ1 && <TableHead>Q1</TableHead>}{hasQ2 && <TableHead>Q2</TableHead>}{hasQ3 && <TableHead>Q3</TableHead>}{hasQualBest && <TableHead>Best</TableHead>}{hasGapPole && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasQualLaps && <TableHead>Laps</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}</>}
-               {isRace && <>{hasRaceLaps && <TableHead>Laps</TableHead>}{hasTotalTime && <TableHead>Time</TableHead>}{hasGapLeader && <TableHead>Gap</TableHead>}{hasInt && <TableHead>Int</TableHead>}{hasFastestLap && <TableHead>Best Lap</TableHead>}{hasAvgLap && <TableHead>Avg Lap</TableHead>}{hasPits && <TableHead>Pits</TableHead>}{hasPoints && <TableHead>Pts</TableHead>}{hasStatus && <TableHead>Status</TableHead>}</>}
-               {extraDataKeys.filter(c => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires").map(col => (
-                 <TableHead key={col.key}>{col.name}</TableHead>
-               ))}
-               {extraDataKeys.some(c => c.key === "Tires") && !isOverallEnduranceView && <TableHead>Tires</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredResults.map((r: any, i: number) => (
-              <TableRow key={r.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
-                <TableCell className="font-bold text-center">{r.position}</TableCell>
-                {isRace && hasRefData && (
-                  <TableCell className="text-center">
-                    <PositionDelta racePos={r.position} qualPos={r.driver_id && refPosMapByDriver[r.driver_id] ? refPosMapByDriver[r.driver_id] : (r.car_number && refPosMapByCar[r.car_number] ? refPosMapByCar[r.car_number] : null)} />
-                  </TableCell>
+
+        {/* Class filter */}
+        {isMulticlass && uniqueClasses.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto border-b bg-background/40 px-4 py-2" role="group" aria-label="Filter by class">
+            <button type="button" className={chip(classFilter === "all")} onClick={() => setClassFilter("all")}>
+              All <span className="num font-normal opacity-70">{results.length}</span>
+            </button>
+            {uniqueClasses.map((cls) => {
+              const c = classColor(cls);
+              const active = classFilter === cls;
+              return (
+                <button
+                  key={cls}
+                  type="button"
+                  className={chip(active)}
+                  onClick={() => setClassFilter(active ? "all" : cls)}
+                  style={active ? { backgroundColor: c, borderColor: c, color: "#fff" } : undefined}
+                >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: active ? "#fff" : c }} />
+                  {cls}
+                  <span className="num font-normal opacity-70">{classCounts[cls] || 0}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="data-table [&_tbody_td]:px-2 [&_thead_th]:px-2 sm:[&_tbody_td]:px-3 sm:[&_thead_th]:px-3 [&_thead_th.text-center]:text-center [&_thead_th.text-right]:text-right">
+            <thead>
+              <tr>
+                <th className="w-12 text-center">Pos</th>
+                {isRace && hasRefData && <th className="hidden w-12 text-center sm:table-cell" title={useQualifying ? "Positions gained vs. qualifying" : "Positions gained vs. previous hour"}>+/−</th>}
+                {showPic && <th className="w-12 text-center">PIC</th>}
+                {showClass && <th className="hidden w-20 md:table-cell">Class</th>}
+                {hasCarNumber && <th className="w-14 text-right">No.</th>}
+                <th>Driver</th>
+                {hasTeam && <th className="hidden md:table-cell">Team</th>}
+                {hasCar && <th className="hidden lg:table-cell">Car</th>}
+                {isPractice && (
+                  <>
+                    {hasBestLap && <th className="text-right">Best lap</th>}
+                    {hasGapP1 && <th className="text-right">Gap</th>}
+                    {hasInt && <th className="hidden text-right lg:table-cell">Int</th>}
+                    {hasPracticeLaps && <th className="hidden text-right sm:table-cell">Laps</th>}
+                  </>
                 )}
-                {(isMulticlass || extraDataKeys.some(c => c.key === "PIC")) && <TableCell className="text-xs">{(r.extra_data as any)?.PIC || "—"}</TableCell>}
-                {(isMulticlass || extraDataKeys.some(c => c.key === "Class")) && <TableCell className="text-xs">{(r.extra_data as any)?.Class || "—"}</TableCell>}
-                {hasCarNumber && <TableCell className="text-center font-mono text-xs">{r.car_number || "—"}</TableCell>}
-                <TableCell className="font-medium whitespace-nowrap">
-                  {(() => {
-                    const coDrivers = (r as any)._coDrivers;
-                    const allDrivers = (r as any).extra_data?.all_drivers;
-                    const drivers = coDrivers || (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0 ? allDrivers : null);
-                    if (drivers) {
-                      return (
-                        <div className="flex flex-col">
+                {isQual && (
+                  <>
+                    {hasQ1 && <th className="hidden text-right lg:table-cell">Q1</th>}
+                    {hasQ2 && <th className="hidden text-right lg:table-cell">Q2</th>}
+                    {hasQ3 && <th className="hidden text-right lg:table-cell">Q3</th>}
+                    {hasQualBest && <th className="text-right">Best</th>}
+                    {hasGapPole && <th className="text-right">Gap</th>}
+                    {hasInt && <th className="hidden text-right lg:table-cell">Int</th>}
+                    {hasQualLaps && <th className="hidden text-right sm:table-cell">Laps</th>}
+                    {hasPoints && <th className="hidden text-right sm:table-cell">Pts</th>}
+                  </>
+                )}
+                {isRace && (
+                  <>
+                    {hasRaceLaps && <th className="text-right">Laps</th>}
+                    {hasTotalTime && <th className="hidden text-right lg:table-cell">Time</th>}
+                    {hasGapLeader && <th className="text-right">Gap</th>}
+                    {hasInt && <th className="hidden text-right lg:table-cell">Int</th>}
+                    {hasFastestLap && <th className="text-right">Best lap</th>}
+                    {hasAvgLap && <th className="hidden text-right xl:table-cell">Avg lap</th>}
+                    {hasPits && <th className="hidden text-right sm:table-cell">Pits</th>}
+                    {hasPoints && <th className="hidden text-right sm:table-cell">Pts</th>}
+                    {hasStatus && <th>Status</th>}
+                  </>
+                )}
+                {otherExtraCols.map((col) => (
+                  <th key={col.key} className="hidden lg:table-cell">{col.name}</th>
+                ))}
+                {showTires && <th className="hidden lg:table-cell">Tires</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredResults.map((r: any) => {
+                const cls = (r.extra_data as any)?.Class as string | undefined;
+                const retired = hasStatus && r.status && r.status !== "finished";
+                const coDrivers = (r as any)._coDrivers;
+                const allDrivers = (r as any).extra_data?.all_drivers;
+                const drivers: any[] | null = coDrivers || (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0 ? allDrivers : null);
+                return (
+                  <tr key={r.id} className={retired ? "[&>td:not(.st)]:opacity-55" : ""}>
+                    <td
+                      className="text-center"
+                      style={cls && showClass ? { boxShadow: `inset 3px 0 0 ${classColor(cls)}` } : undefined}
+                    >
+                      <Pos value={r.position} />
+                    </td>
+                    {isRace && hasRefData && (
+                      <td className="hidden text-center sm:table-cell">
+                        <PositionDelta
+                          racePos={r.position}
+                          qualPos={r.driver_id && refPosMapByDriver[r.driver_id] ? refPosMapByDriver[r.driver_id] : r.car_number && refPosMapByCar[r.car_number] ? refPosMapByCar[r.car_number] : null}
+                        />
+                      </td>
+                    )}
+                    {showPic && <td className="num text-center text-[13px] text-muted-foreground">{(r.extra_data as any)?.PIC || "—"}</td>}
+                    {showClass && (
+                      <td className="hidden md:table-cell">{cls ? <ClassBadge name={cls} color={classColor(cls)} /> : <span className="text-muted-foreground">—</span>}</td>
+                    )}
+                    {hasCarNumber && <td className="num text-right font-semibold">{r.car_number ? `#${r.car_number}` : "—"}</td>}
+                    <td className="py-2">
+                      {drivers ? (
+                        <div className="flex flex-col gap-0.5">
                           {drivers.map((d: any, idx: number) => (
-                            <span key={idx} className="leading-[22px] whitespace-nowrap">
+                            <span key={idx} className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium leading-5">
+                              <FlagImage nationality={d.nationality} size={14} />
                               {d.id ? (
-                                <Link to={`/driver/${d.id}`} className="hover:text-primary transition-colors">{d.name}</Link>
-                              ) : d.name}
+                                <Link to={`/driver/${d.id}`} className="transition-colors hover:text-primary">{d.name}</Link>
+                              ) : (
+                                d.name
+                              )}
                             </span>
                           ))}
                         </div>
-                      );
-                    }
-                    return r.driver_id ? <Link to={`/driver/${r.driver_id}`} className="hover:text-primary transition-colors whitespace-nowrap">{r.v2_drivers?.full_name || "—"}</Link> : "—";
-                  })()}
-                </TableCell>
-                <TableCell>
-                  {(() => {
-                    const coDrivers = (r as any)._coDrivers;
-                    const allDrivers = (r as any).extra_data?.all_drivers;
-                    const drivers = coDrivers || (allDrivers && Array.isArray(allDrivers) && allDrivers.length > 0 ? allDrivers : null);
-                    if (drivers) {
-                      return (
-                        <div className="flex flex-col">
-                          {drivers.map((d: any, idx: number) => (
-                            <div key={idx} className="flex items-center leading-[22px] h-[22px]">
-                              <FlagImage nationality={d.nationality} size={18} />
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }
-                    return <FlagImage nationality={r.v2_drivers?.nationality} size={18} />;
-                  })()}
-                </TableCell>
-                {hasTeam && <TableCell className="text-muted-foreground whitespace-nowrap">
-                  {r.team_id ? <Link to={`/team/${r.team_id}`} className="hover:text-primary transition-colors">{getTeamName(r)}</Link> : getTeamName(r)}
-                </TableCell>}
-                {hasCar && <TableCell className="text-muted-foreground text-xs">
-                  {r.car_id ? <Link to={`/car/${r.car_id}`} className="hover:text-primary transition-colors">{r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—"}</Link> : (r.v2_cars ? [r.v2_cars.manufacturer, r.v2_cars.model_name].filter(Boolean).join(" ") : "—")}
-                </TableCell>}
-                {isPractice && <>
-                  {hasBestLap && <TableCell className={`font-mono text-xs ${r.best_lap_time && r.best_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.best_lap_time || "—"}</TableCell>}
-                  {hasGapP1 && <TableCell className="font-mono text-xs">{r.gap_to_p1 || "—"}</TableCell>}
-                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  {hasPracticeLaps && <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>}
-                </>}
-                {isQual && <>
-                  {hasQ1 && <TableCell className="font-mono text-xs">{r.q1_time || "—"}</TableCell>}
-                  {hasQ2 && <TableCell className="font-mono text-xs">{r.q2_time || "—"}</TableCell>}
-                  {hasQ3 && <TableCell className="font-mono text-xs">{r.q3_time || "—"}</TableCell>}
-                  {hasQualBest && <TableCell className={`font-mono text-xs font-semibold ${r.best_time && r.best_time === fastestLapStr ? "text-purple-400" : ""}`}>{r.best_time || "—"}</TableCell>}
-                  {hasGapPole && <TableCell className="font-mono text-xs">{r.gap_to_pole || "—"}</TableCell>}
-                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  {hasQualLaps && <TableCell className="text-xs">{r.laps_run || "—"}</TableCell>}
-                  {hasPoints && <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>}
-                </>}
-                {isRace && <>
-                  {hasRaceLaps && <TableCell className="text-xs">{r.laps_completed || "—"}</TableCell>}
-                  {hasTotalTime && <TableCell className="font-mono text-xs">{r.total_time || "—"}</TableCell>}
-                  {hasGapLeader && <TableCell className="font-mono text-xs">{(() => { const g = r.gap_to_leader; if (!g) return "—"; const lapMatch = g.match(/^\+(\d+)\s*lap/i); if (lapMatch) { const n = parseInt(lapMatch[1], 10); return `+${n} ${n === 1 ? "Lap" : "Laps"}`; } return g; })()}</TableCell>}
-                  {hasInt && <TableCell className="font-mono text-xs">{(r.extra_data as any)?.Int || "—"}</TableCell>}
-                  {hasFastestLap && <TableCell className={`font-mono text-xs ${r.fastest_lap_time && r.fastest_lap_time === fastestLapStr ? "text-purple-400 font-semibold" : ""}`}>{r.fastest_lap_time || "—"}</TableCell>}
-                  {hasAvgLap && <TableCell className="font-mono text-xs">{r.average_lap_time || "—"}</TableCell>}
-                  {hasPits && <TableCell className="text-xs">{r.pit_stops ?? "—"}</TableCell>}
-                  {hasPoints && <TableCell className="text-xs font-semibold">{r.points ?? "—"}</TableCell>}
-                  {hasStatus && <TableCell>
-                    {r.status && r.status !== "finished" ? (
-                      <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="destructive" className="text-[10px] cursor-default">{r.status.toUpperCase()}</Badge>
-                          </TooltipTrigger>
-                          {(r.dnf_reason || r.dnf_explanation) && (
-                            <TooltipContent side="top" className="max-w-[300px] text-xs">
-                              {r.dnf_reason && <p className="font-semibold">{r.dnf_reason}</p>}
-                              {r.dnf_explanation && <p className="text-muted-foreground mt-0.5">{r.dnf_explanation}</p>}
-                            </TooltipContent>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium">
+                          <FlagImage nationality={r.v2_drivers?.nationality} size={14} />
+                          {r.driver_id ? (
+                            <Link to={`/driver/${r.driver_id}`} className="transition-colors hover:text-primary">{r.v2_drivers?.full_name || "—"}</Link>
+                          ) : (
+                            "—"
                           )}
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : null}
-                  </TableCell>}
-                </>}
-                {extraDataKeys.filter(c => c.key !== "PIC" && c.key !== "Class" && c.key !== "Tires").map(col => (
-                  <TableCell key={col.key} className="text-xs">{(r.extra_data as any)?.[col.key] || "—"}</TableCell>
-                ))}
-                {extraDataKeys.some(c => c.key === "Tires") && !isOverallEnduranceView && <TableCell className="text-xs">{(r.extra_data as any)?.Tires || "—"}</TableCell>}
-              </TableRow>
-            ))}
-            {filteredResults.length === 0 && <TableRow><TableCell colSpan={20} className="text-center text-muted-foreground py-8">No results entered yet.</TableCell></TableRow>}
-          </TableBody>
-        </Table>
+                        </span>
+                      )}
+                      {hasTeam && <div className="max-w-[10rem] truncate text-xs text-muted-foreground sm:max-w-[16rem] md:hidden">{getTeamName(r)}</div>}
+                    </td>
+                    {hasTeam && (
+                      <td className="hidden whitespace-nowrap text-muted-foreground md:table-cell">
+                        {r.team_id ? (
+                          <Link to={`/team/${r.team_id}`} className="transition-colors hover:text-foreground">{getTeamName(r)}</Link>
+                        ) : (
+                          getTeamName(r)
+                        )}
+                      </td>
+                    )}
+                    {hasCar && (
+                      <td className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">
+                        {r.car_id ? (
+                          <Link to={`/car/${r.car_id}`} className="transition-colors hover:text-foreground">{carLabel(r)}</Link>
+                        ) : (
+                          carLabel(r)
+                        )}
+                      </td>
+                    )}
+                    {isPractice && (
+                      <>
+                        {hasBestLap && lapCell(r.best_lap_time)}
+                        {hasGapP1 && numCell(r.gap_to_p1, "text-muted-foreground")}
+                        {hasInt && numCell((r.extra_data as any)?.Int, "hidden lg:table-cell text-muted-foreground")}
+                        {hasPracticeLaps && numCell(r.laps_run, "hidden sm:table-cell")}
+                      </>
+                    )}
+                    {isQual && (
+                      <>
+                        {hasQ1 && numCell(r.q1_time, "hidden lg:table-cell text-muted-foreground")}
+                        {hasQ2 && numCell(r.q2_time, "hidden lg:table-cell text-muted-foreground")}
+                        {hasQ3 && numCell(r.q3_time, "hidden lg:table-cell text-muted-foreground")}
+                        {hasQualBest && lapCell(r.best_time)}
+                        {hasGapPole && numCell(r.gap_to_pole, "text-muted-foreground")}
+                        {hasInt && numCell((r.extra_data as any)?.Int, "hidden lg:table-cell text-muted-foreground")}
+                        {hasQualLaps && numCell(r.laps_run, "hidden sm:table-cell")}
+                        {hasPoints && numCell(r.points, "hidden sm:table-cell font-semibold")}
+                      </>
+                    )}
+                    {isRace && (
+                      <>
+                        {hasRaceLaps && numCell(r.laps_completed)}
+                        {hasTotalTime && numCell(r.total_time, "hidden lg:table-cell")}
+                        {hasGapLeader && numCell(r.gap_to_leader ? formatGap(r.gap_to_leader) : null, "text-muted-foreground whitespace-nowrap")}
+                        {hasInt && numCell((r.extra_data as any)?.Int, "hidden lg:table-cell text-muted-foreground whitespace-nowrap")}
+                        {hasFastestLap && lapCell(r.fastest_lap_time)}
+                        {hasAvgLap && numCell(r.average_lap_time, "hidden xl:table-cell text-muted-foreground")}
+                        {hasPits && numCell(r.pit_stops, "hidden sm:table-cell")}
+                        {hasPoints && numCell(r.points, "hidden sm:table-cell font-semibold")}
+                        {hasStatus && (
+                          <td className="st">
+                            {r.status && r.status !== "finished" ? (
+                              <TooltipProvider delayDuration={200}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex cursor-default items-center gap-1 font-display text-xs font-bold uppercase tracking-wider text-dnf">
+                                      {r.status.toUpperCase()}
+                                      {(r.dnf_reason || r.dnf_explanation) && <Info className="h-3 w-3 opacity-70" />}
+                                    </span>
+                                  </TooltipTrigger>
+                                  {(r.dnf_reason || r.dnf_explanation) && (
+                                    <TooltipContent side="top" className="max-w-[300px] text-xs">
+                                      {r.dnf_reason && <p className="font-semibold">{r.dnf_reason}</p>}
+                                      {r.dnf_explanation && <p className="mt-0.5 text-muted-foreground">{r.dnf_explanation}</p>}
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <span className="label-caps text-muted-foreground/60">Fin</span>
+                            )}
+                          </td>
+                        )}
+                      </>
+                    )}
+                    {otherExtraCols.map((col) => (
+                      <td key={col.key} className="hidden text-xs lg:table-cell">{(r.extra_data as any)?.[col.key] || "—"}</td>
+                    ))}
+                    {showTires && <td className="hidden text-xs lg:table-cell">{(r.extra_data as any)?.Tires || "—"}</td>}
+                  </tr>
+                );
+              })}
+              {filteredResults.length === 0 && (
+                <tr>
+                  <td colSpan={20} className="py-10 text-center text-muted-foreground">
+                    No results entered yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Legend */}
+        {filteredResults.length > 0 && (fastestLapStr || (isRace && hasRefData)) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t bg-background/40 px-4 py-2 text-[11px] text-muted-foreground">
+            {fastestLapStr && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-fastest" /> Fastest lap <span className="num text-fastest">{fastestLapStr}</span>
+              </span>
+            )}
+            {isRace && hasRefData && (
+              <span className="hidden sm:inline">+/− positions vs. {useQualifying ? "qualifying" : "previous hour"}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Incidents */}
       {isRace && incidents.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold">Incidents</h4>
-          <div className="space-y-1">
+        <section>
+          <SectionHeader kicker="Stewards" title="Incidents" />
+          <div className="divide-y overflow-hidden rounded border bg-card">
             {incidents.map((inc: any) => (
-              <div key={inc.id} className="text-xs text-muted-foreground border-l-2 border-destructive pl-3 py-1">
-                {inc.lap_number && <span className="font-medium">Lap {inc.lap_number}: </span>}
-                {inc.description}
-                {inc.penalty_type && <span className="text-destructive"> — {inc.penalty_type}</span>}
-                {inc.outcome && <span> ({inc.outcome})</span>}
+              <div key={inc.id} className="flex gap-3 px-4 py-2.5 text-sm" style={{ boxShadow: "inset 3px 0 0 hsl(var(--dnf))" }}>
+                {inc.lap_number && <span className="num w-14 shrink-0 text-xs text-muted-foreground">L{inc.lap_number}</span>}
+                <div className="min-w-0 text-muted-foreground">
+                  <span className="text-foreground">{inc.description}</span>
+                  {inc.penalty_type && <span className="text-dnf"> — {inc.penalty_type}</span>}
+                  {inc.outcome && <span> ({inc.outcome})</span>}
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Bottom tabbed sections (manila folder style) */}
+      {/* Analysis: time delta, strategy, progression, race control, fingerprint */}
       <SessionBottomTabs
         session={session}
         event={event}

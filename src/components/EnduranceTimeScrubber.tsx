@@ -4,12 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { FileDown } from "lucide-react";
-import FlagImage from "@/components/FlagImage";
-import WeatherBubble from "@/components/WeatherBubble";
-import { Link } from "react-router-dom";
+import { Clock } from "lucide-react";
+import { chip } from "@/components/event-ui";
 import {
   fetchAllLapTimes,
   computeStandingsAtTime,
@@ -35,6 +31,7 @@ interface EnduranceTimeScrubberProps {
   weatherMap?: Record<string, any>;
   parentSession?: any;
   event?: any;
+  seasonClasses?: { class_name: string; color: string }[];
 }
 
 export default function EnduranceTimeScrubber({
@@ -48,7 +45,13 @@ export default function EnduranceTimeScrubber({
   weatherMap,
   parentSession,
   event,
+  seasonClasses,
 }: EnduranceTimeScrubberProps) {
+  const classColors = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const sc of seasonClasses || []) if (sc?.class_name && sc?.color) m[sc.class_name] = sc.color;
+    return m;
+  }, [seasonClasses]);
   const [customElapsed, setCustomElapsed] = useState<number | null>(null);
   const [timeInput, setTimeInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -411,52 +414,45 @@ export default function EnduranceTimeScrubber({
       ...hourSessions.map(hs => ({ id: hs.id, label: hs.name })),
     ];
     return (
-      <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-lg">
-        {subTabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSubTab(tab.id)}
-            className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all ${
-              activeSubTab === tab.id
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 rounded border bg-card px-4 py-2.5">
+        <span className="label-caps hidden shrink-0 sm:inline">Classification</span>
+        <div className="flex min-w-0 gap-1.5 overflow-x-auto" role="tablist">
+          {subTabs.map((tab) => (
+            <button key={tab.id} role="tab" aria-selected={activeSubTab === tab.id} onClick={() => setActiveSubTab(tab.id)} className={chip(activeSubTab === tab.id)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Top row: Dropdown + time controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={currentValue} onValueChange={handleDropdownChange}>
-          <SelectTrigger className="w-[200px] h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {dropdownOptions.map(opt => (
-              <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded border bg-card px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="label-caps hidden items-center gap-1.5 sm:flex">
+            <Clock className="h-3.5 w-3.5" /> Classification
+          </span>
+          <Select value={currentValue} onValueChange={handleDropdownChange}>
+            <SelectTrigger className="h-8 w-[200px] rounded-sm font-display text-xs font-semibold uppercase tracking-wider">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {dropdownOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        {customElapsed != null && (
+        {customElapsed != null ? (
           <>
-            <div className="flex-1 min-w-[200px] max-w-[500px]">
-              <Slider
-                value={[customElapsed]}
-                min={timeRange.min}
-                max={timeRange.max}
-                step={60}
-                onValueChange={handleSliderChange}
-                className="w-full"
-              />
+            <div className="min-w-[200px] max-w-[560px] flex-1">
+              <Slider value={[customElapsed]} min={timeRange.min} max={timeRange.max} step={60} onValueChange={handleSliderChange} className="w-full" />
             </div>
             <div className="flex items-center gap-1.5">
               <Input
@@ -465,45 +461,16 @@ export default function EnduranceTimeScrubber({
                 onChange={(e) => setTimeInput(e.target.value)}
                 onBlur={handleTimeInputSubmit}
                 onKeyDown={(e) => e.key === "Enter" && handleTimeInputSubmit()}
-                className="w-[90px] h-8 text-xs font-mono text-center"
+                className="num h-8 w-[90px] rounded-sm text-center text-xs"
                 placeholder="H:MM:SS"
               />
-              <span className="text-[10px] text-muted-foreground">
-                / {formatElapsedLabel(timeRange.max)}
-              </span>
+              <span className="num text-[11px] text-muted-foreground">/ {formatElapsedLabel(timeRange.max)}</span>
             </div>
           </>
+        ) : (
+          <span className="text-xs text-muted-foreground">Pick a race hour or a custom time to see the order at that moment.</span>
         )}
       </div>
-
-      {/* Fallback: quick hour buttons only when no lap data (legacy imported hours) */}
-      {!hasLapData && hourSessions.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          <button
-            onClick={() => handleDropdownChange("race-results")}
-            className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-              activeSubTab === "race-results" && customElapsed == null
-                ? "bg-background text-foreground shadow-sm border border-border"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Final
-          </button>
-          {hourSessions.map(hs => (
-            <button
-              key={hs.id}
-              onClick={() => handleDropdownChange(hs.id)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                activeSubTab === hs.id && customElapsed == null
-                  ? "bg-background text-foreground shadow-sm border border-border"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {hs.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Custom standings table */}
       {customElapsed != null && customStandings && (
@@ -515,6 +482,7 @@ export default function EnduranceTimeScrubber({
           event={event}
           parentSession={parentSession}
           teamNameMap={teamNameMap}
+          classColors={classColors}
         />
       )}
     </div>

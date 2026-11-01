@@ -1,6 +1,5 @@
 import { TrackMetrics, categoryHexColor } from "@/lib/track-calculations";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
 
 const CATEGORY_EXPLANATIONS: Record<string, string> = {
   // TCS
@@ -35,22 +34,15 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   "Elevation": "Altitude change score (0–100). Rates total climb and descent per lap relative to track length. Higher = hillier terrain.",
 };
 
-interface GaugeProps {
+interface MetricProps {
   value: number;
   category: string;
   title: string;
-  large?: boolean;
 }
 
-function SemiCircleGauge({ value, category, title, large }: GaugeProps) {
+function MetricCell({ value, category, title }: MetricProps) {
   const color = categoryHexColor(category);
-  const size = large ? 140 : 110;
-  const strokeWidth = large ? 9 : 7;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = Math.PI * radius;
-  const progress = Math.max(0, Math.min(100, value)) / 100;
-  const dashOffset = circumference * (1 - progress);
-  const rounded = Math.round(value);
+  const pct = Math.max(0, Math.min(100, value));
   const explanation = CATEGORY_EXPLANATIONS[category];
   const metricDesc = METRIC_DESCRIPTIONS[title];
 
@@ -58,50 +50,26 @@ function SemiCircleGauge({ value, category, title, large }: GaugeProps) {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="flex flex-col items-center cursor-default">
-            <svg width={size} height={size / 2 + strokeWidth} viewBox={`0 0 ${size} ${size / 2 + strokeWidth}`}>
-              <path
-                d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
-                fill="none"
-                stroke="currentColor"
-                className="text-border"
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-              />
-              <path
-                d={`M ${strokeWidth / 2} ${size / 2} A ${radius} ${radius} 0 0 1 ${size - strokeWidth / 2} ${size / 2}`}
-                fill="none"
-                stroke={color}
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={dashOffset}
-                style={{ opacity: 0.9 }}
-              />
-              <text
-                x={size / 2}
-                y={size / 2 - (large ? 6 : 2)}
-                textAnchor="middle"
-                fill={color}
-                fontSize={large ? 38 : 28}
-                fontFamily="'ModernAge', sans-serif"
-              >
-                {rounded}
-              </text>
-            </svg>
-            <span
-              className="font-display font-bold tracking-wide uppercase mt-1 text-center leading-tight"
-              style={{ color, fontSize: large ? 13 : 11 }}
-            >
-              {category}
-            </span>
-            <span className="text-muted-foreground uppercase tracking-widest text-center" style={{ fontSize: large ? 10 : 8 }}>
-              {title}
-            </span>
+          <div className="min-w-0 cursor-default bg-card px-4 py-3.5">
+            <div className="label-caps truncate">{title}</div>
+            <div className="mt-1.5 flex items-baseline gap-1.5">
+              <span className="font-accent text-3xl leading-none text-foreground">{Math.round(value)}</span>
+              <span className="num text-[11px] text-muted-foreground">/100</span>
+            </div>
+            <div className="relative mt-2.5 h-1 w-full bg-muted" aria-hidden>
+              <div className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, backgroundColor: color }} />
+              {[25, 50, 75].map((t) => (
+                <span key={t} className="absolute inset-y-0 w-px bg-card" style={{ left: `${t}%` }} />
+              ))}
+            </div>
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+              <span className="truncate font-display text-xs font-semibold uppercase tracking-wide text-foreground">{category}</span>
+            </div>
           </div>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="max-w-[260px] text-xs space-y-1.5 p-3">
-          {metricDesc && <p className="text-foreground font-medium">{metricDesc}</p>}
+        <TooltipContent side="bottom" className="max-w-[260px] space-y-1.5 p-3 text-xs">
+          {metricDesc && <p className="font-medium text-foreground">{metricDesc}</p>}
           {explanation && <p className="text-muted-foreground">{explanation}</p>}
         </TooltipContent>
       </Tooltip>
@@ -132,24 +100,20 @@ export default function TrackFingerprint({ metrics, layoutImageUrl, layoutName, 
   if (gauges.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-6 w-full">
+    <div className="flex w-full min-w-0 flex-col gap-4 md:flex-row md:items-center md:gap-6">
       {layoutImageUrl && (
-        <div className="shrink-0 flex items-center gap-4">
-          <div className="w-[160px]">
-            <AspectRatio ratio={5 / 3}>
-              <img
-                src={layoutImageUrl}
-                alt={layoutName ? `${layoutName} layout` : "Circuit layout"}
-                className="w-full h-full object-contain"
-              />
-            </AspectRatio>
+        <div className="flex shrink-0 items-center gap-4">
+          <div className="flex aspect-[5/3] w-[132px] items-center justify-center">
+            <img
+              src={layoutImageUrl}
+              alt={layoutName ? `${layoutName} layout` : "Circuit layout"}
+              className="logo-adapt max-h-full w-full object-contain"
+            />
           </div>
-          {(layoutName || lengthKm || turns) && (
-            <div className="shrink-0">
-              {layoutName && (
-                <span className="font-display text-sm font-semibold text-card-foreground">{layoutName}</span>
-              )}
-              <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+          {(layoutName || lengthKm || turns != null) && (
+            <div className="min-w-0 md:max-w-[160px]">
+              {layoutName && <div className="font-display text-sm font-bold uppercase leading-tight tracking-wide text-foreground">{layoutName}</div>}
+              <div className="num mt-1 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                 {lengthKm && <span>{Number(lengthKm).toFixed(3)} km</span>}
                 {turns != null && <span>{turns} turns</span>}
               </div>
@@ -157,9 +121,9 @@ export default function TrackFingerprint({ metrics, layoutImageUrl, layoutName, 
           )}
         </div>
       )}
-      <div className="flex items-center gap-6 ml-auto">
-        {gauges.map(g => (
-          <SemiCircleGauge key={g.key} value={g.value} category={g.category} title={g.title} large={g.key === "tdi"} />
+      <div className={`grid min-w-0 flex-1 grid-cols-2 gap-px overflow-hidden rounded-sm border bg-border ${gauges.length >= 4 ? "lg:grid-cols-4" : gauges.length === 3 ? "lg:grid-cols-3" : ""}`}>
+        {gauges.map((g) => (
+          <MetricCell key={g.key} value={g.value} category={g.category} title={g.title} />
         ))}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -11,7 +12,7 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from "recharts";
-import { Badge } from "@/components/ui/badge";
+import { CHART_FONT, chip, segItem, segWrap, useChartTheme } from "@/components/event-ui";
 import {
   fetchAllLapTimes,
   computeStandingsAtTime,
@@ -70,10 +71,7 @@ interface Props {
 
 const DEFAULT_CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const DEFAULT_CLASS_COLORS: Record<string, string> = {
-  GTP: "#e63946", GTDPRO: "#457b9d", GTD: "#2a9d8f",
-  LMP2: "#e9c46a", LMP3: "#f4a261", GS: "#264653", TCR: "#a855f7",
-};
+const DEFAULT_CLASS_COLORS: Record<string, string> = SHARED_CLASS_COLORS;
 
 // ── Individual car color palette ─────────────────────────────────────
 
@@ -114,6 +112,20 @@ export default function PositionProgressionChart({
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const theme = useChartTheme();
+  const tickStyle = { fontSize: 10, fill: theme.muted, fontFamily: CHART_FONT.mono };
+  const [chartWidth, setChartWidth] = useState(0);
+  const resizeObs = useRef<ResizeObserver | null>(null);
+  const setChartContainer = useCallback((el: HTMLDivElement | null) => {
+    chartContainerRef.current = el;
+    resizeObs.current?.disconnect();
+    resizeObs.current = null;
+    if (el) {
+      setChartWidth(el.clientWidth);
+      resizeObs.current = new ResizeObserver(() => setChartWidth(el.clientWidth));
+      resizeObs.current.observe(el);
+    }
+  }, []);
 
   // Auto-switch to class position when filtering by class
   const isClassFiltered = selectedClasses.size > 0;
@@ -554,7 +566,14 @@ export default function PositionProgressionChart({
 
   // X-axis tick formatting for continuous mode
   const tickInterval = isContinuousMode
-    ? getTickIntervalSeconds(continuousData!.duration)
+    ? (() => {
+        const base = getTickIntervalSeconds(continuousData!.duration);
+        // Keep labels at least ~80px apart for the available width
+        const slots = Math.max(2, Math.floor(Math.max(0, (chartWidth || 600) - 80) / 80));
+        const raw = continuousData!.duration / slots;
+        const nice = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600].find((st) => st >= raw) ?? 21600;
+        return Math.max(base, nice);
+      })()
     : null;
 
   const xAxisTicks = useMemo(() => {
@@ -578,52 +597,48 @@ export default function PositionProgressionChart({
     : filteredSeries.map(c => ({ carNumber: c.carNumber, className: c.className, teamName: c.teamName }));
 
   return (
-    <div className={compact ? "h-full flex flex-col" : "rounded-lg border border-border bg-card p-4 space-y-4"}>
-      {!compact && (
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-card-foreground">Position Progression</h3>
+    <div className={compact ? "h-full flex flex-col" : "space-y-3"}>
+      {!compact && (showClassFilter || selectedClasses.size > 0) && (
         <div className="flex flex-wrap items-center gap-2">
           {showClassFilter && allClasses.length > 1 && (
-            <div className="flex flex-wrap gap-1">
-              {allClasses.map((cls) => (
-                <Badge
-                  key={cls}
-                  variant={selectedClasses.has(cls) ? "default" : "outline"}
-                  className="cursor-pointer text-[10px] select-none"
-                  onClick={() => toggleClass(cls)}
-                >
-                  {cls}
-                </Badge>
-              ))}
+            <div className="flex flex-wrap gap-1.5">
+              {allClasses.map((cls) => {
+                const c = classColors[cls] || classColors[cls.toUpperCase()] || "#6b7280";
+                const active = selectedClasses.has(cls);
+                return (
+                  <button
+                    key={cls}
+                    className={chip(active)}
+                    style={active ? { backgroundColor: c, borderColor: c, color: "#fff" } : undefined}
+                    onClick={() => toggleClass(cls)}
+                  >
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: active ? "#fff" : c }} />
+                    {cls}
+                  </button>
+                );
+              })}
               {selectedClasses.size > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="cursor-pointer text-[10px] select-none"
-                  onClick={() => setSelectedClasses(new Set())}
-                >
+                <button className={chip(false)} onClick={() => setSelectedClasses(new Set())}>
                   Clear
-                </Badge>
+                </button>
               )}
             </div>
           )}
           {showClassFilter && (
-            <button
-              className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
-                viewMode === "class"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setViewMode((v) => (v === "overall" ? "class" : "overall"))}
-            >
-              {viewMode === "class" ? "Class Pos" : "Overall Pos"}
-            </button>
+            <div className={`${segWrap} sm:ml-auto`}>
+              <button className={segItem(viewMode === "overall")} onClick={() => setViewMode("overall")}>
+                Overall pos
+              </button>
+              <button className={segItem(viewMode === "class")} onClick={() => setViewMode("class")}>
+                Class pos
+              </button>
+            </div>
           )}
         </div>
-      </div>
       )}
 
       <div
-        ref={chartContainerRef}
+        ref={setChartContainer}
         className={`w-full relative ${compact ? "flex-1" : ""}`}
         style={compact ? undefined : { height: Math.min(500, Math.max(300, (maxPosition || 10) * 16 + 60)) }}
         onMouseLeave={() => { setHoveredCar(null); setTooltipPos(null); }}
@@ -693,27 +708,27 @@ export default function PositionProgressionChart({
                 domain={[continuousData!.minElapsed, continuousData!.maxElapsed]}
                 ticks={xAxisTicks}
                 tickFormatter={(v: number) => formatElapsedLabel(v)}
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                axisLine={{ stroke: "hsl(var(--border))" }}
+                tick={tickStyle}
+                axisLine={{ stroke: theme.border }}
                 tickLine={false}
               />
             ) : (
               <XAxis
                 dataKey="hourLabel"
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                axisLine={{ stroke: "hsl(var(--border))" }}
+                tick={tickStyle}
+                axisLine={{ stroke: theme.border }}
                 tickLine={false}
               />
             )}
             <YAxis
               reversed
               domain={[1, maxPosition || 1]}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              axisLine={{ stroke: "hsl(var(--border))" }}
+              tick={tickStyle}
+              axisLine={{ stroke: theme.border }}
               tickLine={false}
               allowDecimals={false}
               width={compact ? 25 : 50}
-              {...(!compact && { label: { value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "hsl(var(--muted-foreground))" } } })}
+              {...(!compact && { label: { value: viewMode === "class" ? "Class Position" : "Position", angle: -90, position: "insideLeft", style: { fontSize: 11, fill: theme.muted, fontFamily: CHART_FONT.display, textTransform: "uppercase", letterSpacing: "0.1em" } } })}
             />
             <Tooltip content={() => null} wrapperStyle={{ display: "none" }} />
             {/* Flag segment overlays */}
@@ -732,7 +747,7 @@ export default function PositionProgressionChart({
             {!isContinuousMode && activeHourIndex && activeHourIndex > 0 && (
               <ReferenceLine
                 x={hourSessions[activeHourIndex - 1]?.name}
-                stroke="hsl(var(--primary))"
+                stroke={theme.primary}
                 strokeDasharray="4 4"
                 strokeOpacity={0.5}
               />
@@ -776,12 +791,12 @@ export default function PositionProgressionChart({
             const pic = continuousData!.chartData[hoveredHour]?.[`pic_${hoveredCar}`];
             return (
               <div
-                className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
+                className="pointer-events-none absolute max-w-[220px] space-y-1 rounded-sm border bg-popover px-3 py-2 text-xs"
                 style={{ left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10, top: Math.max(10, tooltipPos.y - 40), zIndex: 50 }}
               >
                 <div className="font-semibold text-popover-foreground">#{hoveredCar}</div>
                 {meta?.teamName && <div className="text-muted-foreground">{meta.teamName}</div>}
-                <div className="flex gap-3 text-popover-foreground">
+                <div className="num flex gap-3 text-popover-foreground">
                   {pos && <span>P{pos}</span>}
                   {meta?.className && <span>{meta.className}</span>}
                   {pic && <span>PIC {pic}</span>}
@@ -797,13 +812,13 @@ export default function PositionProgressionChart({
           if (!pt) return null;
           return (
             <div
-              className="pointer-events-none absolute rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg space-y-1 max-w-[220px]"
+              className="pointer-events-none absolute max-w-[220px] space-y-1 rounded-sm border bg-popover px-3 py-2 text-xs"
               style={{ left: flipX ? tooltipPos.x - 180 : tooltipPos.x + 10, top: Math.max(10, tooltipPos.y - 40), zIndex: 50 }}
             >
               <div className="font-semibold text-popover-foreground">#{pt.carNumber}</div>
               {pt.teamName && <div className="text-muted-foreground">{pt.teamName}</div>}
               {pt.driverName && <div className="text-muted-foreground">{pt.driverName}</div>}
-              <div className="flex gap-3 text-popover-foreground">
+              <div className="num flex gap-3 text-popover-foreground">
                 <span>P{pt.position}</span>
                 {pt.className && <span>{pt.className}</span>}
                 {pt.classPosition && <span>PIC {pt.classPosition}</span>}
@@ -816,7 +831,7 @@ export default function PositionProgressionChart({
 
       {/* Car legend */}
       {!compact && (
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 border-t pt-3 text-[11px]">
         {carInfoForLegend.map((car) => (
           <button
             key={car.carNumber}
@@ -830,7 +845,7 @@ export default function PositionProgressionChart({
             }
           >
             <span
-              className="inline-block w-2.5 h-2.5 rounded-sm shrink-0"
+              className="inline-block h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: getCarColor(car.carNumber, carsToRender) }}
             />
             <span className="text-muted-foreground">

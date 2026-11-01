@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Search } from "lucide-react";
+import { chip } from "@/components/event-ui";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { HelpCircle } from "lucide-react";
@@ -90,67 +91,55 @@ function RaceControlContent({ sections }: { sections: any[] }) {
   };
 
   return (
-    <div className="px-5 py-3 space-y-2">
+    <div>
       {/* Search + Filter chips */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="relative flex-shrink-0">
-          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+        <div className="relative w-full sm:w-56">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search messages…"
-            className="h-7 w-40 rounded-md border border-border bg-background pl-7 pr-2 text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+            className="h-8 w-full rounded-sm border bg-background pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground/40 focus:outline-none"
           />
         </div>
-        {availableFilters.size > 1 && (
-          <>
-            {(["flags", "penalties", "incidents"] as RaceControlFilter[])
-              .filter(f => availableFilters.has(f))
-              .map(f => {
-                const isActive = activeFilters.has(f);
-                return (
-                  <button
-                    key={f}
-                    onClick={() => toggleFilter(f)}
-                    className={`
-                      inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all
-                      ${isActive
-                        ? "bg-primary/10 border-primary/30 text-primary"
-                        : "bg-muted/50 border-border text-muted-foreground hover:text-foreground hover:border-border"
-                      }
-                    `}
-                  >
-                    {filterLabels[f].label}
-                  </button>
-                );
-              })}
-          </>
-        )}
+        {availableFilters.size > 1 &&
+          (["flags", "penalties", "incidents"] as RaceControlFilter[])
+            .filter((f) => availableFilters.has(f))
+            .map((f) => (
+              <button key={f} type="button" onClick={() => toggleFilter(f)} className={chip(activeFilters.has(f))}>
+                {filterLabels[f].label}
+              </button>
+            ))}
       </div>
 
       {/* Items — scrollable compact list */}
-      <div className="max-h-48 overflow-y-auto space-y-3 pr-1">
+      <div className="max-h-[420px] overflow-y-auto">
         {classifiedSections.map((section: any) => {
           const lowerSearch = searchQuery.toLowerCase();
-          const filteredItems = section._classifiedItems.filter(
-            (item: any) => {
-              const matchFilter = showAll || activeFilters.has(item._category);
-              const matchSearch = !searchQuery || (item.description || "").toLowerCase().includes(lowerSearch);
-              return matchFilter && matchSearch;
-            }
-          );
+          const filteredItems = section._classifiedItems.filter((item: any) => {
+            const matchFilter = showAll || activeFilters.has(item._category);
+            const matchSearch = !searchQuery || (item.description || "").toLowerCase().includes(lowerSearch);
+            return matchFilter && matchSearch;
+          });
           if (filteredItems.length === 0) return null;
           return (
-            <div key={section.id} className="space-y-0.5">
+            <div key={section.id}>
               {classifiedSections.length > 1 && (
-                <h4 className="text-xs font-semibold text-muted-foreground mb-0.5">{section.title}</h4>
+                <div className="label-caps sticky top-0 z-10 border-b bg-card px-4 py-1.5">{section.title}</div>
               )}
-              {filteredItems.map((item: any) => (
-                <div key={item.id} className="text-xs text-muted-foreground border-l-2 pl-3 py-0.5" style={{ borderColor: item.color }}>
-                  {item.description}
-                </div>
-              ))}
+              <div className="divide-y">
+                {filteredItems.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="px-4 py-2 text-[13px] text-muted-foreground"
+                    style={{ boxShadow: `inset 3px 0 0 ${item.color || "hsl(var(--border))"}` }}
+                  >
+                    {item.description}
+                  </div>
+                ))}
+              </div>
             </div>
           );
         })}
@@ -228,11 +217,11 @@ export default function SessionBottomTabs({
   const hasProgression = (hourSessions && hourSessions.length > 0) || lapTimeCount > 0;
 
   // Build tabs in desired order: Time Delta, Strategy, Progression, Race Control, Fingerprint
-  if (lapTimeCount > 0) tabs.push({ id: "time-delta", label: "Class Time Delta" });
-  if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy Timeline" });
-  if (hasProgression) tabs.push({ id: "progression", label: "Position Progression" });
-  if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race Control" });
-  if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit Fingerprint" });
+  if (lapTimeCount > 0) tabs.push({ id: "time-delta", label: "Time delta" });
+  if (stintCount > 0) tabs.push({ id: "strategy", label: "Strategy" });
+  if (hasProgression) tabs.push({ id: "progression", label: "Progression" });
+  if (raceControlSections.length > 0) tabs.push({ id: "race-control", label: "Race control" });
+  if (hasFingerprint) tabs.push({ id: "fingerprint", label: "Circuit fingerprint" });
 
   const [activeTab, setActiveTab] = useState<string>("");
 
@@ -251,87 +240,89 @@ export default function SessionBottomTabs({
 
   return (
     <TooltipProvider delayDuration={200}>
-    <div className="mt-6" data-session-bottom-tabs>
-      {/* Manila folder tabs */}
-      <div className="flex items-end gap-0.5">
-        {tabs.map(tab => {
-          const isActive = tab.id === resolvedTab;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`
-                relative inline-flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-semibold transition-colors
-                rounded-t-lg border border-b-0
-                ${isActive
-                  ? "bg-card text-card-foreground border-border z-10"
-                  : "bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted"
-                }
-              `}
-              style={isActive ? { marginBottom: "-1px" } : {}}
-            >
-              {tab.label}
-              {tabHelpText[tab.id] && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span onClick={(e) => e.stopPropagation()} className="inline-flex">
-                      <HelpCircle className={`h-3 w-3 cursor-help ${isActive ? "text-muted-foreground/50 hover:text-muted-foreground" : "text-muted-foreground/30 hover:text-muted-foreground/60"}`} />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[220px]">
-                    <p className="text-xs">{tabHelpText[tab.id]}</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Content box */}
-      <div className="rounded-lg rounded-tl-none border border-border bg-card overflow-hidden">
-        {resolvedTab === "fingerprint" && hasFingerprint && layoutData && trackMetrics && (
-          <div className="p-5">
-            <TrackFingerprint
-              metrics={trackMetrics}
-              layoutImageUrl={layoutData.layout_image_url}
-              layoutName={layoutData.name}
-              lengthKm={layoutData.length_km}
-              turns={layoutData.turns}
-            />
+      <section className="scroll-mt-32" data-session-bottom-tabs>
+        <div className="mb-3 flex items-end justify-between gap-4">
+          <div>
+            <div className="label-caps mb-1">Beyond the classification</div>
+            <h2 className="font-display text-xl font-bold uppercase tracking-wide text-foreground">Session analysis</h2>
           </div>
-        )}
-
-        {resolvedTab === "race-control" && (
-          <RaceControlContent sections={raceControlSections} />
-        )}
-
-        {resolvedTab === "progression" && hasProgression && (
-          <div className="p-5">
-            <PositionProgressionChart
-              hourSessions={hourSessions || []}
-              teamNameMap={teamNameMap}
-              activeHourId={activeHourId}
-              isMulticlass={isMulticlass}
-              parentSessionId={parentSessionId || session.id}
-              seasonClasses={seasonClasses}
-            />
+        </div>
+        <div className="overflow-hidden rounded border bg-card">
+          {/* Tab strip */}
+          <div className="flex overflow-x-auto border-b bg-background/40 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+            {tabs.map((tab) => {
+              const isActive = tab.id === resolvedTab;
+              return (
+                <div key={tab.id} className={`relative flex shrink-0 items-center border-r ${isActive ? "bg-card" : ""}`}>
+                  <button
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`h-11 pl-4 pr-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+                      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                  {tabHelpText[tab.id] && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="mr-3 inline-flex">
+                          <HelpCircle className="h-3 w-3 cursor-help text-muted-foreground/40 hover:text-muted-foreground" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px]">
+                        <p className="text-xs">{tabHelpText[tab.id]}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <span className={`absolute inset-x-0 top-0 h-0.5 ${isActive ? "bg-signal" : "bg-transparent"}`} />
+                </div>
+              );
+            })}
           </div>
-        )}
 
-        {resolvedTab === "strategy" && (
-          <div className="p-5">
-            <StrategyTimeline sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
-          </div>
-        )}
+          {/* Content */}
+          {resolvedTab === "fingerprint" && hasFingerprint && layoutData && trackMetrics && (
+            <div className="p-4 sm:p-5">
+              <TrackFingerprint
+                metrics={trackMetrics}
+                layoutImageUrl={layoutData.layout_image_url}
+                layoutName={layoutData.name}
+                lengthKm={layoutData.length_km}
+                turns={layoutData.turns}
+              />
+            </div>
+          )}
 
-        {resolvedTab === "time-delta" && (
-          <div className="p-5">
-            <ClassTimeDelta sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
-          </div>
-        )}
-      </div>
-    </div>
+          {resolvedTab === "race-control" && <RaceControlContent sections={raceControlSections} />}
+
+          {resolvedTab === "progression" && hasProgression && (
+            <div className="p-4 sm:p-5">
+              <PositionProgressionChart
+                hourSessions={hourSessions || []}
+                teamNameMap={teamNameMap}
+                activeHourId={activeHourId}
+                isMulticlass={isMulticlass}
+                parentSessionId={parentSessionId || session.id}
+                seasonClasses={seasonClasses}
+              />
+            </div>
+          )}
+
+          {resolvedTab === "strategy" && (
+            <div className="p-4 sm:p-5">
+              <StrategyTimeline sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
+            </div>
+          )}
+
+          {resolvedTab === "time-delta" && (
+            <div className="p-4 sm:p-5">
+              <ClassTimeDelta sessionId={session.id} teamNameMap={teamNameMap} isMulticlass={isMulticlass} seasonClasses={seasonClasses} />
+            </div>
+          )}
+        </div>
+      </section>
     </TooltipProvider>
   );
 }

@@ -163,7 +163,11 @@
     @apply w-full text-sm;
   }
   .data-table thead th {
-    @apply label-caps h-9 whitespace-nowrap border-b px-3 text-left align-middle;
+    @apply label-caps h-9 whitespace-nowrap border-b px-3 align-middle;
+  }
+  /* zero-specificity default so text-right / text-center utilities win */
+  :where(.data-table thead th) {
+    text-align: left;
   }
   .data-table tbody td {
     @apply h-11 border-b px-3 align-middle;

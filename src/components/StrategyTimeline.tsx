@@ -1,7 +1,10 @@
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { GitCompareArrows, ListOrdered, Search } from "lucide-react";
+import { CHART_FONT, chip, segItem, segWrap, useChartTheme } from "@/components/event-ui";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -52,15 +55,7 @@ interface HourPosition {
 
 const DEFAULT_CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
 
-const DEFAULT_CLASS_COLORS: Record<string, string> = {
-  GTP: "#e63946",
-  GTDPRO: "#457b9d",
-  GTD: "#2a9d8f",
-  LMP2: "#e9c46a",
-  LMP3: "#f4a261",
-  GS: "#264653",
-  TCR: "#a855f7",
-};
+const DEFAULT_CLASS_COLORS: Record<string, string> = SHARED_CLASS_COLORS;
 
 const FLAG_COLORS: Record<string, { bg: string; strip: string }> = {
   GREEN: { bg: "rgba(34, 197, 94, 0.06)", strip: "#22c55e" },
@@ -145,6 +140,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
   const [compareCars, setCompareCars] = useState<Set<string>>(new Set());
   const [showPositions, setShowPositions] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const theme = useChartTheme();
 
   // ── Data fetching ──────────────────────────────────────────────
 
@@ -467,8 +463,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     }
     // Strip label (hide in compact mode)
     if (!compact) {
-      ctx.fillStyle = "#9ca3af";
-      ctx.font = "9px system-ui, sans-serif";
+      ctx.fillStyle = theme.muted;
+      ctx.font = `600 10px ${CHART_FONT.display}`;
       ctx.textAlign = "right";
       ctx.fillText("FLAGS", labelW - 6, stripY + STRIP_HEIGHT / 2 + 3);
     }
@@ -476,20 +472,23 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     // ── Time axis ticks ──
     const axisY = TOP_MARGIN - STRIP_HEIGHT - 8;
     if (!compact) {
-      ctx.fillStyle = "#6b7280";
-      ctx.font = "9px system-ui, sans-serif";
+      ctx.fillStyle = theme.muted;
+      ctx.font = `10px ${CHART_FONT.mono}`;
       ctx.textAlign = "center";
     }
-    const tickInterval = viewDuration > 14400 ? 3600 : viewDuration > 3600 ? 1800 : viewDuration > 600 ? 300 : 60;
+    const tickRaw = viewDuration / Math.max(2, Math.floor(chartWidth / 80));
+    const tickInterval = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600].find((s) => s >= tickRaw) ?? 21600;
     const firstTick = Math.ceil(viewRange[0] / tickInterval) * tickInterval;
     for (let t = firstTick; t <= viewRange[1]; t += tickInterval) {
       const x = elapsed2x(t);
       if (x < labelW || x > labelW + chartWidth) continue;
       if (!compact) {
-        ctx.fillText(formatElapsed(t), x, axisY);
+        const label = formatElapsed(t);
+        const half = ctx.measureText(label).width / 2;
+        ctx.fillText(label, Math.min(x, width - half - 2), axisY);
       }
-      ctx.strokeStyle = "rgba(107, 114, 128, 0.15)";
-      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = theme.a("--muted-foreground", theme.dark ? 0.14 : 0.2);
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, TOP_MARGIN);
       ctx.lineTo(x, totalHeight - 10);
@@ -515,9 +514,9 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
     if (isDragging && dragStart != null && dragEnd != null) {
       const x1 = Math.min(dragStart, dragEnd);
       const x2 = Math.max(dragStart, dragEnd);
-      ctx.fillStyle = "rgba(59, 130, 246, 0.15)";
+      ctx.fillStyle = theme.a("--primary", 0.12);
       ctx.fillRect(x1, TOP_MARGIN, x2 - x1, rowsBottom - TOP_MARGIN);
-      ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.strokeStyle = theme.a("--primary", 0.6);
       ctx.lineWidth = 1;
       ctx.strokeRect(x1, TOP_MARGIN, x2 - x1, rowsBottom - TOP_MARGIN);
     }
@@ -532,22 +531,22 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
 
       // Car label
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#d1d5db";
-      ctx.font = compareMode ? "bold 11px monospace" : "10px monospace";
+      ctx.fillStyle = theme.fg;
+      ctx.font = compareMode ? `600 11px ${CHART_FONT.mono}` : `10px ${CHART_FONT.mono}`;
       ctx.textAlign = "right";
       ctx.fillText(`#${car.carNumber}`, labelW - 6, y + effectiveRowHeight / 2 + 3);
 
       // Compare mode: show team name below car number
       if (compareMode) {
-        ctx.fillStyle = "#9ca3af";
-        ctx.font = "8px system-ui, sans-serif";
+        ctx.fillStyle = theme.muted;
+        ctx.font = `9px ${CHART_FONT.body}`;
         ctx.fillText(car.teamName.substring(0, 12), labelW - 6, y + effectiveRowHeight / 2 + 13);
       }
 
       // Background
       ctx.fillStyle = isCompared && !compareMode
-        ? "rgba(59, 130, 246, 0.08)"
-        : "rgba(107, 114, 128, 0.06)";
+        ? theme.a("--primary", 0.1)
+        : theme.a("--muted-foreground", theme.dark ? 0.07 : 0.09);
       ctx.fillRect(labelW, y, chartWidth, effectiveRowHeight);
 
       // Stints for this car
@@ -602,7 +601,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         ctx.rect(x1, ry, w, rh);
         ctx.clip();
 
-        const hatchColor = gap.isDnf ? "#ef4444" : "#6b7280";
+        const hatchColor = gap.isDnf ? theme.dnf : theme.muted;
         ctx.strokeStyle = hatchColor;
         ctx.lineWidth = 0.8;
         const spacing = 6;
@@ -618,8 +617,8 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         if (w > 28 && !compact) {
           const label = gap.isDnf ? (car.status?.toUpperCase() || "DNF") : "GARAGE";
           ctx.globalAlpha = alpha * 0.6;
-          ctx.fillStyle = gap.isDnf ? "#ef4444" : "#9ca3af";
-          ctx.font = "bold 7px system-ui, sans-serif";
+          ctx.fillStyle = gap.isDnf ? theme.dnf : theme.muted;
+          ctx.font = `700 8px ${CHART_FONT.display}`;
           ctx.textAlign = "center";
           ctx.fillText(label, x1 + w / 2, y + effectiveRowHeight / 2 + 2.5);
         }
@@ -748,12 +747,12 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         // Class header (hide in compact mode)
         if (!compact) {
           ctx.fillStyle = classColor;
-          ctx.font = "bold 10px system-ui, sans-serif";
+          ctx.font = `700 11px ${CHART_FONT.display}`;
           ctx.textAlign = "left";
-          ctx.fillText(`${cls} (${group.length})`, 4, y + hdrH / 2 + 3);
+          ctx.fillText(`${cls.toUpperCase()} (${group.length})`, 4, y + hdrH / 2 + 3);
           if (!isExpanded && group.length > maxPerClass) {
-            ctx.fillStyle = "#9ca3af";
-            ctx.font = "9px system-ui, sans-serif";
+            ctx.fillStyle = theme.muted;
+            ctx.font = `9px ${CHART_FONT.body}`;
             ctx.fillText(`+${group.length - maxPerClass} more`, labelW - 8, y + hdrH / 2 + 3);
           }
         }
@@ -765,7 +764,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
         }
       }
     }
-  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars, compact, timeRange, classColors, carInfoMap]);
+  }, [stints, pitStops, flagSegments, visibleCars, allClasses, carsByClass, effectiveClasses, expandedClasses, highlightedCar, viewRange, viewDuration, isDragging, dragStart, dragEnd, compareMode, compareCars, effectiveRowHeight, showPositions, positionLookup, searchFilteredCars, compact, timeRange, classColors, carInfoMap, theme]);
 
   useEffect(() => {
     drawCanvas();
@@ -1037,29 +1036,26 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
           {/* Controls Row 1: Class filters + Zoom presets */}
           <div className="flex flex-wrap items-center gap-2">
             {allClasses.length > 1 && (
-              <div className="flex flex-wrap gap-1">
-                {allClasses.map(cls => {
+              <div className="flex flex-wrap gap-1.5">
+                {allClasses.map((cls) => {
                   const isActive = selectedClasses.size === 0 || selectedClasses.has(cls);
                   const color = getClassColor(cls, classColors);
                   return (
                     <button
                       key={cls}
                       onClick={() => {
-                        setSelectedClasses(prev => {
+                        setSelectedClasses((prev) => {
                           const next = new Set(prev);
-                          if (next.has(cls)) next.delete(cls); else next.add(cls);
+                          if (next.has(cls)) next.delete(cls);
+                          else next.add(cls);
                           if (next.size === allClasses.length) return new Set();
                           return next;
                         });
                       }}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-all"
-                      style={{
-                        borderColor: isActive ? color : "transparent",
-                        backgroundColor: isActive ? `${color}18` : "rgba(107, 114, 128, 0.1)",
-                        color: isActive ? color : "#9ca3af",
-                      }}
+                      className={chip(false, isActive ? "!text-foreground" : "opacity-60")}
+                      style={isActive ? { borderColor: `${color}99`, backgroundColor: `${color}1f` } : undefined}
                     >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color, opacity: isActive ? 1 : 0.3 }} />
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color, opacity: isActive ? 1 : 0.4 }} />
                       {cls}
                     </button>
                   );
@@ -1067,17 +1063,15 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
               </div>
             )}
 
-            <div className="flex gap-1 ml-auto">
+            <div className={`${segWrap} sm:ml-auto`}>
               {zoomPresets.map((preset, i) => (
                 <button
                   key={i}
                   onClick={() => setZoomRange(preset.range)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition-all border ${
+                  className={segItem(
                     (preset.range === null && zoomRange === null) ||
-                    (preset.range && zoomRange && preset.range[0] === zoomRange[0] && preset.range[1] === zoomRange[1])
-                      ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
-                  }`}
+                      !!(preset.range && zoomRange && preset.range[0] === zoomRange[0] && preset.range[1] === zoomRange[1]),
+                  )}
                 >
                   {preset.label}
                 </button>
@@ -1089,65 +1083,52 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => {
-                setCompareMode(prev => !prev);
+                setCompareMode((prev) => !prev);
                 if (compareMode) setCompareCars(new Set());
               }}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
-                compareMode
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
-              }`}
+              className={chip(compareMode)}
             >
-              🔀 Compare {compareMode && compareCars.size > 0 ? `(${compareCars.size})` : ""}
+              <GitCompareArrows className="h-3 w-3" />
+              Compare {compareMode && compareCars.size > 0 ? <span className="num">({compareCars.size})</span> : ""}
             </button>
 
-            <button
-              onClick={() => setShowPositions(prev => !prev)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
-                showPositions
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-muted/50 border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              🏆 Positions
+            <button onClick={() => setShowPositions((prev) => !prev)} className={chip(showPositions)}>
+              <ListOrdered className="h-3 w-3" />
+              Positions
             </button>
 
-            <input
-              type="text"
-              placeholder="Search car # or team..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="px-2 py-1 rounded text-[10px] border border-border bg-muted/30 text-foreground placeholder:text-muted-foreground/60 w-36 focus:outline-none focus:border-primary/40"
-            />
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Car # or team…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-7 w-40 rounded-sm border bg-background pl-7 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-foreground/40 focus:outline-none"
+              />
+            </div>
 
             {compareMode && compareCars.size > 0 && (
-              <button
-                onClick={() => setCompareCars(new Set())}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
+              <button onClick={() => setCompareCars(new Set())} className="text-[11px] text-muted-foreground transition-colors hover:text-foreground">
                 Clear selection
               </button>
             )}
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap gap-3 text-[9px] text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.GREEN.strip }} /> Green
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.YELLOW.strip }} /> Yellow
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.FCY.strip }} /> FCY/SC
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-2 rounded-sm" style={{ background: FLAG_COLORS.RED.strip }} /> Red
-            </span>
-            <span className="text-[9px] text-muted-foreground/60 ml-2">
-              {compareMode
-                ? "Click cars to add/remove from comparison"
-                : "Click class header to expand · Click car row to highlight · Drag to zoom"}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            {[
+              { k: "GREEN", label: "Green" },
+              { k: "YELLOW", label: "Yellow" },
+              { k: "FCY", label: "FCY / SC" },
+              { k: "RED", label: "Red" },
+            ].map((f) => (
+              <span key={f.k} className="flex items-center gap-1.5">
+                <span className="h-2 w-3" style={{ background: FLAG_COLORS[f.k].strip }} /> {f.label}
+              </span>
+            ))}
+            <span className="text-muted-foreground/70 sm:ml-2">
+              {compareMode ? "Click cars to add/remove from comparison" : "Click class header to expand · Click a car row to highlight · Drag to zoom"}
             </span>
           </div>
         </>
@@ -1168,7 +1149,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
       {/* Tooltip — portaled to body to avoid overflow:hidden clipping */}
       {tooltip && createPortal(
         <div
-          className="fixed z-50 pointer-events-none bg-popover border border-border rounded-lg shadow-lg px-3 py-2 text-xs text-popover-foreground"
+          className="pointer-events-none fixed z-50 rounded-sm border bg-popover px-3 py-2 text-xs text-popover-foreground"
           style={{
             left: tooltip.x + 12,
             top: tooltip.y - 8,
@@ -1176,7 +1157,7 @@ export default function StrategyTimeline({ sessionId, teamNameMap, isMulticlass,
           }}
         >
           {tooltip.content.map((line, i) => (
-            <div key={i} className={i === 0 ? "font-semibold mb-1" : line === "" ? "h-1" : "text-muted-foreground"}>
+            <div key={i} className={i === 0 ? "mb-1 font-semibold" : line === "" ? "h-1" : "num text-[11px] text-muted-foreground"}>
               {line}
             </div>
           ))}
