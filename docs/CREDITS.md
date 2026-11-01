@@ -2,6 +2,19 @@
 
 Images that are not our own, with their authors and licences.
 
+## Car illustrations (IMSA spotter guides)
+
+**Car illustrations: Andy Blackmore Design — [SpotterGuides.com](https://spotterguides.com/), used with permission.**
+
+The IMSA WeatherTech SportsCar Championship and IMSA Michelin Pilot Challenge car side profiles for 2024 (all cars),
+2025 (Michelin Pilot Challenge, and the WeatherTech cars without official IMSA art) and the cars missing from the
+2026 IMSA art are cut out from Andy Blackmore's official IMSA spotter guides
+([2024](https://spotterguides.com/portfolio/24_imsa/), [2025](https://spotterguides.com/portfolio/25_imsa/),
+[2026](https://spotterguides.com/portfolio/26_imsa/)), © Andy Blackmore Design, and are used on this site for
+educational purposes with his permission. They are cropped from the guide, the white background is removed and
+they are resized only (orientation and artwork unchanged; `scripts/spotter-liveries.py`). Each car uses the
+latest guide of the season that shows it. Please do not reuse them without asking Andy Blackmore Design.
+
 ## Track maps (Wikimedia Commons)
 
 Recoloured to a single-colour outline on a transparent background (white; the site inverts it in light mode).
