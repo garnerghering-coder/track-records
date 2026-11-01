@@ -139,6 +139,8 @@ export const lastName = (full?: string | null) => {
   const parts = cleanName(full).split(/\s+/).filter(Boolean);
   if (parts.length < 2) return parts[0] || "";
   let i = parts.length - 1;
+  // generational suffixes stay with the surname ("Ricky Stenhouse Jr." → "Stenhouse Jr.")
+  if (i > 1 && /^(jr\.?|sr\.?|ii|iii|iv|v)$/i.test(parts[i])) i--;
   while (i > 1 && PARTICLES.has(parts[i - 1].toLowerCase())) i--;
   return parts.slice(i).join(" ");
 };
