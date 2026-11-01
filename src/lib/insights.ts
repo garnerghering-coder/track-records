@@ -73,7 +73,28 @@ export interface RaceDigest {
 
 export interface EventDigest {
   eventId: string;
+  /** light digest (lists): see liteDigest */
+  lite?: boolean;
   races: RaceDigest[]; // in running order; the last one is the headline
+}
+
+/**
+ * The light digest used by lists (public/data/derived/digests.json): winners,
+ * classes and stats; only the fastest-lap insight; podiums only for races
+ * without classes (where the "winners" row is the podium). Race pages load the
+ * full digest (derived/digests/<eventId>.json).
+ */
+export function liteDigest(d: EventDigest): EventDigest {
+  return {
+    eventId: d.eventId,
+    lite: true,
+    races: d.races.map((r) => ({
+      ...r,
+      insights: r.insights.filter((i) => i.kind === "fastest_lap"),
+      podiums: r.classes.length > 1 ? {} : r.podiums,
+      lapsLed: [],
+    })),
+  };
 }
 
 /* ── parsing ─────────────────────────────────────────────────── */

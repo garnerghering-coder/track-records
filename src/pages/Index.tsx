@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, ArrowUpRight, Play } from "lucide-react";
 import Header, { openSearch } from "@/components/Header";
@@ -10,15 +10,17 @@ import {
   cleanName,
   lastName,
   layoutFor,
+  useDigest,
   useDigests,
   useEvents,
   useLayouts,
   useNames,
+  useSeasonLeaders,
   useSeasons,
-  useSeasonStandings,
   type EventLite,
   type SeasonLite,
 } from "@/site/data";
+import { Chip } from "@/site/record-ui";
 import { ClassTag, Eyebrow, Livery, Page, PosNum, SectionHead, Skeleton, Sparkline, Ticker, TrackMap, dateRange } from "@/site/ui";
 
 const stripYear = (name: string) => name.replace(/^\d{4}\s+/, "");
@@ -32,15 +34,40 @@ const Index = () => {
 
   const today = new Date().toISOString().slice(0, 10);
   const past = useMemo(() => (events || []).filter((e) => (e.start_date || "") <= today && digests?.[e.id]?.races.length), [events, digests, today]);
+  // The hero is the most recent race overall, whatever the series.
   const lead = past[0];
-  const leadDigest = lead ? digests?.[lead.id] : undefined;
+  const leadFull = useDigest(lead?.id).data;
+  const leadDigest = leadFull || (lead ? digests?.[lead.id] : undefined);
   const leadRace = leadDigest?.races[leadDigest.races.length - 1];
-  const more = past.slice(1, 5);
 
+  // Series with races on the record, most recently raced first.
+  const seriesList = useMemo(() => {
+    const m = new Map<string, { id: string; short: string; name: string; events: EventLite[] }>();
+    for (const e of past) {
+      if (!e.series) continue;
+      if (!m.has(e.series.id)) m.set(e.series.id, { id: e.series.id, short: e.series.short_name || e.series.name, name: e.series.name, events: [] });
+      m.get(e.series.id)!.events.push(e);
+    }
+    return [...m.values()];
+  }, [past]);
+  const [seriesF, setSeriesF] = useState("");
+  const picked = seriesList.find((s) => s.id === seriesF);
+  // "All": the latest race of every other series first, then the most recent of the rest.
+  const more = useMemo(() => {
+    if (picked) return picked.events.filter((e) => e.id !== lead?.id).slice(0, 4);
+    const latest = seriesList.map((s) => s.events.find((e) => e.id !== lead?.id)).filter((e): e is EventLite => !!e && e.series?.id !== lead?.series?.id);
+    const rest = past.filter((e) => e.id !== lead?.id && !latest.includes(e));
+    return [...latest, ...rest].slice(0, Math.max(4, Math.min(latest.length, 8)));
+  }, [picked, seriesList, past, lead]);
+
+  // The current season of each series, most recently raced first.
   const championships = useMemo(() => {
+    const lastRace = new Map(seriesList.map((s, i) => [s.id, i]));
     const seen = new Set<string>();
-    return (seasons || []).filter((s) => s.eventCount > 0 && !seen.has(s.series.id) && seen.add(s.series.id));
-  }, [seasons]);
+    return (seasons || [])
+      .filter((s) => s.eventCount > 0 && !seen.has(s.series.id) && seen.add(s.series.id))
+      .sort((a, b) => (lastRace.get(a.series.id) ?? 99) - (lastRace.get(b.series.id) ?? 99));
+  }, [seasons, seriesList]);
 
   return (
     <div className="min-h-screen">
@@ -73,27 +100,58 @@ const Index = () => {
       )}
 
       {/* ── More races ─────────────────────────────────────────── */}
-      {more.length > 0 && (
+      {(more.length > 0 || picked) && (
         <Page className="mt-24 sm:mt-32">
-          <SectionHead eyebrow="Also on the record" title="Recent races" to="/results" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {more.map((e) => {
-              const d = digests?.[e.id];
-              return <RaceCard key={e.id} ev={e} race={d?.races[d.races.length - 1]} names={names} />;
-            })}
-          </div>
+          <SectionHead
+            eyebrow={seriesList.length > 1 ? (picked ? `Latest in ${picked.short}` : "Latest from every series") : "Also on the record"}
+            title={picked ? <>{picked.name}</> : "Recent races"}
+            to={picked ? `/results?series=${picked.id}` : "/results"}
+          />
+          {seriesList.length > 1 && (
+            <div className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Filter recent races by series">
+              <Chip active={!picked} onClick={() => setSeriesF("")}>
+                All series
+              </Chip>
+              {seriesList.map((s) => (
+                <Chip key={s.id} active={picked?.id === s.id} onClick={() => setSeriesF(picked?.id === s.id ? "" : s.id)}>
+                  {s.short}
+                </Chip>
+              ))}
+            </div>
+          )}
+          {more.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {more.map((e) => {
+                const d = digests?.[e.id];
+                return <RaceCard key={e.id} ev={e} race={d?.races[d.races.length - 1]} names={names} />;
+              })}
+            </div>
+          ) : (
+            <p className="text-ink-2">The latest {picked?.short} race is the one above; earlier rounds are in the results.</p>
+          )}
         </Page>
       )}
 
       {/* ── Championships ──────────────────────────────────────── */}
       {championships.length > 0 && (
         <Page className="mt-24 sm:mt-32">
-          <SectionHead eyebrow="Who leads" title="Championships" to="/series" />
-          <div className="grid gap-4 lg:grid-cols-3">
-            {championships.map((s) => (
-              <ChampionshipCard key={s.id} season={s} />
-            ))}
-          </div>
+          <SectionHead eyebrow={championships.length > 3 ? `Who leads · ${championships.length} championships` : "Who leads"} title="Championships" to="/series" />
+          {championships.length > 3 ? (
+            // Many series: one scrolling row, snapping card by card.
+            <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:thin] sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10" tabIndex={0} aria-label="Championships, scroll sideways for more">
+              {championships.map((s) => (
+                <div key={s.id} className="flex w-[min(85vw,380px)] shrink-0 snap-start">
+                  <ChampionshipCard season={s} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {championships.map((s) => (
+                <ChampionshipCard key={s.id} season={s} />
+              ))}
+            </div>
+          )}
         </Page>
       )}
 
@@ -313,9 +371,9 @@ export function RaceCard({ ev, race, names }: { ev: EventLite; race?: RaceDigest
 /* ── Championship card ─────────────────────────────────────────── */
 
 function ChampionshipCard({ season }: { season: SeasonLite }) {
-  const st = useSeasonStandings(season.id);
+  const st = useSeasonLeaders(season.id);
   return (
-    <Link to={`/series/${season.series.id}`} className="group flex flex-col rounded-3xl border bg-sheet p-6 transition-colors hover:border-ink/30">
+    <Link to={`/series/${season.series.id}`} className="group flex w-full flex-col rounded-3xl border bg-sheet p-6 transition-colors hover:border-ink/30">
       <div className="flex items-start justify-between gap-4">
         <div>
           <Eyebrow>
@@ -331,16 +389,17 @@ function ChampionshipCard({ season }: { season: SeasonLite }) {
         {st?.byClass
           .filter((c) => c.rows[0]?.totalPoints > 0)
           .sort((a, b) => classRank(a.className) - classRank(b.className))
+          .slice(0, 4)
           .map((c) => {
             const leader = c.rows[0];
             const second = c.rows.find((r) => r.position > leader.position);
-            const col = getClassColor(c.className);
+            const col = c.color || getClassColor(c.className);
             return (
               <div key={c.className} className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
                 <PosNum n={1} size="sm" className="w-5 text-center" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    {c.className && <ClassTag name={c.className} />}
+                    {c.className && <ClassTag name={c.className} color={c.color} />}
                     <span className="truncate text-[15px]">
                       {c.rows
                         .filter((r) => r.position === leader.position)

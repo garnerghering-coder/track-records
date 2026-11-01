@@ -4,12 +4,13 @@
  * results, calendar and search. Everything is cached through `useLoad` so
  * pages that share data (e.g. /series and /series/:id) load it once.
  */
+import { computeLapRecords, lapRecordsFile, type LapRecord } from "@/lib/lap-records";
 import { supabase } from "@/integrations/supabase/client";
 import { classRank, parseTime, type ClassifiedCar, type EventDigest, type RaceDigest } from "@/lib/insights";
 import { loadChampionship, type ChampEntry } from "@/lib/standings-data";
 import { computeTrackMetrics, type TrackMetrics } from "@/lib/track-calculations";
 import { getClassColor } from "@/lib/classes";
-import { cleanName, lastName, useLoad } from "@/site/data";
+import { cleanName, lastName, useLoad, type EventLite } from "@/site/data";
 
 /* ── Text ─────────────────────────────────────────────────────── */
 
@@ -163,72 +164,41 @@ export function characterWords(l?: LayoutRow | null): { noun: string; traits: st
   return { noun: (fp?.tcsCategory && NOUN[fp.tcsCategory]) || "lap", traits };
 }
 
-/* ── Lap records (fastest race lap per class at a circuit) ────── */
+/* ── Lap records (fastest race lap per layout and class at a circuit) ── */
 
-export interface LapRecord {
-  className: string;
-  seconds: number;
-  time: string;
-  carNumber: string;
-  driverIds: string[];
-  teamId: string | null;
-  carId: string | null;
-  eventId: string;
-  sessionName: string;
-  year: number | null;
-}
+export type { LapRecord } from "@/lib/lap-records";
 
-const RACE_TYPES = ["race", "endurance_race", "sprint_race"];
+const DATA = `${import.meta.env.BASE_URL || "/"}data/`.replace(/\/{2,}/g, "/");
 
-export async function fetchLapRecords(eventIds: string[], years: Record<string, number | null>): Promise<LapRecord[]> {
+/** A circuit's lap records: precomputed at build, computed here from the results as a fallback. */
+export async function fetchLapRecords(circuitId: string, events: EventLite[], defaultLayoutId: string | null): Promise<LapRecord[]> {
+  try {
+    const res = await fetch(`${DATA}${lapRecordsFile(circuitId)}`);
+    if (res.ok && (res.headers.get("content-type") || "").includes("json")) return (await res.json()) as LapRecord[];
+  } catch {
+    /* fall through */
+  }
+  const eventIds = events.map((e) => e.id);
   if (!eventIds.length) return [];
   const { data: sessions } = await supabase
     .from("v2_sessions")
-    .select("id, event_id, name, session_type, parent_session_id")
+    .select("id, event_id, name, session_type, parent_session_id, layout_id")
     .in("event_id", eventIds)
     .is("parent_session_id", null);
-  const races = ((sessions || []) as any[]).filter((s) => RACE_TYPES.includes(s.session_type));
+  const races = ((sessions || []) as any[]).filter((s) => ["race", "endurance_race", "sprint_race"].includes(s.session_type));
   if (!races.length) return [];
-  const sById = new Map(races.map((s) => [s.id, s]));
   const rows: any[] = [];
   for (let from = 0; ; from += 1000) {
     const { data } = await supabase
       .from("v2_race_results")
       .select("session_id, car_number, driver_id, team_id, car_id, fastest_lap_time, extra_data")
-      .in("session_id", [...sById.keys()])
+      .in("session_id", races.map((s) => s.id))
       .order("id")
       .range(from, from + 999);
     rows.push(...((data || []) as any[]));
     if (!data || data.length < 1000) break;
   }
-  const best = new Map<string, LapRecord>();
-  const crews = new Map<string, Set<string>>();
-  for (const r of rows) {
-    const k = `${r.session_id}|${r.car_number}`;
-    if (r.driver_id) (crews.get(k) ?? crews.set(k, new Set()).get(k)!).add(r.driver_id);
-  }
-  for (const r of rows) {
-    const t = parseTime(r.fastest_lap_time);
-    if (t == null || t <= 0) continue;
-    const cls = (r.extra_data?.Class as string) || "Overall";
-    const cur = best.get(cls);
-    if (!cur || t < cur.seconds) {
-      const s = sById.get(r.session_id)!;
-      best.set(cls, {
-        className: cls,
-        seconds: t,
-        time: String(r.fastest_lap_time),
-        carNumber: String(r.car_number),
-        driverIds: [...(crews.get(`${r.session_id}|${r.car_number}`) || [])],
-        teamId: r.team_id ?? null,
-        carId: r.car_id ?? null,
-        eventId: s.event_id,
-        sessionName: s.name,
-        year: years[s.event_id] ?? null,
-      });
-    }
-  }
-  return [...best.values()].sort((a, b) => classRank(a.className) - classRank(b.className) || a.seconds - b.seconds);
+  return computeLapRecords(events, races, rows, defaultLayoutId);
 }
 
 /* ── Series ───────────────────────────────────────────────────── */
