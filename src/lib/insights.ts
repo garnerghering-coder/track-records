@@ -258,7 +258,7 @@ export function cautionPeriods(flags: Row[]): Row[][] {
 }
 
 export const isCaution = (state: string) => /YELLOW|FCY|SC|SAFETY|CAUTION|CODE ?60|SLOW/i.test(state || "") && !/GREEN/i.test(state || "");
-export const isRedFlag = (state: string) => /RED/i.test(state || "");
+export const isRedFlag = (state: string) => /\bRED\b/i.test(state || "") && !/CHEQ/i.test(state || "");
 
 /** What a neutralisation is called: "virtual safety car", "safety car", "full-course yellow", "caution". */
 export function cautionKind(state: string): string {
