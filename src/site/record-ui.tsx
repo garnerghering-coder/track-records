@@ -481,9 +481,7 @@ export function LiveryStage({ src, number, color, alt, className, caption }: { s
             className="absolute inset-0 m-auto w-[94%] select-none object-contain drop-shadow-[0_30px_28px_rgba(0,0,0,0.28)] transition-transform duration-700 hover:-translate-x-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-8 motion-safe:duration-700"
           />
         ) : (
-          <div className="absolute inset-0 flex items-end p-6">
-            <span className="eyebrow">No livery on file</span>
-          </div>
+          <div className="absolute inset-0" aria-hidden />
         )}
       </div>
       {caption && <figcaption className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-ink-3">{caption}</figcaption>}
@@ -529,7 +527,7 @@ export function RecordCard({
             className="absolute inset-x-4 bottom-2 m-auto h-28 w-[88%] object-contain transition-transform duration-500 group-hover:-translate-x-2 group-hover:scale-[1.03]"
           />
         ) : (
-          <span className="eyebrow absolute bottom-4 left-5">No livery on file</span>
+          null
         )}
       </div>
       <div className="flex flex-1 flex-col p-5">

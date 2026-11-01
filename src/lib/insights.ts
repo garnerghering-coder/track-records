@@ -237,6 +237,26 @@ export function mergeFlags(flags: Row[]): Row[] {
   return out;
 }
 
+/**
+ * Caution periods as officials count them: one period runs from the first
+ * caution/red flag until green, so "yellow → red → yellow" is a single period.
+ */
+export function cautionPeriods(flags: Row[]): Row[][] {
+  const periods: Row[][] = [];
+  let cur: Row[] | null = null;
+  for (const f of flags) {
+    const neutral = isCaution(f.flag_state) || isRedFlag(f.flag_state);
+    if (!neutral) {
+      cur = null;
+      continue;
+    }
+    const prev = cur?.[cur.length - 1];
+    if (cur && prev && f.start_elapsed <= prev.end_elapsed + 1) cur.push(f);
+    else periods.push((cur = [f]));
+  }
+  return periods.filter((p) => p.some((f) => isCaution(f.flag_state)));
+}
+
 export const isCaution = (state: string) => /YELLOW|FCY|SC|SAFETY|CAUTION|CODE ?60|SLOW/i.test(state || "") && !/GREEN/i.test(state || "");
 export const isRedFlag = (state: string) => /RED/i.test(state || "");
 
@@ -457,8 +477,10 @@ export function digestRace(input: DigestInput, session: Row): RaceDigest {
 
   // cautions
   const flags = mergeFlags(input.flags.filter((f) => inRace(f.session_id)));
-  const cautions = flags.filter((f) => isCaution(f.flag_state));
-  const cautionS = cautions.reduce((n, f) => n + Math.max(0, f.end_elapsed - f.start_elapsed), 0);
+  const cautionSegments = flags.filter((f) => isCaution(f.flag_state));
+  // one entry per caution period (a red flag inside a caution doesn't split it)
+  const cautions = cautionPeriods(flags).map((p) => p.find((f) => isCaution(f.flag_state))!);
+  const cautionS = cautionSegments.reduce((n, f) => n + Math.max(0, f.end_elapsed - f.start_elapsed), 0);
   const durationS = laps.length ? Math.max(...laps.map((l) => l.elapsed)) : null;
   if (cautions.length && durationS) {
     const kinds = new Set(cautions.map((f) => cautionKind(f.flag_state)));
