@@ -68,6 +68,11 @@ async function loadReplay(b: EventBundle, raceId: string) {
     supabase.from("v2_pit_stops").select("car_number, pit_in_elapsed, pit_out_elapsed").in("session_id", ids),
     supabase.from("v2_flag_segments").select("flag_state, start_elapsed, end_elapsed").in("session_id", ids),
   ]);
+  const gridOf = new Map<string, number>();
+  for (const r of (results.data || []) as any[]) {
+    const g = Number(r.extra_data?.grid ?? r.extra_data?.Grid ?? r.extra_data?.start_position);
+    if (Number.isFinite(g) && g > 0 && !gridOf.has(String(r.car_number))) gridOf.set(String(r.car_number), g);
+  }
   const cars = classify((results.data || []) as any[], [], b.liveries).map((c: ClassifiedCar) => ({
     carNumber: c.carNumber,
     className: c.className,
@@ -75,6 +80,7 @@ async function loadReplay(b: EventBundle, raceId: string) {
     driverIds: c.driverIds,
     livery: c.livery,
     finalStatus: c.status,
+    grid: gridOf.get(c.carNumber) ?? null,
   }));
   const messages = b.sections.filter((s) => ids.includes(s.session_id)).flatMap((s) => s.v2_annotation_items || []);
   return buildModel({ laps: (laps.data || []) as any[], cars, stints: (stints.data || []) as any[], pits: (pits.data || []) as any[], flags: (flags.data || []) as any[], messages });

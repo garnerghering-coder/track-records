@@ -70,7 +70,9 @@ const SeriesProfile = () => {
   const classesMeta: SeasonClass[] | undefined = season ? seasonClasses?.[season.id] : undefined;
   const mode: Mode = params.get("mode") === "teams" ? "teams" : "drivers";
   const classList = ch?.classes || [];
-  const cls = classList.includes(params.get("class") || "") ? params.get("class")! : classList[0] ?? "";
+  // No ?class= means "" (the single class of single-class series), never null.
+  const requestedClass = params.get("class") ?? "";
+  const cls = classList.includes(requestedClass) ? requestedClass : classList[0] ?? "";
   const color = classColor(classesMeta, cls);
   const entries = ch ? (mode === "drivers" ? ch.drivers[cls] : ch.teams[cls]) || [] : [];
   const teamLabel = ch?.teamLabel || "Teams";
@@ -171,7 +173,9 @@ const SeriesProfile = () => {
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border bg-rule">
             {[
               { label: "Rounds scored", value: scoredRounds },
-              { label: realClasses.length > 1 ? "Classes" : "Class", value: ch ? realClasses.length || (classList.length ? 1 : 0) : undefined },
+              realClasses.length > 0
+                ? { label: realClasses.length > 1 ? "Classes" : "Class", value: ch ? realClasses.length : undefined }
+                : { label: ch?.teamLabel || "Teams", value: ch ? (ch.teams?.[""] || []).length : undefined },
               { label: "Drivers scored", value: ch ? scoredDrivers : undefined },
               { label: "Different winners", value: digests && ch ? winnersCount : undefined },
             ].map((s) => (
