@@ -20,8 +20,10 @@
 {"id":"bd1d02f9-bc1e-4ba0-b729-ecba25cc9a1f","model_name":"M Hybrid V8","manufacturer":"BMW","created_at":"2026-02-22T12:42:22.945144+00:00","updated_at":"2026-02-22T14:59:25.102888+00:00"}
 {"id":"bd208e10-8e9c-4846-b550-f8eb9d1e5bbc","model_name":"Vantage GT3 Evo","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:27.03198+00:00","updated_at":"2026-02-22T14:59:18.875022+00:00"}
 {"id":"c46636a9-40ca-4d4b-907b-8683ef505406","model_name":"ARX-06","manufacturer":"Acura","created_at":"2026-02-22T12:42:21.911637+00:00","updated_at":"2026-02-22T14:59:05.283096+00:00"}
+{"model_name":"911 GT3 R (992)","manufacturer":"Porsche","id":"d13e71d8-bd46-4738-adc7-c09aa906f540","created_at":"2026-11-01T14:46:09.036Z","updated_at":"2026-11-01T14:46:09.036Z"}
 {"id":"d24bf956-5fba-4157-9283-6481ea7739a4","model_name":"Mustang GT4","manufacturer":"Ford","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:57.318821+00:00"}
 {"id":"e332ac91-5565-497f-8535-2f5eaef75b1d","model_name":"Vantage AMR GT4 Evo","manufacturer":"Aston Martin","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:14.508212+00:00"}
 {"id":"e4f5c101-a2fd-487c-b6a6-1cc059d43a89","model_name":"GT GT4","manufacturer":"Mercedes-AMG","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:29.950125+00:00"}
 {"id":"e807fde1-a7b1-4f7a-a82e-f41011eb1bf4","model_name":"V-Series.R","manufacturer":"Cadillac","created_at":"2026-02-22T12:42:22.666062+00:00","updated_at":"2026-02-22T14:59:36.78664+00:00"}
+{"model_name":"Corvette Z06 GT3.R","manufacturer":"Chevrolet","id":"e852acf8-da38-41f0-a6cf-cf35dc1b2e2c","created_at":"2026-11-01T14:46:09.036Z","updated_at":"2026-11-01T14:46:09.036Z"}
 {"id":"f349c8aa-ec9e-48f9-ad5b-b715e0b34130","model_name":"Valkyrie","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:23.914782+00:00","updated_at":"2026-02-22T14:59:14.576034+00:00"}

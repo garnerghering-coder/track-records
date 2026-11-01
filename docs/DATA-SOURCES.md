@@ -19,8 +19,11 @@ dialog) takes one Al Kamel **event page** URL plus the Track Records event to fi
 3. For each session folder it reads one classification JSON (`03_Results_<session>_<mark>.JSON`).
    It prefers Official over Provisional over Unofficial, and an Amended or Revised file over
    the file it replaces. Endurance races also get per-hour sub-sessions from the `Hour N` folders.
-4. It adds lap and stint data from `23_Time Cards*.CSV`, weather from `26_Weather*.JSON`, and
-   flags from `25_FlagsAnalysis*.JSON`, or from the PDF version of that report when no JSON exists.
+4. It adds lap times, stints and pit stops from `23_Time Cards*.CSV` (pit stops from the
+   `PIT_TIME` column when present), weather from `26_Weather*.JSON`, and flags from
+   `25_FlagsAnalysis*.JSON`. Without that JSON it OCRs the PDF version of the report when an AI
+   key is configured, and otherwise derives the flag periods from the time cards' `FLAG_AT_FL`
+   column (accurate to about one lap).
 5. It creates sessions, drivers, teams and cars, reusing existing ones through search aliases.
    It skips any session whose name the event already has, so you can safely run it again.
 
@@ -113,7 +116,38 @@ in `supabase/functions/import-imsa-results/series-points.ts`. **Before you impor
 or the Airbnb Endurance Challenge**, make sure the points code uses that hook. The old rule treats
 any series whose name contains "IMSA" as WeatherTech.
 
-## Step by step: add a series, season and event, then import it
+## Import locally into the repo (current workflow)
+
+The importer's logic lives in `supabase/functions/import-imsa-results/core.ts` and runs under
+Node against `data/` (Node 22.6+). Nothing hosted is involved; every change is a reviewable diff.
+
+```bash
+# 1. Series / season / classes / circuit / event: matched case-insensitively (series also by
+#    v2_series_aliases), created only when missing. Prints the event id; new events are 'published'.
+node --experimental-strip-types scripts/add-event.mjs --series "IMSA WeatherTech SportsCar Championship" \
+  --year 2025 --event "2025 Acura Grand Prix of Long Beach" --round 3 \
+  --start 2025-04-11 --end 2025-04-12 --circuit "Long Beach Street Circuit" --classes GTP,GTD
+
+# 2. Import (use the Results URL from the tables below). Sessions are created 'published'.
+node --experimental-strip-types scripts/import-event.mjs --event <id> --url "<Results URL>" [--preview]
+#    --preview   fetch and count only, write nothing
+#    --replace   delete the event's sessions and all their rows first (needed to re-import)
+#    --weather   fill Open-Meteo weather for sessions that got none from Al Kamel
+#    --cache DIR reuse downloaded files on reruns (be polite to Al Kamel)
+
+# 3. Recompute driver fingerprints, then review and commit
+node --experimental-strip-types scripts/recompute-fingerprints.mjs
+git diff --stat data/
+```
+
+The import prints the rows added per table and the growth of `data/` (a sprint-race weekend
+with time cards adds about 0.4–0.9 MB). Check the summary for `drivers_created` /
+`teams_created` / `cars_created`: drivers are matched case-, accent- and "(R)"-insensitively and
+through `search_aliases`, so new rows should be genuinely new people, teams or models.
+
+## Step by step in the old hosted admin (legacy)
+
+The `/manage` pages below belonged to the Supabase-hosted site and are kept for reference.
 
 You must be signed in as an admin (`user_roles.role = 'admin'`). Every import function now
 rejects other callers.
@@ -154,8 +188,8 @@ Earlier versions of the importer read the **Unofficial** classification. When an
 Official, Provisional and Unofficial files, it took the last one listed, and this happened for
 about 220 of 924 session folders across 2024–2026. Unofficial results can be missing post-race
 penalties. The importer now picks the Official file. Sessions already in the database are not
-changed, because the importer skips sessions by name. To correct them, delete a session and
-import the event again, then compare.
+changed, because the importer skips sessions by name. To correct them, re-import the event with
+`scripts/import-event.mjs --replace`, then compare.
 
 ## Full catalog
 
