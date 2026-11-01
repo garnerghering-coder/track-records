@@ -1,0 +1,97 @@
+{
+  "exported_at": "2026-11-01T14:06:48.405Z",
+  "source": "https://ywgfgetfdaefjxdtezei.supabase.co",
+  "tables": {
+    "search_aliases": {
+      "rows": 36
+    },
+    "source_definitions": {
+      "rows": 2
+    },
+    "v2_annotation_items": {
+      "rows": 7352
+    },
+    "v2_annotation_sections": {
+      "rows": 38
+    },
+    "v2_car_liveries": {
+      "rows": 215
+    },
+    "v2_cars": {
+      "rows": 27
+    },
+    "v2_circuit_layouts": {
+      "rows": 48
+    },
+    "v2_circuits": {
+      "rows": 44
+    },
+    "v2_driver_fingerprints": {
+      "rows": 410
+    },
+    "v2_drivers": {
+      "rows": 456
+    },
+    "v2_events": {
+      "rows": 15
+    },
+    "v2_flag_segments": {
+      "rows": 230
+    },
+    "v2_lap_times": {
+      "rows": 81171,
+      "partitionedBy": "session_id",
+      "partitions": 5
+    },
+    "v2_pit_stops": {
+      "rows": 4348,
+      "partitionedBy": "session_id",
+      "partitions": 50
+    },
+    "v2_practice_results": {
+      "rows": 1503
+    },
+    "v2_qualifying_results": {
+      "rows": 620
+    },
+    "v2_race_results": {
+      "rows": 6431
+    },
+    "v2_season_classes": {
+      "rows": 12
+    },
+    "v2_seasons": {
+      "rows": 5
+    },
+    "v2_series": {
+      "rows": 3
+    },
+    "v2_series_aliases": {
+      "rows": 5
+    },
+    "v2_session_summaries": {
+      "rows": 12
+    },
+    "v2_session_weather": {
+      "rows": 148
+    },
+    "v2_sessions": {
+      "rows": 148
+    },
+    "v2_stints": {
+      "rows": 7727,
+      "partitionedBy": "session_id",
+      "partitions": 55
+    },
+    "v2_team_season_cars": {
+      "rows": 156
+    },
+    "v2_teams": {
+      "rows": 103
+    }
+  },
+  "media": {
+    "downloaded": 263,
+    "failed": 0
+  }
+}
