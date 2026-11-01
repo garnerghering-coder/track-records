@@ -4,7 +4,10 @@ import {
   compareStandings,
   computeDriverStandings,
   computeTeamStandings,
+  GENERIC_RULES,
+  IMSA_RULES,
   standingsKindForSessionType,
+  standingsRulesFor,
   type StandingsRow,
   type StandingsSession,
 } from "@/lib/standings";
@@ -152,5 +155,86 @@ describe("driver standings", () => {
     const sessions = [S("r", "race", "e1", 0)];
     const rows = [R("r", "7", "a", 350, "GTP", 1), R("r", "7", "a", 350, "GTP", 1)];
     expect(computeDriverStandings(sessions, rows)[0].totalPoints).toBe(350);
+  });
+});
+
+/* ── Other series ────────────────────────────────────────────────── */
+
+describe("standings rules per series", () => {
+  it("picks rules from the series name", () => {
+    expect(standingsRulesFor({ name: "IMSA WeatherTech SportsCar Championship", short_name: "IMSA" })).toBe(IMSA_RULES);
+    expect(standingsRulesFor({ name: "Whelen Mazda MX-5 Cup", short_name: "MX-5 CUP" })).toBe(IMSA_RULES);
+    expect(standingsRulesFor({ name: "Formula 1 World Championship", short_name: "F1" })).toMatchObject({ tiebreak: "countback", teamKey: "team", teamLabel: "Constructors" });
+    expect(standingsRulesFor({ name: "NASCAR Cup Series", short_name: "Cup" })).toMatchObject({ tiebreak: "countback", teamKey: "car", teamLabel: "Owners" });
+    expect(standingsRulesFor({ name: "NTT INDYCAR SERIES", short_name: "INDYCAR" })).toMatchObject({ teamKey: "car", teamLabel: "Entrants" });
+    expect(standingsRulesFor(null)).toBe(GENERIC_RULES);
+  });
+
+  const F1 = standingsRulesFor({ name: "Formula 1" });
+  // Single-class rows: no class, position overall.
+  const O = (sessionId: string, car: string, driver: string, team: string, points: number, pos: number, status = "finished"): StandingsRow => ({
+    sessionId,
+    carNumber: car,
+    driverId: driver,
+    teamId: team,
+    points,
+    className: null,
+    classPosition: pos,
+    status,
+  });
+
+  it("sums both cars of an F1 team into one constructors' entry", () => {
+    const sessions = [S("gp1", "race", "e1", 1), S("spr2", "race", "e2", 2, false), S("gp2", "race", "e2", 3)];
+    const rows = [
+      O("gp1", "1", "max", "rbr", 25, 1),
+      O("gp1", "22", "yuki", "rbr", 2, 9),
+      O("gp1", "4", "lando", "mcl", 18, 2),
+      O("gp1", "81", "oscar", "mcl", 15, 3),
+      O("spr2", "4", "lando", "mcl", 8, 1),
+      O("gp2", "81", "oscar", "mcl", 25, 1),
+      O("gp2", "1", "max", "rbr", 18, 2),
+      O("gp2", "22", "yuki", "rbr", 0, 11),
+      O("gp2", "4", "lando", "mcl", 0, 20, "dnf"),
+    ];
+    const teams = computeTeamStandings(sessions, rows, F1);
+    expect(teams.map((t) => [t.teamId, t.totalPoints, t.wins, t.carNumbers])).toEqual([
+      ["mcl", 66, 1, ["4", "81"]],
+      ["rbr", 45, 1, ["1", "22"]],
+    ]);
+    // sprint wins are not wins
+    const drivers = computeDriverStandings(sessions, rows, F1);
+    expect(drivers.find((d) => d.driverId === "lando")).toMatchObject({ totalPoints: 26, wins: 0, podiums: 1 });
+    expect(drivers.map((d) => d.driverId)).toEqual(["max", "oscar", "lando", "yuki"]);
+  });
+
+  it("lists starters with no points and breaks ties on wins, then seconds, in main races", () => {
+    const sessions = [S("r1", "race", "e1", 1), S("r2", "race", "e2", 2), S("q3", "qualifying", "e3", 3)];
+    const rows = [
+      O("r1", "5", "kyle", "hms", 40, 2),
+      O("r1", "9", "chase", "hms", 40, 1),
+      O("r2", "5", "kyle", "hms", 30, 1),
+      O("r2", "9", "chase", "hms", 30, 3),
+      O("r2", "48", "alex", "hms", 0, 30, "dnf"),
+      O("q3", "5", "kyle", "hms", 0, 1),
+      O("r1", "99", "dns", "x", 0, 40, "dns"),
+    ];
+    const nascar = standingsRulesFor({ name: "NASCAR Cup Series" });
+    const d = computeDriverStandings(sessions, rows, nascar);
+    // kyle and chase both 70 with one win each: kyle has a second, chase a third
+    expect(d.map((x) => [x.driverId, x.totalPoints, x.position])).toEqual([
+      ["kyle", 70, 1],
+      ["chase", 70, 2],
+      ["alex", 0, 3],
+    ]);
+    // owners' points stay per car number
+    expect(computeTeamStandings(sessions, rows, nascar).map((t) => t.carNumber)).toEqual(["5", "9", "48"]);
+    // IMSA rules keep omitting zero-point entries
+    expect(computeDriverStandings(sessions, rows).map((x) => x.driverId)).not.toContain("alex");
+  });
+
+  it("generic countback ignores sprint and qualifying positions", () => {
+    const a = { totalPoints: 10, results: [{ sessionId: "s", order: 1, points: 5, classPosition: 1, kind: "race" as const, main: false }, { sessionId: "r", order: 2, points: 5, classPosition: 4, kind: "race" as const, main: true }] };
+    const b = { totalPoints: 10, results: [{ sessionId: "r2", order: 3, points: 10, classPosition: 3, kind: "race" as const, main: true }] };
+    expect(compareStandings(a, b, GENERIC_RULES)).toBeGreaterThan(0);
   });
 });

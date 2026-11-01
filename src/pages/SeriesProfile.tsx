@@ -73,6 +73,8 @@ const SeriesProfile = () => {
   const cls = classList.includes(params.get("class") || "") ? params.get("class")! : classList[0] ?? "";
   const color = classColor(classesMeta, cls);
   const entries = ch ? (mode === "drivers" ? ch.drivers[cls] : ch.teams[cls]) || [] : [];
+  const teamLabel = ch?.teamLabel || "Teams";
+  const perTeam = ch?.teamKey === "team";
 
   const setParam = (k: string, v: string | null) => {
     const next = new URLSearchParams(params);
@@ -201,7 +203,7 @@ const SeriesProfile = () => {
                   <span>·</span>
                   <span>{plural(ch.rounds.length, "round")}</span>
                 </Eyebrow>
-                <LeadLine entries={entries} cls={cls} mode={mode} finished={finished} rounds={ch.rounds.length} />
+                <LeadLine entries={entries} cls={cls} mode={mode} perTeam={perTeam} finished={finished} rounds={ch.rounds.length} />
               </div>
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 {classList.length > 1 && (
@@ -224,7 +226,7 @@ const SeriesProfile = () => {
                   onChange={(v) => setParam("mode", v === "teams" ? "teams" : null)}
                   items={[
                     { value: "drivers", label: "Drivers" },
-                    { value: "teams", label: "Teams" },
+                    { value: "teams", label: teamLabel },
                   ]}
                 />
               </div>
@@ -255,11 +257,13 @@ const SeriesProfile = () => {
                 <span>After {plural(ch.rounds.length, "round")}</span>
               </>
             }
-            title={mode === "drivers" ? <>Drivers&rsquo; standings</> : <>Teams&rsquo; standings</>}
+            title={mode === "drivers" ? <>Drivers&rsquo; standings</> : <>{teamLabel}&rsquo; standings</>}
           />
-          <Standings key={`${season?.id}|${cls}|${mode}`} entries={entries} mode={mode} color={color} names={names} active={active} setActive={setActive} />
+          <Standings key={`${season?.id}|${cls}|${mode}`} entries={entries} mode={mode} perTeam={perTeam} color={color} names={names} active={active} setActive={setActive} />
           <p className="mt-4 max-w-2xl text-xs leading-relaxed text-ink-3">
-            Points as published with the official results; ties are split by countback (most wins, then seconds, and so on), and drivers on identical records share a position. Wins and podiums count main races only.
+            Points as published with the official results{ch.tiebreak === "countback" ? " (stage, sprint and bonus points included)" : ""}; ties are split by countback (most wins, then seconds, and so
+            on{ch.tiebreak === "imsa" || !ch.tiebreak ? ", qualifying included, as IMSA does" : ", in main races"}), and {mode === "drivers" ? "drivers" : "entries"} on identical records share a position.
+            Wins and podiums count main races only{perTeam ? `; the ${teamLabel.toLowerCase()}' table adds up every car of a team` : mode === "teams" ? `; the ${teamLabel.toLowerCase()}' table is kept per car number` : ""}.
           </p>
         </Page>
       )}
@@ -288,15 +292,15 @@ function Shell({ title, canonical, children }: { title: string; canonical?: stri
 const groupLabel = (entries: ChampEntry[], mode: Mode, names: Names) =>
   mode === "drivers"
     ? entries.map((e) => lastName(e.name)).join(" / ")
-    : entries.map((e) => `#${e.carNumbers[0]} ${names?.teams[e.teamId || ""]?.short_name || e.name}`).join(" / ");
+    : entries.map((e) => `${e.carNumbers.length === 1 ? `#${e.carNumbers[0]} ` : ""}${names?.teams[e.teamId || ""]?.short_name || e.name}`).join(" / ");
 
-function LeadLine({ entries, cls, mode, finished, rounds }: { entries: ChampEntry[]; cls: string; mode: Mode; finished: boolean; rounds: number }) {
+function LeadLine({ entries, cls, mode, perTeam, finished, rounds }: { entries: ChampEntry[]; cls: string; mode: Mode; perTeam: boolean; finished: boolean; rounds: number }) {
   const groups = groupByPosition(entries);
   const lead = groups[0];
-  if (!lead) return <p className="display mt-3 text-[1.9rem] leading-[1.08] text-ink-2">No points scored in this class yet.</p>;
+  if (!lead) return <p className="display mt-3 text-[1.9rem] leading-[1.08] text-ink-2">No points scored{cls ? " in this class" : ""} yet.</p>;
   const next = groups[1];
   const gap = next ? lead.entries[0].totalPoints - next.entries[0].totalPoints : null;
-  const who = mode === "drivers" ? joinNames(lead.entries.map((e) => cleanName(e.name))) : `The #${lead.entries[0].carNumbers[0]} ${lead.entries[0].name}`;
+  const who = mode === "drivers" ? joinNames(lead.entries.map((e) => cleanName(e.name))) : perTeam ? lead.entries[0].name : `The #${lead.entries[0].carNumbers[0]} ${lead.entries[0].name}`;
   const many = mode === "drivers" && lead.entries.length > 1;
   const verb = finished ? "won" : many ? "lead" : "leads";
   return (
@@ -569,6 +573,7 @@ const COLS = "md:grid-cols-[4rem_minmax(0,1fr)_4rem_4.5rem_minmax(8rem,11rem)_5r
 function Standings({
   entries,
   mode,
+  perTeam = false,
   color,
   names,
   active,
@@ -576,6 +581,7 @@ function Standings({
 }: {
   entries: ChampEntry[];
   mode: Mode;
+  perTeam?: boolean;
   color: string;
   names: Names;
   active: number | null;
@@ -585,13 +591,13 @@ function Standings({
   const [all, setAll] = useState(false);
   const shown = all ? groups : groups.slice(0, 12);
   const leader = groups[0]?.entries[0].totalPoints || 0;
-  if (!groups.length) return <Note title="No points in this class yet" />;
+  if (!groups.length) return <Note title="No points scored yet" />;
 
   return (
     <div className="overflow-hidden rounded-3xl border bg-sheet">
       <div className={cn("hidden items-center gap-4 border-b px-6 py-3 md:grid", COLS)}>
         <span className="eyebrow">Pos</span>
-        <span className="eyebrow">{mode === "drivers" ? "Driver" : "Entry"}</span>
+        <span className="eyebrow">{mode === "drivers" ? "Driver" : perTeam ? "Team" : "Entry"}</span>
         <span className="eyebrow text-right">Wins</span>
         <span className="eyebrow text-right">Podiums</span>
         <span className="eyebrow text-right">Points</span>
@@ -631,7 +637,7 @@ function Standings({
                   </div>
                 ) : (
                   <div className="flex min-w-0 items-center gap-2">
-                    <CarNum n={e0.carNumbers[0]} />
+                    {!perTeam && <CarNum n={e0.carNumbers[0]} />}
                     {e0.teamId ? (
                       <Link to={`/team/${e0.teamId}`} className="truncate text-[15.5px] hover:underline hover:underline-offset-4">
                         {e0.name}
@@ -646,6 +652,10 @@ function Standings({
                     <>
                       {e0.carNumbers.map((c) => `#${c}`).join(", ")}
                       {e0.teamId && names?.teams[e0.teamId] ? ` · ${names.teams[e0.teamId].full_name}` : ""}
+                    </>
+                  ) : perTeam ? (
+                    <>
+                      {e0.carNumbers.map((c) => `#${c}`).join(", ")} · {crewLastNames(e0.driverIds, names, 6)}
                     </>
                   ) : (
                     crewLastNames(e0.driverIds, names, 6)

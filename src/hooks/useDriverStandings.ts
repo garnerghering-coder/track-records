@@ -259,7 +259,7 @@ export function useDriverStandings(driverId: string | undefined): DriverStanding
     (async () => {
       try {
         const input = await fetchSeasonStandingsInput(selectedSeasonId);
-        const all = computeDriverStandings(input.sessions, input.rows);
+        const all = computeDriverStandings(input.sessions, input.rows, input.rules);
         if (cancelled) return;
 
         // The class this driver scored most in (a driver can score in two classes)
