@@ -626,3 +626,56 @@ Series folder names seen: `05_NASCAR Classic Presented by Petty's Garage`
 | Event | Sessions (races) | Time cards | Weather | Flags | Hour results | Importable | Results URL |
 |---|---|---|---|---|---|---|---|
 | VIRginia International Raceway | 4 (2) | yes | JSON | PDF | - | yes | https://imsa.results.alkamelcloud.com/?season=24_2024&evvent=15_VIRginia%20International%20Raceway |
+
+## NASCAR Cup Series (cf.nascar.com feeds)
+
+NASCAR Cup data does not come from Al Kamel. `scripts/import-nascar.mjs` reads the public JSON
+feeds the NASCAR apps use on `cf.nascar.com` (series_id 1 = Cup) and writes through the local
+store like the IMSA importer. Imported so far: **2024** (36 points races), **2025** (36) and
+**2026** (34 run as of 2026-11-01; Martinsville and the Homestead finale are skipped until their
+results are posted — rerun the season to add them).
+
+```bash
+# whole seasons (events that already have sessions are skipped)
+node --experimental-strip-types scripts/import-nascar.mjs --season 2024 --season 2025 --cache ~/.cache/nascar
+# one race weekend again, after NASCAR revised it (a Duel race id re-imports its Daytona 500 event)
+node --experimental-strip-types scripts/import-nascar.mjs --season 2026 --race 5632 --replace --cache ~/.cache/nascar
+# --preview fetches and counts only; then, as always:
+node --experimental-strip-types scripts/recompute-fingerprints.mjs
+```
+
+| Feed | Used for |
+|---|---|
+| `cacher/<year>/1/race_list_basic.json` | schedule and race ids (`race_type_id` 1 = points race; 2 = Clash, Duels, All-Star) |
+| `cacher/<year>/1/<race_id>/weekend-feed.json` | race results (`points_earned` already includes stage points), stage results, laps led, cautions, practice and qualifying runs |
+| `cacher/<year>/1/<race_id>/lap-times.json` | every car's lap times and running position per lap, per-lap flag state → `v2_lap_times`, `v2_flag_segments` |
+| `cacher/<year>/1/<race_id>/lap-notes.json` | lap-by-lap notes → Race Control |
+| `cacher/live/series_1/<race_id>/live-pit-data.json` | pit stops (lap, pit-road time) |
+| `cacher/live/series_1/<race_id>/live-flag-data.json` | red flags, green-flag time of day |
+| `live/feeds/series_1/<race_id>/live_points.json` | per-race points, only when the weekend feed was never filled (2025 Talladega playoff race) |
+| `cacher/drivers.json` | date of birth and hometown country of new drivers |
+| `cacher/<year>/1/points-feed.json` | official final standings, used only to verify |
+
+How the feeds are mapped:
+
+- One event per race weekend at its track **layout** (oval and road course at the same venue are
+  separate layouts: Charlotte oval / Roval, Daytona, Indianapolis, COTA Grand Prix 2024 / National
+  Circuit 2025–). Sessions: practice runs, every qualifying round, the race; the Daytona Duels are
+  `sprint_race` sessions of the Daytona 500 event (they pay points to the top 10). Exhibition races
+  (Clash, All-Star Open/Race) are not imported.
+- `points` = `points_earned` from the weekend feed (finish + stage points, + the 2025–26 fastest-lap
+  point). Post-race penalties and the playoff reset are **not** in the per-race data: summing
+  `points` gives each driver's points earned on track, not NASCAR's official playoff standings.
+  `extra_data` holds `Start`, `Laps Led`, `Stage N` (stage finishing position), `Stage N Pts`,
+  `Playoff Pts`, sponsor, crew chief and manufacturer.
+- Lap times start at each car's own crossing of the start line, and red-flag laps are sometimes
+  9999.999 or missing. Elapsed time = cumulative lap time + a per-car offset (start-line delay, and a
+  re-sync after unknown laps) fitted so the order of line crossings agrees with the running
+  positions NASCAR publishes for every lap and with the final classification. Unknown laps are
+  estimated from the field's median lap; when the lap feed stops early (2025 Brickyard, 2026
+  Southern 500) the missing laps are estimated the same way. Red-flag time that NASCAR counted
+  inside a lap stays in the timeline.
+- Flags: each leader lap's flag state (green/white → GREEN, caution → YELLOW, red flag → RED).
+- Pit stops: placed on the car's own lap timeline; `stop_duration` is the pit-road time.
+- `nascar.com`, `jayski.com` and the team sites answer 403 / a bot challenge to scripts, so no car
+  side-profile images could be sourced for the Cup cars (the feeds carry none).
