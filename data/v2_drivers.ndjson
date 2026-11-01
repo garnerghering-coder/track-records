@@ -308,6 +308,7 @@
 {"id":"6540bf52-1671-45b8-8730-d1f833ea744f","full_name":"Paul Di Resta","short_name":null,"nationality":"GB","date_of_birth":"1986-04-16","created_at":"2026-02-22T15:41:09.455275+00:00","updated_at":"2026-02-22T16:51:40.688948+00:00"}
 {"id":"654c7fed-020a-4282-b0eb-2d346322e2ea","full_name":"Zacharie Robichon","short_name":null,"nationality":"CA","date_of_birth":"1992-07-28","created_at":"2026-02-22T15:41:09.516143+00:00","updated_at":"2026-02-23T09:13:24.834534+00:00"}
 {"full_name":"Brian Thienes","id":"6578c9a8-8e6e-446b-a022-bb7a46b432ec","created_at":"2026-11-01T15:37:44.323Z","updated_at":"2026-11-01T15:38:11.664Z","nationality":"US"}
+{"id":"65926bb1-9150-4244-b5f4-49f4303a704d","full_name":"Ryan Truex","short_name":null,"nationality":null,"date_of_birth":"1992-03-18","created_at":"2026-11-01T19:43:23.760Z","updated_at":"2026-11-01T19:43:23.760Z"}
 {"id":"65a50ca6-6bca-4eb4-aa3d-c41f8529c950","full_name":"David Starr","short_name":null,"nationality":null,"date_of_birth":"1967-10-11","created_at":"2026-11-01T19:42:43.323Z","updated_at":"2026-11-01T19:42:43.323Z"}
 {"full_name":"Todd Buras","nationality":"US","id":"65f49c47-37d0-46a6-801b-c7d388b4b1e3","created_at":"2026-11-01T15:33:41.952Z","updated_at":"2026-11-01T15:33:41.952Z"}
 {"id":"662556d7-ff88-40c7-b968-74b91c80c838","full_name":"Adam Adelson","short_name":null,"nationality":"US","date_of_birth":"1997-04-18","created_at":"2026-02-22T15:41:09.516143+00:00","updated_at":"2026-02-22T16:26:10.73588+00:00"}
@@ -395,6 +396,7 @@
 {"id":"83a4e405-c8e2-4dfe-b1b5-64d2ced07dd4","full_name":"Patrick Gallagher","short_name":null,"nationality":"US","date_of_birth":"1992-10-06","created_at":"2026-02-22T15:41:09.579972+00:00","updated_at":"2026-02-22T16:51:28.562493+00:00"}
 {"id":"83ab95a8-c3e3-4f5b-b8b6-602167619bee","full_name":"Justin Adakonis","short_name":null,"nationality":"US","date_of_birth":null,"created_at":"2026-03-02T12:35:47.422609+00:00","updated_at":"2026-03-02T12:35:47.422609+00:00"}
 {"id":"83bd71b2-9794-4ba0-b72e-3df5e8b924a2","full_name":"Trent Hindman","short_name":null,"nationality":"US","date_of_birth":"1995-09-20","created_at":"2026-02-22T15:41:09.63676+00:00","updated_at":"2026-02-23T09:13:24.106732+00:00"}
+{"id":"83f4baf5-8597-46c5-b5a1-a8fa2c4ed0a8","full_name":"Cole Custer","short_name":null,"nationality":"United States","date_of_birth":"1998-01-23","created_at":"2026-11-01T19:43:12.361Z","updated_at":"2026-11-01T19:43:12.361Z"}
 {"full_name":"Marius Fossard","nationality":"FR","id":"840cab1f-3491-4c54-b5dd-da7b6985eb69","created_at":"2026-11-01T15:13:31.252Z","updated_at":"2026-11-01T15:13:31.252Z"}
 {"full_name":"Sally McNulty","nationality":"US","id":"846e79d4-876f-4628-9fee-1b1ded250bff","created_at":"2026-11-01T15:33:41.952Z","updated_at":"2026-11-01T15:33:41.952Z"}
 {"id":"84e738ae-7f34-44f2-a728-46e3b93e2a7f","full_name":"Michael Cooper","short_name":null,"nationality":"Clearwater, United States","date_of_birth":"1989-08-01","created_at":"2026-02-24T18:36:02.470815+00:00","updated_at":"2026-02-25T09:29:03.925022+00:00"}
@@ -569,6 +571,7 @@
 {"id":"b632f731-27c9-4a5a-8eb8-43888df6b247","full_name":"Sebastian Priaulx","short_name":null,"nationality":"GB","date_of_birth":"2000-01-13","created_at":"2026-02-22T15:41:09.516143+00:00","updated_at":"2026-02-23T09:13:22.060673+00:00"}
 {"id":"b653f7bd-5008-4cf4-8c64-0997bbb46d78","full_name":"Robin Liddell","short_name":null,"nationality":"Edinburgh, United Kingdom","date_of_birth":"1973-04-18","created_at":"2026-02-24T18:36:02.470815+00:00","updated_at":"2026-02-25T09:29:04.103676+00:00"}
 {"full_name":"Romain Dumas","nationality":"FR","id":"b6620bce-72cb-4e60-9d2d-107a7b7c0041","created_at":"2026-11-01T15:10:00.569Z","updated_at":"2026-11-01T15:10:00.569Z"}
+{"id":"b6a1cc9e-9118-48e3-b4f3-ee9f7f3c3586","full_name":"Helio Castroneves","short_name":null,"nationality":null,"date_of_birth":null,"created_at":"2026-11-01T19:43:12.358Z","updated_at":"2026-11-01T19:43:12.358Z"}
 {"full_name":"Elliott Budzinski","id":"b6ca9573-d6b5-46a9-8f74-3397a2323e3d","created_at":"2026-11-01T15:27:10.723Z","updated_at":"2026-11-01T15:27:10.723Z"}
 {"id":"b73777de-1c38-4015-8cae-970aab12397c","full_name":"Casper Stevenson","short_name":null,"nationality":"London, United Kingdom","date_of_birth":"2002-03-08","created_at":"2026-02-22T15:41:09.516143+00:00","updated_at":"2026-02-25T18:31:42.755959+00:00"}
 {"full_name":"Titus Sherlock","nationality":"US","id":"b74d6c51-d898-4cbc-9b31-e532c550b1f6","created_at":"2026-11-01T15:38:57.978Z","updated_at":"2026-11-01T15:38:57.978Z"}
@@ -643,8 +646,10 @@
 {"id":"cb3c614b-62a0-44ef-8d9f-3364c92d8128","full_name":"Bob Michaelian","short_name":null,"nationality":"US","date_of_birth":null,"created_at":"2026-02-27T10:02:53.014944+00:00","updated_at":"2026-02-27T10:02:53.014944+00:00"}
 {"full_name":"Westin Workman","id":"cb5d47c3-ee81-416c-aca2-0743dc479835","created_at":"2026-11-01T15:32:03.174Z","updated_at":"2026-11-01T15:33:31.969Z","nationality":"US"}
 {"full_name":"Kayden Kelly","id":"cbaada1e-7395-4269-b59c-76076bc23f97","created_at":"2026-11-01T15:33:16.721Z","updated_at":"2026-11-01T15:33:16.721Z"}
+{"id":"cbe9c82c-f7d7-4453-b5a0-6cf551393b28","full_name":"Burt Myers","short_name":null,"nationality":null,"date_of_birth":null,"created_at":"2026-11-01T19:43:17.136Z","updated_at":"2026-11-01T19:43:17.136Z"}
 {"id":"cbf6edef-3630-4775-82ec-bb9bb62ee8f0","full_name":"Alessio Picariello","short_name":null,"nationality":"BE","date_of_birth":"1993-10-23","created_at":"2026-02-22T15:41:09.63676+00:00","updated_at":"2026-02-22T16:26:11.260058+00:00"}
 {"full_name":"Mat Pombo","id":"cc194172-6df0-4b52-a62d-b1d8cf8561e1","created_at":"2026-11-01T15:27:07.034Z","updated_at":"2026-11-01T15:27:07.034Z"}
+{"id":"cc1baa81-4033-4514-b98c-3fd1185bffad","full_name":"Chandler Smith","short_name":null,"nationality":"United States","date_of_birth":"2002-06-26","created_at":"2026-11-01T19:43:12.357Z","updated_at":"2026-11-01T19:43:12.357Z"}
 {"full_name":"Marc Miller","id":"cc305f9b-dca4-4f2c-84c4-64247925f523","created_at":"2026-11-01T15:27:03.347Z","updated_at":"2026-11-01T15:27:03.347Z"}
 {"full_name":"Matt Brabham","nationality":"US","id":"cc6b591e-f49f-4f99-8758-c7828bb5f37e","created_at":"2026-11-01T14:46:13.636Z","updated_at":"2026-11-01T14:46:13.636Z"}
 {"id":"cc9b4b84-8bee-4fc0-98c5-b98497dfd856","full_name":"Ryan Preece","short_name":null,"nationality":"United States","date_of_birth":"1990-10-25","created_at":"2026-11-01T19:42:38.925Z","updated_at":"2026-11-01T19:42:38.925Z"}
@@ -717,6 +722,7 @@
 {"id":"e2ecb6d7-0726-433a-a16e-262b2b9377ec","full_name":"Tyler Chambers","short_name":null,"nationality":"Acworth, United States","date_of_birth":"1999-03-15","created_at":"2026-02-24T18:36:02.550157+00:00","updated_at":"2026-02-26T08:38:19.14116+00:00"}
 {"id":"e30d5f7c-cab2-4094-b38c-3a50540efc5c","full_name":"Harry King","short_name":null,"nationality":"Kingston upon Thames, United Kingdom","date_of_birth":"2001-01-10","created_at":"2026-02-22T15:41:09.63676+00:00","updated_at":"2026-02-25T18:30:28.024265+00:00"}
 {"id":"e33538a0-dc9e-47ff-b465-ea5d1a8d5feb","full_name":"Jules Gounon","short_name":null,"nationality":"Aubenas, France","date_of_birth":"1994-12-31","created_at":"2026-02-22T15:41:09.579972+00:00","updated_at":"2026-02-25T09:30:58.812977+00:00"}
+{"id":"e341b904-fe89-41c9-8ee9-005f54d1714a","full_name":"Casey Mears","short_name":null,"nationality":null,"date_of_birth":null,"created_at":"2026-11-01T19:43:17.137Z","updated_at":"2026-11-01T19:43:17.137Z"}
 {"id":"e354aa2f-e897-47ea-8d9e-7784539e7bfa","full_name":"Charles Milesi","short_name":null,"nationality":"Chaumont, France","date_of_birth":"2001-03-04","created_at":"2026-02-22T15:41:09.455275+00:00","updated_at":"2026-02-25T09:29:20.35157+00:00"}
 {"id":"e3b7c034-6987-4a3f-b658-7545b18b5424","full_name":"Hunter McElrea","short_name":null,"nationality":"Auckland, New Zealand","date_of_birth":"1999-11-21","created_at":"2026-02-22T15:41:09.381973+00:00","updated_at":"2026-02-25T09:30:30.699376+00:00"}
 {"id":"e3bbf97c-c8ef-44ca-bf8e-6afe887eacc5","full_name":"Allen Patten","short_name":null,"nationality":"US","date_of_birth":null,"created_at":"2026-02-27T10:02:53.014944+00:00","updated_at":"2026-02-27T10:02:53.014944+00:00"}
@@ -786,6 +792,7 @@
 {"id":"f8bbf14a-217a-4819-8016-df67b3122405","full_name":"Lars Kern","short_name":null,"nationality":"Weissach, Germany","date_of_birth":"1987-11-18","created_at":"2026-02-22T15:41:09.579972+00:00","updated_at":"2026-02-25T09:31:26.78222+00:00"}
 {"id":"f8f5396d-e28f-4497-b6c3-970a59697816","full_name":"Alessio Rovera","short_name":null,"nationality":"IT","date_of_birth":"1995-06-22","created_at":"2026-02-22T15:41:09.455275+00:00","updated_at":"2026-02-22T16:26:11.340317+00:00"}
 {"id":"f9525ab9-92a6-4b55-9fce-fd4979d48129","full_name":"William Byron","short_name":null,"nationality":"United States","date_of_birth":"1997-11-29","created_at":"2026-11-01T19:42:38.924Z","updated_at":"2026-11-01T19:42:38.924Z"}
+{"id":"f97b1b00-55c3-4895-a26f-f4490a6771b7","full_name":"Brennan Poole","short_name":null,"nationality":"United States","date_of_birth":"1991-04-11","created_at":"2026-11-01T19:43:24.102Z","updated_at":"2026-11-01T19:43:24.102Z"}
 {"full_name":"Anders Fjordbach","id":"f996eac2-aada-4a2e-ba72-ff3b42f92d48","created_at":"2026-11-01T15:10:00.569Z","updated_at":"2026-11-01T15:10:00.569Z"}
 {"id":"f9df91ce-c3c5-44cf-a526-9764a27e6b51","full_name":"Nikita Johnson","short_name":null,"nationality":"Gulfport, United States","date_of_birth":"2008-05-25","created_at":"2026-02-22T15:41:09.455275+00:00","updated_at":"2026-02-25T09:32:22.792014+00:00"}
 {"id":"fa185004-58b1-4c70-98ec-fd0e422a7869","full_name":"Austin Cindric","short_name":null,"nationality":"Columbus, United States","date_of_birth":"1998-09-02","created_at":"2026-02-22T17:00:36.589742+00:00","updated_at":"2026-02-25T18:30:14.738136+00:00"}
