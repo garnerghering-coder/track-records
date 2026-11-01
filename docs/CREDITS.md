@@ -10,6 +10,10 @@ Recoloured to a single-colour outline on a transparent background (white; the si
 |---|---|---|---|
 | Madring — Grand Prix | [File:Madring (2026).svg](https://commons.wikimedia.org/wiki/File:Madring_(2026).svg) | GabrielStella, Cherkash | CC BY-SA 3.0 |
 | Sepang International Circuit — Grand Prix | [File:Sepang.svg](https://commons.wikimedia.org/wiki/File:Sepang.svg) | Will Pittenger | CC BY-SA 3.0 |
+| Milwaukee Mile — Oval | [File:The Milwaukee Mile.svg](https://commons.wikimedia.org/wiki/File:The_Milwaukee_Mile.svg) | Eric Duff | Public domain |
+| Exhibition Place (Toronto) — Street Circuit | [File:Toronto, Ontario street circuit track map 2023.svg](https://commons.wikimedia.org/wiki/File:Toronto,_Ontario_street_circuit_track_map_2023.svg) | Will Petenger | CC BY-SA 3.0 |
+| The Thermal Club — INDYCAR Grand Prix Circuit | [File:Thermal Club IndyCar Track Map.svg](https://commons.wikimedia.org/wiki/File:Thermal_Club_IndyCar_Track_Map.svg) | HotMAN0199 | CC BY-SA 4.0 |
+| Arlington Street Circuit | [File:Arlington GP Layout.png](https://commons.wikimedia.org/wiki/File:Arlington_GP_Layout.png) | WL2392 | CC BY-SA 4.0 |
 
 ## Car liveries (Formula 1)
 
