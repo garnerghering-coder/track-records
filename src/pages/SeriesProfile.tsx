@@ -1,15 +1,21 @@
-import { useEffect, useState, useMemo } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { ChevronDown, ChevronUp, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Trophy, ChevronDown, ChevronUp, FileDown } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import EventCard from "@/components/EventCard";
-import { useEventPodiums } from "@/hooks/useEventPodiums";
-import { Button } from "@/components/ui/button";
+import FlagImage from "@/components/FlagImage";
+import EventCard, { EventListHead, shortDateRange } from "@/components/EventCard";
+import { ClassBadge, EmptyState, PageHeader, Pos, RowsSkeleton, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
+import { Count, Segmented } from "@/components/browse/Segmented";
 import { Progress } from "@/components/ui/progress";
 import { exportStandingsPdf } from "@/lib/standings-pdf-export";
+import { fetchClassWinners, fetchSeasonClassColors, shortName, type ClassWinner } from "@/lib/race-data";
+import { getClassColor } from "@/lib/classes";
+import { formatDateRange } from "@/lib/date-utils";
+import { cn } from "@/lib/utils";
 
 interface DisplayEvent {
   id: string;
@@ -20,12 +26,18 @@ interface DisplayEvent {
   endDate: string | null;
   year: number;
   seasonId: string;
+  round: string | null;
+}
+
+interface StandingDriver {
+  id: string;
+  name: string;
+  nationality: string | null;
 }
 
 interface StandingEntry {
   carNumber: string;
-  driverNames: string[];
-  driverIds: string[];
+  drivers: StandingDriver[];
   teamName: string | null;
   teamId: string | null;
   totalPoints: number;
@@ -35,144 +47,109 @@ interface StandingEntry {
   podiums: number;
 }
 
-const PODIUM_HEIGHT: Record<number, string> = {
-  1: "h-28",
-  2: "h-20",
-  3: "h-16",
-};
+const fmtPts = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
 
-const PODIUM_BG: Record<number, string> = {
-  1: "from-yellow-500/30 to-yellow-600/10 border-yellow-500/50",
-  2: "from-gray-300/20 to-gray-400/10 border-gray-400/40",
-  3: "from-amber-700/25 to-amber-800/10 border-amber-700/40",
-};
+/* ── Standings table ─────────────────────────────────────────── */
+function StandingsTable({ standings, className, color }: { standings: StandingEntry[]; className?: string | null; color?: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const LIMIT = 12;
+  const rows = showAll ? standings : standings.slice(0, LIMIT);
+  const leader = standings[0]?.totalPoints ?? 0;
+  const multiDriver = standings.some((s) => s.drivers.length > 1);
+  const hasWinsOrPodiums = standings.some((s) => s.wins > 0 || s.podiums > 0);
 
-const PODIUM_TEXT: Record<number, string> = {
-  1: "text-yellow-400",
-  2: "text-gray-300",
-  3: "text-amber-600",
-};
-
-function shortenName(full: string): string {
-  const parts = full.trim().split(/\s+/);
-  if (parts.length <= 1) return full;
-  return `${parts[0][0]}. ${parts.slice(1).join(" ")}`;
-}
-
-function PodiumDisplay({ standings, className: classLabel }: { standings: StandingEntry[]; className?: string | null }) {
-  const [showFull, setShowFull] = useState(false);
-  const top3 = standings.slice(0, 3);
-  if (top3.length === 0 || top3[0].totalPoints === 0) return null;
-
-  // Reorder for visual: [2nd, 1st, 3rd]
-  const ordered = [top3[1], top3[0], top3[2]].filter(Boolean);
-
-  // If ANY car in the standings has multiple drivers, use car#/team format for ALL
-  const anyMultiDriver = standings.some(s => s.driverNames.length > 1);
-
-  const getPillarLabel = (entry: StandingEntry) => {
-    if (anyMultiDriver) {
-      return { primary: `#${entry.carNumber}`, secondary: entry.teamName };
-    }
-    return { primary: shortenName(entry.driverNames[0] || "Unknown"), secondary: entry.teamName };
-  };
-
-  const getDisplayName = (entry: StandingEntry) => {
-    if (anyMultiDriver) {
-      return `#${entry.carNumber} – ${entry.teamName || "Unknown Team"}`;
-    }
-    return entry.driverNames[0] || "Unknown";
-  };
-
-  const hasWinsOrPodiums = standings.some(s => s.wins > 0 || s.podiums > 0);
+  if (standings.length === 0)
+    return <EmptyState title="No points scored yet">Standings appear once classified results with points are published.</EmptyState>;
 
   return (
-    <div className="mb-4">
-      {classLabel && (
-        <p className="text-xs font-display font-semibold text-muted-foreground uppercase tracking-wider mb-2">{classLabel}</p>
-      )}
-      <div className="flex items-end justify-center gap-2">
-        {ordered.map((entry) => {
-          const pos = entry.position;
-          const label = getPillarLabel(entry);
-          return (
-            <div key={entry.carNumber} className="flex flex-col items-center" style={{ minWidth: 100, maxWidth: 140 }}>
-              <div className="text-center mb-1.5">
-                <span className={`text-xs font-semibold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                  {label.primary}
-                </span>
-                {label.secondary && (
-                  <p className="text-[9px] text-muted-foreground truncate max-w-[120px]">{label.secondary}</p>
+    <div className="overflow-hidden rounded border bg-card">
+      <div className="overflow-x-auto">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="w-12">Pos</th>
+              <th className="w-14 text-right">Car</th>
+              <th>{multiDriver ? "Drivers" : "Driver"}</th>
+              <th className="hidden lg:table-cell">Team</th>
+              {className && <th className="hidden md:table-cell">Class</th>}
+              {hasWinsOrPodiums && (
+                <>
+                  <th className="hidden w-12 text-right sm:table-cell" title="Wins">
+                    W
+                  </th>
+                  <th className="hidden w-12 text-right sm:table-cell" title="Podiums">
+                    Pod
+                  </th>
+                </>
+              )}
+              <th className="w-16 text-right">Pts</th>
+              <th className="w-16 text-right">Gap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e) => (
+              <tr key={e.carNumber}>
+                <td>
+                  <Pos value={e.position} />
+                </td>
+                <td className="num text-right font-semibold">#{e.carNumber}</td>
+                <td>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {e.drivers.length ? (
+                      e.drivers.map((d) => (
+                        <Link key={d.id} to={`/driver/${d.id}`} className="inline-flex items-center gap-1.5 whitespace-nowrap font-medium hover:text-primary">
+                          <FlagImage nationality={d.nationality} size={14} />
+                          {multiDriver ? shortName(d.name) : d.name}
+                        </Link>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </div>
+                  {e.teamName && <div className="truncate text-xs text-muted-foreground lg:hidden">{e.teamName}</div>}
+                </td>
+                <td className="hidden max-w-[16rem] truncate text-muted-foreground lg:table-cell">
+                  {e.teamId ? (
+                    <Link to={`/team/${e.teamId}`} className="hover:text-foreground">
+                      {e.teamName}
+                    </Link>
+                  ) : (
+                    e.teamName || "—"
+                  )}
+                </td>
+                {className && (
+                  <td className="hidden md:table-cell">
+                    <ClassBadge name={className} color={color} />
+                  </td>
                 )}
-                <p className="text-[10px] text-muted-foreground">{entry.totalPoints} pts</p>
-              </div>
-              <div
-                className={`w-full ${PODIUM_HEIGHT[pos] || "h-12"} rounded-t-md border-t border-x bg-gradient-to-b ${PODIUM_BG[pos] || ""} flex items-center justify-center`}
-              >
-                <span className={`font-display text-2xl font-bold ${PODIUM_TEXT[pos] || "text-foreground"}`}>
-                  P{pos}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Full standings list */}
-      {standings.length > 3 && (
-        <div className="mt-3">
-          <button
-            onClick={() => setShowFull(!showFull)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 mx-auto"
-          >
-            {showFull ? "Hide" : "View all"} standings
-            {showFull ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          {showFull && (
-            <div className="mt-2">
-              {/* Header row */}
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider px-2 py-1 border-b border-border mb-1">
-                <span className="w-6 text-right">#</span>
-                <span className="flex-1 min-w-0">
-                  {anyMultiDriver ? "Car / Team" : "Driver"}
-                </span>
-                {!anyMultiDriver && <span className="shrink-0 text-right">Team</span>}
                 {hasWinsOrPodiums && (
                   <>
-                    <span className="w-10 text-center shrink-0">Wins</span>
-                    <span className="w-14 text-center shrink-0">Podiums</span>
+                    <td className={cn("num hidden text-right sm:table-cell", e.wins ? "text-foreground" : "text-muted-foreground")}>{e.wins}</td>
+                    <td className={cn("num hidden text-right sm:table-cell", e.podiums ? "text-foreground" : "text-muted-foreground")}>{e.podiums}</td>
                   </>
                 )}
-                <span className="w-14 text-right shrink-0">Pts</span>
-              </div>
-              <div className="space-y-0.5">
-                {standings.map((entry) => (
-                  <div key={entry.carNumber} className="flex items-center gap-2 text-xs px-2 py-1 rounded hover:bg-muted/50">
-                    <span className="font-mono w-6 text-right font-semibold text-muted-foreground shrink-0">{entry.position}.</span>
-                    <span className="flex-1 min-w-0 truncate text-foreground">{getDisplayName(entry)}</span>
-                    {!anyMultiDriver && (
-                      <span className="shrink-0 text-right text-muted-foreground text-[10px]">{entry.teamName || ""}</span>
-                    )}
-                    {hasWinsOrPodiums && (
-                      <>
-                        <span className="font-mono w-10 text-center text-muted-foreground shrink-0">{entry.wins}</span>
-                        <span className="font-mono w-14 text-center text-muted-foreground shrink-0">{entry.podiums}</span>
-                      </>
-                    )}
-                    <span className="font-mono w-14 text-right text-muted-foreground shrink-0">{entry.totalPoints} pts</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+                <td className="num text-right font-semibold">{fmtPts(e.totalPoints)}</td>
+                <td className="num text-right text-muted-foreground">{e.position === 1 ? "—" : `−${fmtPts(leader - e.totalPoints)}`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {standings.length > LIMIT && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="flex w-full items-center justify-center gap-1 py-2.5 font-display text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+        >
+          {showAll ? "Show top " + LIMIT : `Show all ${standings.length}`}
+          {showAll ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
       )}
     </div>
   );
 }
 
-function StandingsSection({ standings, classes, isMulticlass, year, seasonId, seriesName }: {
-  standings: StandingEntry[];
+/* ── Export PDF control (with class picker for multi-class seasons) ── */
+function ExportButton({ classes, isMulticlass, year, seasonId, seriesName }: {
   classes: { id: string; name: string }[];
   isMulticlass: boolean;
   year: number;
@@ -181,21 +158,17 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
 }) {
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [showClassPicker, setShowClassPicker] = useState(false);
-  const [selectedClasses, setSelectedClasses] = useState<Set<string>>(new Set(classes.map(c => c.name)));
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set(classes.map((c) => c.name)));
+
+  useEffect(() => setSelected(new Set(classes.map((c) => c.name))), [classes]);
 
   const handleExport = async (classNames?: string[] | null) => {
-    setShowClassPicker(false);
+    setOpen(false);
     setExporting(true);
     setProgress(5);
     try {
-      await exportStandingsPdf({
-        seriesName,
-        year,
-        seasonId,
-        classNames: classNames,
-        onProgress: setProgress,
-      });
+      await exportStandingsPdf({ seriesName, year, seasonId, classNames, onProgress: setProgress });
       setProgress(100);
       setTimeout(() => {
         setExporting(false);
@@ -209,380 +182,443 @@ function StandingsSection({ standings, classes, isMulticlass, year, seasonId, se
     }
   };
 
-  const toggleClass = (name: string) => {
-    setSelectedClasses(prev => {
+  const toggle = (name: string) =>
+    setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
     });
-  };
 
-  const toggleAll = () => {
-    if (selectedClasses.size === classes.length) {
-      setSelectedClasses(new Set());
-    } else {
-      setSelectedClasses(new Set(classes.map(c => c.name)));
-    }
-  };
-
-  return (
-    <div className="mb-6 rounded-lg border border-border bg-card/50 p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="font-display text-sm font-semibold text-foreground flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-yellow-500" />
-          {year} Championship Standings
-        </h4>
-        {!exporting && (
-          <div className="relative">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => isMulticlass ? setShowClassPicker(!showClassPicker) : handleExport(null)}
-            >
-              <FileDown className="h-3 w-3" />
-              Export PDF
-            </Button>
-            {showClassPicker && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg p-3 min-w-[180px]">
-                <div className="flex items-center gap-2 pb-2 mb-2 border-b border-border">
-                  <input
-                    type="checkbox"
-                    checked={selectedClasses.size === classes.length}
-                    onChange={toggleAll}
-                    className="rounded border-border"
-                  />
-                  <span className="text-xs font-semibold text-foreground">Select All</span>
-                </div>
-                {classes.map((cls) => (
-                  <label key={cls.id} className="flex items-center gap-2 py-1 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedClasses.has(cls.name)}
-                      onChange={() => toggleClass(cls.name)}
-                      className="rounded border-border"
-                    />
-                    <span className="text-xs text-foreground">{cls.name}</span>
-                  </label>
-                ))}
-                <Button
-                  size="sm"
-                  className="w-full mt-2 h-7 text-xs"
-                  disabled={selectedClasses.size === 0}
-                  onClick={() => handleExport([...selectedClasses])}
-                >
-                  Download {selectedClasses.size === classes.length ? "All" : `${selectedClasses.size} class${selectedClasses.size !== 1 ? "es" : ""}`}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+  if (exporting)
+    return (
+      <div className="flex w-36 items-center gap-2">
+        <Progress value={progress} className="h-1.5" />
+        <span className="num text-[11px] text-muted-foreground">{Math.round(progress)}%</span>
       </div>
-      {exporting && (
-        <div className="mb-3 space-y-1">
-          <Progress value={progress} className="h-1.5" />
-          <p className="text-[10px] text-muted-foreground text-right">{Math.round(progress)}%</p>
-        </div>
-      )}
-      {isMulticlass ? (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {classes.map((cls) => {
-            const classStandings = standings
-              .filter(s => s.className === cls.name)
-              .sort((a, b) => b.totalPoints - a.totalPoints)
-              .map((s, i) => ({ ...s, position: i + 1 }));
-            return (
-              <PodiumDisplay key={cls.id} standings={classStandings} className={cls.name} />
-            );
-          })}
-        </div>
-      ) : (
-        <PodiumDisplay standings={standings} />
-      )}
-    </div>
-  );
-}
-
-function EventsSection({ events, seasonsGrouped, seasonStandings, seasonClassMap, seriesName }: {
-  events: DisplayEvent[];
-  seriesName: string;
-  seasonsGrouped: Record<number, { events: DisplayEvent[]; seasonId: string }>;
-  seasonStandings: Record<string, StandingEntry[]>;
-  seasonClassMap: Record<string, { id: string; name: string }[]>;
-}) {
-  const eventIds = useMemo(() => events.map(e => e.id), [events]);
-  const { podiums } = useEventPodiums(eventIds);
+    );
 
   return (
-    <div className="container py-8">
-      <h2 className="font-display text-xl font-semibold text-foreground mb-4">Events</h2>
-      {events.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No events linked to this series yet.</p>
-      ) : (
-        <div className="space-y-10">
-          {Object.entries(seasonsGrouped).sort(([a], [b]) => Number(b) - Number(a)).map(([year, { events: yearEvents, seasonId }]) => {
-            const standings = seasonStandings[seasonId] || [];
-            const classes = seasonClassMap[seasonId] || [];
-            const isMulticlass = classes.length > 0;
-
-            return (
-              <div key={year}>
-                <h3 className="font-display text-lg font-semibold text-foreground mb-4">{year} Season</h3>
-
-                {standings.length > 0 && (
-                  <StandingsSection
-                    standings={standings}
-                    classes={classes}
-                    isMulticlass={isMulticlass}
-                    year={Number(year)}
-                    seasonId={seasonId}
-                    seriesName={seriesName}
-                  />
-                )}
-
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {yearEvents.map(ev => (
-                    <EventCard key={ev.id} event={ev} podium={podiums[ev.id]} />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+    <div className="relative">
+      <button
+        onClick={() => (isMulticlass ? setOpen(!open) : handleExport(null))}
+        className="flex h-8 items-center gap-1.5 rounded border bg-card px-3 font-display text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+      >
+        <FileDown className="h-3.5 w-3.5" /> Export PDF
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded border bg-popover p-3">
+          <label className="mb-2 flex cursor-pointer items-center gap-2 border-b pb-2">
+            <input
+              type="checkbox"
+              checked={selected.size === classes.length}
+              onChange={() => setSelected(selected.size === classes.length ? new Set() : new Set(classes.map((c) => c.name)))}
+              className="accent-[hsl(var(--primary))]"
+            />
+            <span className="label-caps text-foreground">Select all</span>
+          </label>
+          {classes.map((cls) => (
+            <label key={cls.id} className="flex cursor-pointer items-center gap-2 py-1">
+              <input type="checkbox" checked={selected.has(cls.name)} onChange={() => toggle(cls.name)} className="accent-[hsl(var(--primary))]" />
+              <span className="font-display text-sm font-semibold uppercase tracking-wide">{cls.name}</span>
+            </label>
+          ))}
+          <button
+            disabled={selected.size === 0}
+            onClick={() => handleExport([...selected])}
+            className="mt-2 h-8 w-full rounded-sm bg-signal font-display text-xs font-bold uppercase tracking-[0.12em] text-signal-foreground disabled:opacity-40"
+          >
+            Download {selected.size === classes.length ? "all" : `${selected.size} class${selected.size !== 1 ? "es" : ""}`}
+          </button>
         </div>
       )}
     </div>
   );
 }
-const SeriesProfile = () => {
 
+/* ── Page ────────────────────────────────────────────────────── */
+const SeriesProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [series, setSeries] = useState<any>(null);
   const [events, setEvents] = useState<DisplayEvent[]>([]);
   const [seasonStandings, setSeasonStandings] = useState<Record<string, StandingEntry[]>>({});
+  const [standingsLoading, setStandingsLoading] = useState(true);
   const [seasonClassMap, setSeasonClassMap] = useState<Record<string, { id: string; name: string }[]>>({});
+  const [classColors, setClassColors] = useState<Record<string, Record<string, string>>>({});
+  const [winners, setWinners] = useState<Record<string, ClassWinner[]>>({});
+  const [winnersLoaded, setWinnersLoaded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [seasonId, setSeasonId] = useState<string>("");
+  const [activeClass, setActiveClass] = useState<string>("");
 
   useEffect(() => {
     if (!id) return;
+    setLoading(true);
+    setSeasonId("");
     const fetchData = async () => {
       const { data: s } = await supabase.from("v2_series").select("*").eq("id", id).single();
       setSeries(s);
-
-      if (s) {
-        const { data: seasons } = await supabase.from("v2_seasons").select("id, year, is_multiclass").eq("series_id", id);
-        const seasonIds = (seasons || []).map(sn => sn.id);
-        const seasonYearMap = Object.fromEntries((seasons || []).map(sn => [sn.id, sn.year]));
-        const multiclassSeasons = new Set((seasons || []).filter(sn => sn.is_multiclass).map(sn => sn.id));
-
-        // Fetch classes for multiclass seasons
-        if (multiclassSeasons.size > 0) {
-          const { data: classes } = await supabase
-            .from("v2_season_classes")
-            .select("id, season_id, class_name, sort_order")
-            .in("season_id", [...multiclassSeasons])
-            .order("sort_order");
-          const cMap: Record<string, { id: string; name: string }[]> = {};
-          for (const c of (classes || []) as any[]) {
-            if (!cMap[c.season_id]) cMap[c.season_id] = [];
-            cMap[c.season_id].push({ id: c.id, name: c.class_name });
-          }
-          setSeasonClassMap(cMap);
-        }
-
-        if (seasonIds.length > 0) {
-          const { data: evts } = await supabase.from("v2_events")
-            .select("id, name, start_date, end_date, season_id, status, v2_circuits(name, country)")
-            .in("season_id", seasonIds)
-            .eq("status", "published" as any)
-            .order("start_date", { ascending: false });
-
-          const mappedEvents = (evts || []).map(e => ({
-            id: e.id,
-            name: e.name,
-            circuitName: e.v2_circuits?.name || null,
-            country: e.v2_circuits?.country || null,
-            date: e.start_date,
-            endDate: e.end_date,
-            year: seasonYearMap[e.season_id] || 0,
-            seasonId: e.season_id,
-          }));
-          setEvents(mappedEvents);
-
-          // Fetch team season aliases for display names
-          const { data: teamSeasonNames } = await supabase
-            .from("v2_team_season_names" as any)
-            .select("team_id, season_id, display_name")
-            .in("season_id", seasonIds);
-          // Build lookup: "teamId|seasonId" -> display_name
-          const teamAliasMap = new Map<string, string>();
-          for (const tsn of (teamSeasonNames || []) as any[]) {
-            teamAliasMap.set(`${tsn.team_id}|${tsn.season_id}`, tsn.display_name);
-          }
-
-          // Compute standings per season from points data
-          const standingsMap: Record<string, StandingEntry[]> = {};
-
-          for (const seasonId of seasonIds) {
-            const seasonEvts = mappedEvents.filter(e => e.seasonId === seasonId);
-            if (seasonEvts.length === 0) continue;
-
-            const evtIds = seasonEvts.map(e => e.id);
-
-            // Get sessions with type info for wins/podiums filtering
-            const { data: sessions } = await supabase
-              .from("v2_sessions")
-              .select("id, parent_session_id, session_type, name")
-              .in("event_id", evtIds);
-
-            if (!sessions || sessions.length === 0) continue;
-
-            const parentSessions = sessions.filter(s => !s.parent_session_id);
-            const sessIds = parentSessions.map(s => s.id);
-            if (sessIds.length === 0) continue;
-
-            // Track which sessions are main races (not sprints/quali) for wins/podiums
-            const raceSessionIds = new Set(
-              parentSessions
-                .filter(s => s.session_type === 'race' && !s.name?.toLowerCase().includes('sprint'))
-                .map(s => s.id)
-            );
-
-            // Fetch results with points
-            const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
-              supabase.from("v2_race_results" as any)
-                .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-                .in("session_id", sessIds),
-              supabase.from("v2_qualifying_results" as any)
-                .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-                .in("session_id", sessIds),
-            ]);
-
-            const allResults = [...((raceRes || []) as any[]), ...((qualRes || []) as any[])];
-
-            // Group by car_number
-            const carMap = new Map<string, {
-              carNumber: string;
-              driverIds: Set<string>;
-              driverNames: Set<string>;
-              teamName: string | null;
-              teamId: string | null;
-              totalPoints: number;
-              className: string | null;
-              wins: number;
-              podiums: number;
-            }>();
-
-            // Track which (car_number, session_id) combos we've already counted points/wins for
-            const countedPoints = new Set<string>();
-            const countedWins = new Set<string>();
-
-            for (const r of allResults) {
-              if (!r.car_number) continue;
-              const pts = r.points != null ? Number(r.points) : 0;
-              const className = r.extra_data?.Class || r.extra_data?.class || null;
-              // Use season alias from v2_team_season_names, fallback to full_name
-              const teamId = r.v2_teams?.id || null;
-              const teamDisplayName = (teamId ? teamAliasMap.get(`${teamId}|${seasonId}`) : null) || r.v2_teams?.full_name || null;
-
-              if (!carMap.has(r.car_number)) {
-                carMap.set(r.car_number, {
-                  carNumber: r.car_number,
-                  driverIds: new Set(),
-                  driverNames: new Set(),
-                  teamName: teamDisplayName,
-                  teamId: r.v2_teams?.id || null,
-                  totalPoints: 0,
-                  className,
-                  wins: 0,
-                  podiums: 0,
-                });
-              }
-
-              const entry = carMap.get(r.car_number)!;
-
-              // Only count points once per car per session (endurance cars have multiple driver rows)
-              const pointsKey = `${r.car_number}|${r.session_id}`;
-              if (pts > 0 && !countedPoints.has(pointsKey)) {
-                entry.totalPoints += pts;
-                countedPoints.add(pointsKey);
-              }
-
-              if (r.driver_id) entry.driverIds.add(r.driver_id);
-              if (r.v2_drivers?.full_name) entry.driverNames.add(r.v2_drivers.full_name);
-              if (!entry.teamName && teamDisplayName) {
-                entry.teamName = teamDisplayName;
-                entry.teamId = r.v2_teams?.id;
-              }
-              if (!entry.className && className) entry.className = className;
-
-              // Count wins/podiums only from main race sessions, once per car per session
-              const winKey = `${r.car_number}|${r.session_id}`;
-              if (r.position != null && r.session_id && raceSessionIds.has(r.session_id) && !countedWins.has(winKey)) {
-                countedWins.add(winKey);
-                if (r.position === 1) entry.wins++;
-                if (r.position <= 3) entry.podiums++;
-              }
-            }
-
-            const entries = [...carMap.values()].filter(e => e.totalPoints > 0);
-            entries.sort((a, b) => b.totalPoints - a.totalPoints);
-
-            const standings: StandingEntry[] = entries.map((e, i) => ({
-              carNumber: e.carNumber,
-              driverNames: [...e.driverNames],
-              driverIds: [...e.driverIds],
-              teamName: e.teamName,
-              teamId: e.teamId,
-              totalPoints: e.totalPoints,
-              position: i + 1,
-              className: e.className,
-              wins: e.wins,
-              podiums: e.podiums,
-            }));
-
-            if (standings.length > 0) {
-              standingsMap[seasonId] = standings;
-            }
-          }
-
-          setSeasonStandings(standingsMap);
-        }
-      }
       setLoading(false);
+      if (!s) return;
+
+      const { data: seasons } = await supabase.from("v2_seasons").select("id, year, is_multiclass").eq("series_id", id);
+      const seasonIds = (seasons || []).map((sn) => sn.id);
+      const seasonYearMap = Object.fromEntries((seasons || []).map((sn) => [sn.id, sn.year]));
+      const multiclassSeasons = new Set((seasons || []).filter((sn) => sn.is_multiclass).map((sn) => sn.id));
+
+      fetchSeasonClassColors(seasonIds).then(setClassColors);
+
+      if (multiclassSeasons.size > 0) {
+        const { data: classes } = await supabase
+          .from("v2_season_classes")
+          .select("id, season_id, class_name, sort_order")
+          .in("season_id", [...multiclassSeasons])
+          .order("sort_order");
+        const cMap: Record<string, { id: string; name: string }[]> = {};
+        for (const c of (classes || []) as any[]) {
+          if (!cMap[c.season_id]) cMap[c.season_id] = [];
+          cMap[c.season_id].push({ id: c.id, name: c.class_name });
+        }
+        setSeasonClassMap(cMap);
+      }
+
+      if (seasonIds.length === 0) {
+        setStandingsLoading(false);
+        return;
+      }
+
+      const { data: evts } = await supabase
+        .from("v2_events")
+        .select("id, name, start_date, end_date, season_id, status, round_number, v2_circuits(name, country)")
+        .in("season_id", seasonIds)
+        .eq("status", "published" as any)
+        .order("start_date", { ascending: true });
+
+      const mappedEvents: DisplayEvent[] = ((evts || []) as any[]).map((e) => ({
+        id: e.id,
+        name: e.name,
+        circuitName: e.v2_circuits?.name || null,
+        country: e.v2_circuits?.country || null,
+        date: e.start_date,
+        endDate: e.end_date,
+        year: seasonYearMap[e.season_id] || 0,
+        seasonId: e.season_id,
+        round: e.round_number,
+      }));
+      setEvents(mappedEvents);
+
+      // Default to the most recent season with events
+      const latest = [...mappedEvents].sort((a, b) => b.year - a.year)[0];
+      if (latest) setSeasonId((cur) => cur || latest.seasonId);
+
+      // Team season aliases for display names
+      const { data: teamSeasonNames } = await supabase
+        .from("v2_team_season_names" as any)
+        .select("team_id, season_id, display_name")
+        .in("season_id", seasonIds);
+      const teamAliasMap = new Map<string, string>();
+      for (const tsn of (teamSeasonNames || []) as any[]) teamAliasMap.set(`${tsn.team_id}|${tsn.season_id}`, tsn.display_name);
+
+      // Compute standings per season from points data
+      const standingsMap: Record<string, StandingEntry[]> = {};
+      await Promise.all(
+        seasonIds.map(async (sid) => {
+          const evtIds = mappedEvents.filter((e) => e.seasonId === sid).map((e) => e.id);
+          if (evtIds.length === 0) return;
+
+          const { data: sessions } = await supabase.from("v2_sessions").select("id, parent_session_id, session_type, name").in("event_id", evtIds);
+          if (!sessions || sessions.length === 0) return;
+          const parentSessions = sessions.filter((x) => !x.parent_session_id);
+          const sessIds = parentSessions.map((x) => x.id);
+          if (sessIds.length === 0) return;
+
+          // Main races (not sprints / qualifying) count towards wins and podiums
+          const raceSessionIds = new Set(
+            parentSessions
+              .filter((x) => (x.session_type === "race" || x.session_type === "endurance_race") && !x.name?.toLowerCase().includes("sprint"))
+              .map((x) => x.id),
+          );
+
+          const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
+            supabase
+              .from("v2_race_results" as any)
+              .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name, nationality), v2_teams(id, full_name)")
+              .in("session_id", sessIds),
+            supabase
+              .from("v2_qualifying_results" as any)
+              .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name, nationality), v2_teams(id, full_name)")
+              .in("session_id", sessIds),
+          ]);
+          const allResults = [...((raceRes || []) as any[]), ...((qualRes || []) as any[])];
+
+          const carMap = new Map<string, Omit<StandingEntry, "position" | "drivers"> & { drivers: Map<string, StandingDriver> }>();
+          const countedPoints = new Set<string>();
+          const countedWins = new Set<string>();
+
+          for (const r of allResults) {
+            if (!r.car_number) continue;
+            const pts = r.points != null ? Number(r.points) : 0;
+            const cls = r.extra_data?.Class || r.extra_data?.class || null;
+            const teamId = r.v2_teams?.id || null;
+            const teamDisplayName = (teamId ? teamAliasMap.get(`${teamId}|${sid}`) : null) || r.v2_teams?.full_name || null;
+
+            if (!carMap.has(r.car_number))
+              carMap.set(r.car_number, {
+                carNumber: r.car_number,
+                drivers: new Map(),
+                teamName: teamDisplayName,
+                teamId,
+                totalPoints: 0,
+                className: cls,
+                wins: 0,
+                podiums: 0,
+              });
+            const entry = carMap.get(r.car_number)!;
+
+            // Points once per car per session (endurance cars have one row per driver)
+            const key = `${r.car_number}|${r.session_id}`;
+            if (pts > 0 && !countedPoints.has(key)) {
+              entry.totalPoints += pts;
+              countedPoints.add(key);
+            }
+            if (r.driver_id && r.v2_drivers?.full_name && !entry.drivers.has(r.driver_id))
+              entry.drivers.set(r.driver_id, { id: r.driver_id, name: r.v2_drivers.full_name, nationality: r.v2_drivers.nationality ?? null });
+            if (!entry.teamName && teamDisplayName) {
+              entry.teamName = teamDisplayName;
+              entry.teamId = teamId;
+            }
+            if (!entry.className && cls) entry.className = cls;
+
+            // Wins / podiums: by class position in multi-class races, else overall
+            if (r.position != null && r.session_id && raceSessionIds.has(r.session_id) && !countedWins.has(key)) {
+              countedWins.add(key);
+              const pic = Number(r.extra_data?.PIC);
+              const rank = cls && pic > 0 ? pic : r.position;
+              if (rank === 1) entry.wins++;
+              if (rank <= 3) entry.podiums++;
+            }
+          }
+
+          const standings = [...carMap.values()]
+            .filter((e) => e.totalPoints > 0)
+            .sort((a, b) => b.totalPoints - a.totalPoints)
+            .map((e, i) => ({ ...e, drivers: [...e.drivers.values()], position: i + 1 }));
+          if (standings.length > 0) standingsMap[sid] = standings;
+        }),
+      );
+      setSeasonStandings(standingsMap);
+      setStandingsLoading(false);
     };
     fetchData();
   }, [id]);
 
-  if (loading) return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
-  if (!series) return <div className="min-h-screen bg-background"><Header /><div className="flex flex-col items-center justify-center pt-32 gap-4"><p className="text-muted-foreground">Series not found.</p></div></div>;
+  /* Seasons that have published events, newest first */
+  const seasonOptions = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of events) m.set(e.seasonId, e.year);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [events]);
 
-  // Group by year
-  const seasonsGrouped = events.reduce<Record<number, { events: DisplayEvent[]; seasonId: string }>>((acc, ev) => {
-    if (!acc[ev.year]) acc[ev.year] = { events: [], seasonId: ev.seasonId };
-    acc[ev.year].events.push(ev);
-    return acc;
-  }, {});
+  const seasonEvents = useMemo(() => events.filter((e) => e.seasonId === seasonId), [events, seasonId]);
+  const year = seasonOptions.find(([s]) => s === seasonId)?.[1] ?? 0;
+  const classes = useMemo(() => seasonClassMap[seasonId] || [], [seasonClassMap, seasonId]);
+  const isMulticlass = classes.length > 0;
+  const colors = classColors[seasonId];
+  const standings = useMemo(() => seasonStandings[seasonId] || [], [seasonStandings, seasonId]);
+
+  // Reset class tab when the season changes
+  useEffect(() => {
+    if (classes.length && !classes.some((c) => c.name === activeClass)) setActiveClass(classes[0].name);
+  }, [classes, activeClass]);
+
+  // Class winners for the selected season's schedule
+  useEffect(() => {
+    if (!seasonId || winnersLoaded.has(seasonId) || seasonEvents.length === 0) return;
+    fetchClassWinners(seasonEvents.map((e) => e.id), 1).then((w) => {
+      setWinners((prev) => ({ ...prev, ...w }));
+      setWinnersLoaded((prev) => new Set(prev).add(seasonId));
+    });
+  }, [seasonId, seasonEvents, winnersLoaded]);
+
+  const classStandings = useMemo(() => {
+    if (!isMulticlass) return standings;
+    return standings
+      .filter((s) => s.className === activeClass)
+      .sort((a, b) => b.totalPoints - a.totalPoints)
+      .map((s, i) => ({ ...s, position: i + 1 }));
+  }, [standings, isMulticlass, activeClass]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const completed = seasonEvents.filter((e) => e.date && e.date <= today);
+  const lastRound = completed[completed.length - 1];
+  const allYears = seasonOptions.map(([, y]) => y);
+
+  if (loading)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-10">
+          <RowsSkeleton rows={8} />
+        </div>
+      </div>
+    );
+  if (!series)
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container py-16">
+          <EmptyState title="Series not found">
+            <Link to="/series" className="text-primary hover:underline">
+              Browse all series
+            </Link>
+          </EmptyState>
+        </div>
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-background">
       <SEOHead
         title={series.name}
-        description={`Motorsport series profile for ${series.name}. View seasons and events.`}
+        description={`${series.name}: season schedules, race winners and championship standings.`}
         canonical={`/series/${id}`}
       />
       <Header />
-      <section className="pt-24 pb-10 bg-card border-b border-border">
-        <div className="container">
-          <Link to="/series" className="inline-flex items-center gap-1 text-sm text-muted-foreground mb-4 hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Back to Series
-          </Link>
-          <h1 className="font-display text-3xl font-bold text-foreground">{series.name}</h1>
-          {series.short_name && <p className="mt-1 text-sm text-muted-foreground">{series.short_name}</p>}
-        </div>
-      </section>
 
-      <EventsSection events={events} seasonsGrouped={seasonsGrouped} seasonStandings={seasonStandings} seasonClassMap={seasonClassMap} seriesName={series.name} />
+      <PageHeader
+        kicker={
+          <>
+            <Link to="/series" className="hover:text-foreground">
+              Series
+            </Link>
+            <span>/</span>
+            <span className="text-primary">{series.short_name || series.name}</span>
+          </>
+        }
+        title={series.name}
+        meta={
+          seasonOptions.length > 0 && (
+            <>
+              <span>
+                <span className="num text-foreground">{seasonOptions.length}</span> {seasonOptions.length === 1 ? "season" : "seasons"}
+              </span>
+              <span>
+                <span className="num text-foreground">{events.length}</span> {events.length === 1 ? "event" : "events"}
+              </span>
+              <span className="num">{allYears.length > 1 ? `${Math.min(...allYears)}–${Math.max(...allYears)}` : allYears[0]}</span>
+            </>
+          )
+        }
+        actions={
+          seasonOptions.length > 1 && (
+            <Segmented label="Season" value={seasonId} onChange={setSeasonId} options={seasonOptions.map(([s, y]) => ({ value: s, label: <span className="num">{y}</span> }))} />
+          )
+        }
+      />
+
+      <main className="container py-8">
+        {events.length === 0 ? (
+          standingsLoading ? (
+            <RowsSkeleton rows={6} />
+          ) : (
+            <EmptyState title="No events yet">No published events are linked to this series yet.</EmptyState>
+          )
+        ) : (
+          <>
+            <StatStrip className="grid-cols-2 md:grid-cols-4">
+              <Stat label={`${year} rounds`} value={seasonEvents.length} sub={`${completed.length} completed`} />
+              <Stat label="Classes" value={isMulticlass ? classes.length : 1} sub={isMulticlass ? classes.map((c) => c.name).join(" · ") : "Single class"} />
+              <Stat label="Cars scoring" value={standingsLoading ? "—" : standings.length} sub="In the championship" />
+              <Stat
+                label="Latest round"
+                value={<span className="num text-2xl">{lastRound ? shortDateRange(lastRound.date, lastRound.endDate) : "—"}</span>}
+                sub={lastRound?.name}
+              />
+            </StatStrip>
+
+            {/* Standings */}
+            <section className="mt-10">
+              <SectionHeader
+                kicker={`${year} championship`}
+                title="Standings"
+                right={
+                  standings.length > 0 && (
+                    <ExportButton classes={classes} isMulticlass={isMulticlass} year={year} seasonId={seasonId} seriesName={series.name} />
+                  )
+                }
+              />
+              {isMulticlass && standings.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  {classes.map((c) => {
+                    const active = c.name === activeClass;
+                    const col = getClassColor(c.name, colors);
+                    const n = standings.filter((s) => s.className === c.name).length;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => setActiveClass(c.name)}
+                        aria-pressed={active}
+                        className={cn(
+                          "flex h-8 items-center gap-2 rounded-sm border px-3 font-display text-xs font-bold uppercase tracking-wider transition-colors",
+                          active ? "border-foreground/40 bg-accent text-foreground" : "bg-card text-muted-foreground hover:text-foreground",
+                        )}
+                        style={active ? { borderColor: col } : undefined}
+                      >
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: col }} />
+                        {c.name}
+                        <span className="num text-[11px] font-normal tracking-normal opacity-60">{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {standingsLoading ? (
+                <RowsSkeleton rows={8} />
+              ) : (
+                <StandingsTable
+                  key={`${seasonId}-${activeClass}`}
+                  standings={classStandings}
+                  className={isMulticlass ? activeClass : null}
+                  color={isMulticlass ? getClassColor(activeClass, colors) : undefined}
+                />
+              )}
+            </section>
+
+            {/* Schedule */}
+            <section className="mt-12">
+              <SectionHeader kicker={`${year} season`} title="Schedule" right={<Count n={seasonEvents.length} label={seasonEvents.length === 1 ? "round" : "rounds"} />} />
+              <div className="grid gap-px overflow-hidden rounded border bg-border">
+                <EventListHead lead="Rnd · Date" />
+                {seasonEvents.map((ev, i) => {
+                  const upcoming = !!ev.date && ev.date > today;
+                  return (
+                    <EventCard
+                      key={ev.id}
+                      event={ev}
+                      hideYear
+                      winners={winnersLoaded.has(seasonId) ? winners[ev.id] || [] : undefined}
+                      colors={colors}
+                      aside={upcoming ? <span className="label-caps text-primary">Upcoming</span> : undefined}
+                      lead={
+                        <div className="leading-tight">
+                          <div className="font-accent text-lg text-foreground">R{String(ev.round || i + 1).padStart(2, "0")}</div>
+                          <div className="num mt-0.5 text-xs text-muted-foreground">{shortDateRange(ev.date, ev.endDate)}</div>
+                        </div>
+                      }
+                    />
+                  );
+                })}
+              </div>
+              {lastRound && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Last updated after <span className="text-foreground">{lastRound.name}</span>,{" "}
+                  <span className="num">{formatDateRange(lastRound.date, lastRound.endDate)}</span>.
+                </p>
+              )}
+            </section>
+          </>
+        )}
+      </main>
       <Footer />
     </div>
   );

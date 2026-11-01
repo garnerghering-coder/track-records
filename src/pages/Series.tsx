@@ -1,74 +1,145 @@
-import { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Search as SearchIcon, ArrowLeft, Trophy } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
+import { Count, Toolbar } from "@/components/browse/Segmented";
+import { formatDateRange } from "@/lib/date-utils";
+
+interface SeriesRow {
+  id: string;
+  name: string;
+  short_name: string | null;
+  years: number[];
+  events: number;
+  latest: { id: string; name: string; start_date: string | null; end_date: string | null } | null;
+}
+
+const GRID = "grid grid-cols-[minmax(0,1fr)_1rem] gap-x-6 md:grid-cols-[minmax(0,1.4fr)_8rem_5rem_minmax(0,1.2fr)_1rem]";
 
 const SeriesPage = () => {
-  const [seriesList, setSeriesList] = useState<any[]>([]);
+  const [seriesList, setSeriesList] = useState<SeriesRow[] | null>(null);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSeries = async () => {
-      setLoading(true);
-      let query = supabase.from("v2_series").select("*").order("name");
-      if (search) query = query.ilike("name", `%${search}%`);
-      const { data } = await query;
-      setSeriesList(data ?? []);
-      setLoading(false);
-    };
-    const debounce = setTimeout(fetchSeries, 300);
-    return () => clearTimeout(debounce);
-  }, [search]);
+    supabase
+      .from("v2_series")
+      .select("id, name, short_name, v2_seasons(id, year, v2_events(id, name, start_date, end_date, status))")
+      .order("name")
+      .then(({ data }) => {
+        const today = new Date().toISOString().slice(0, 10);
+        setSeriesList(
+          ((data || []) as any[]).map((s) => {
+            const seasons = (s.v2_seasons || []) as any[];
+            const evs = seasons.flatMap((se) => (se.v2_events || []).filter((e: any) => e.status === "published"));
+            const past = evs.filter((e: any) => e.start_date && e.start_date <= today).sort((a: any, b: any) => (b.start_date || "").localeCompare(a.start_date || ""));
+            return {
+              id: s.id,
+              name: s.name,
+              short_name: s.short_name,
+              years: [...new Set(seasons.filter((se) => (se.v2_events || []).some((e: any) => e.status === "published")).map((se) => se.year as number))].sort((a, b) => b - a),
+              events: evs.length,
+              latest: past[0] || null,
+            };
+          }),
+        );
+      });
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!seriesList || !q) return seriesList || [];
+    return seriesList.filter((s) => s.name.toLowerCase().includes(q) || (s.short_name || "").toLowerCase().includes(q));
+  }, [seriesList, search]);
 
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead title="Series & Championships" description="Browse motorsport series and their race history." canonical="/series" />
+      <SEOHead title="Series & Championships" description="Browse motorsport series, their seasons, schedules and championship standings." canonical="/series" />
       <Header />
-      <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
-        <div className="container">
-          <Link to="/" className="cursor-target inline-flex items-center gap-1 text-sm mb-4" style={{ color: "hsl(0 0% 100% / 0.6)" }}>
-            <ArrowLeft className="h-4 w-4" /> Back to Home
-          </Link>
-          <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>Series & Championships</h1>
-          <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>Browse motorsport series and their race history.</p>
-        </div>
-      </section>
+      <PageHeader
+        kicker="Championships"
+        title="Series"
+        meta={
+          seriesList && (
+            <>
+              <span>
+                <span className="num text-foreground">{seriesList.length}</span> series
+              </span>
+              <span>
+                <span className="num text-foreground">{seriesList.reduce((n, s) => n + s.events, 0)}</span> events
+              </span>
+            </>
+          )
+        }
+      />
 
-      <div className="container py-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-8">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search by series name…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
-          </div>
-        </div>
+      <main className="container py-8">
+        <Toolbar>
+          <FilterInput value={search} onChange={setSearch} placeholder="Filter by series name…" className="flex-1" />
+          {seriesList && <Count n={filtered.length} label="series" />}
+        </Toolbar>
 
-        {loading ? (
-          <p className="text-center text-muted-foreground py-12">Loading series…</p>
-        ) : seriesList.length === 0 ? (
-          <div className="text-center py-16"><p className="text-muted-foreground">No series found.</p></div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {seriesList.map(s => (
-              <Link key={s.id} to={`/series/${s.id}`} className="cursor-target group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Trophy className="h-6 w-6 text-primary" />
+        <div className="mt-6">
+          {!seriesList ? (
+            <RowsSkeleton rows={3} />
+          ) : filtered.length === 0 ? (
+            <EmptyState title="No series found">Nothing matches “{search}”.</EmptyState>
+          ) : (
+            <div className="grid gap-px overflow-hidden rounded border bg-border">
+              <div className={`${GRID} hidden h-9 items-center bg-card px-4 md:grid`}>
+                <span className="label-caps">Series</span>
+                <span className="label-caps">Seasons</span>
+                <span className="label-caps text-right">Events</span>
+                <span className="label-caps">Latest round</span>
+                <span />
+              </div>
+              {filtered.map((s) => (
+                <Link key={s.id} to={`/series/${s.id}`} className={`${GRID} group items-center gap-y-2 bg-card px-4 py-4 transition-colors hover:bg-accent/60`}>
+                  <div className="min-w-0">
+                    <div className="label-caps text-primary">{s.short_name || "Series"}</div>
+                    <div className="mt-0.5 font-display text-lg font-bold uppercase leading-tight transition-colors group-hover:text-primary">{s.name}</div>
+                    {/* Mobile meta */}
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground md:hidden">
+                      <span>
+                        <span className="num text-foreground">{s.events}</span> events
+                      </span>
+                      {s.years.length > 0 && <span className="num">{s.years.join(" · ")}</span>}
+                      {s.latest && <span className="truncate">Latest: {s.latest.name}</span>}
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">{s.name}</h3>
-                    {s.short_name && <p className="mt-1 text-xs text-muted-foreground">{s.short_name}</p>}
+                  <div className="hidden flex-wrap gap-1 md:flex">
+                    {s.years.length ? (
+                      s.years.map((y) => (
+                        <span key={y} className="num rounded-sm border px-1.5 py-0.5 text-xs text-foreground">
+                          {y}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+                  <div className="num hidden text-right text-lg text-foreground md:block">{s.events}</div>
+                  <div className="hidden min-w-0 md:block">
+                    {s.latest ? (
+                      <>
+                        <div className="truncate text-sm text-foreground">{s.latest.name}</div>
+                        <div className="num text-xs text-muted-foreground">{formatDateRange(s.latest.start_date, s.latest.end_date)}</div>
+                      </>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No results yet</span>
+                    )}
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
       <Footer />
     </div>
   );

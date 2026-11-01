@@ -1,218 +1,274 @@
-import { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { CalendarClock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Search as SearchIcon, Ticket } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import EventCard, { EventListHead, type EventCardEvent } from "@/components/EventCard";
+import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
+import { Count, Segmented, Toolbar, UpcomingTag } from "@/components/browse/Segmented";
+import { fetchClassWinners, fetchSeasonClassColors, type ClassWinner } from "@/lib/race-data";
+import { formatDateRange } from "@/lib/date-utils";
+import { cn } from "@/lib/utils";
 
-const categoryOptions = [
-  { value: "all", label: "All Categories" },
-  { value: "karting", label: "Karting" },
-  { value: "single_seater", label: "Single Seater" },
-  { value: "gt", label: "GT" },
-  { value: "touring_car", label: "Touring Car" },
-  { value: "sports_car", label: "Sports Car" },
-  { value: "rally", label: "Rally" },
-  { value: "endurance", label: "Endurance" },
-  { value: "formula", label: "Formula" },
-  { value: "stock_car", label: "Stock Car" },
-  { value: "other", label: "Other" },
-];
+type CalEvent = EventCardEvent & { seasonId: string; seriesId: string | null; round: string | null };
 
-const categoryLabels: Record<string, string> = Object.fromEntries(
-  categoryOptions.filter(c => c.value !== "all").map(c => [c.value, c.label])
-);
+const toDate = (s: string) => new Date(s + (s.includes("T") ? "" : "T00:00:00Z"));
 
-interface RaceEvent {
-  id: string;
-  event_name: string;
-  series_name: string;
-  season_year: number;
-  category: string | null;
-  location: string | null;
-  event_date: string | null;
-  ticket_url: string | null;
-  circuit_id: string | null;
-  series_id: string | null;
+/** Day block for the leading column: weekday + day number. */
+function DayBlock({ start, end, past }: { start: string | null; end: string | null; past: boolean }) {
+  if (!start) return <span className="label-caps">TBA</span>;
+  const a = toDate(start);
+  const b = end ? toDate(end) : a;
+  const sameMonth = a.getUTCMonth() === b.getUTCMonth();
+  const wd = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const mo = (d: Date) => d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  return (
+    <div className="leading-none">
+      <div className="label-caps">
+        {wd(a)}
+        {end && end !== start && `–${wd(b)}`}
+      </div>
+      <div className={cn("mt-1.5 font-accent text-2xl", past ? "text-foreground" : "text-primary")}>
+        {a.getUTCDate()}
+        {end && end !== start && (
+          <span className="num ml-1 align-[0.2em] text-xs text-muted-foreground">
+            –{!sameMonth && `${mo(b)} `}
+            {b.getUTCDate()}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 const CalendarPage = () => {
-  const [events, setEvents] = useState<RaceEvent[]>([]);
+  const [events, setEvents] = useState<CalEvent[] | null>(null);
+  const [series, setSeries] = useState<{ id: string; name: string; short_name: string | null }[]>([]);
+  const [winners, setWinners] = useState<Record<string, ClassWinner[]> | null>(null);
+  const [colors, setColors] = useState<Record<string, Record<string, string>>>({});
+  const [year, setYear] = useState<string>("");
+  const [seriesFilter, setSeriesFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
-  const [seriesFilter, setSeriesFilter] = useState("");
-  const [allSeries, setAllSeries] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    const fetchSeries = async () => {
-      const { data } = await supabase.from("race_events").select("series_name").order("series_name");
-      if (data) {
-        const unique = [...new Set(data.map(d => d.series_name))];
-        setAllSeries(unique);
-      }
-    };
-    fetchSeries();
+    supabase
+      .from("v2_series")
+      .select("id, name, short_name")
+      .order("name")
+      .then(({ data }) => setSeries((data || []) as any[]));
+
+    (async () => {
+      const { data } = await supabase
+        .from("v2_events")
+        .select("id, name, start_date, end_date, season_id, round_number, v2_seasons(year, v2_series(id, name, short_name)), v2_circuits(id, name, country)")
+        .eq("status", "published" as any)
+        .order("start_date", { ascending: true })
+        .limit(500);
+      const list: CalEvent[] = ((data || []) as any[]).map((e) => ({
+        id: e.id,
+        name: e.name,
+        series: e.v2_seasons?.v2_series?.name || "",
+        seriesShort: e.v2_seasons?.v2_series?.short_name || null,
+        seriesId: e.v2_seasons?.v2_series?.id || null,
+        year: e.v2_seasons?.year || (e.start_date ? Number(e.start_date.slice(0, 4)) : 0),
+        circuitName: e.v2_circuits?.name || null,
+        country: e.v2_circuits?.country || null,
+        date: e.start_date,
+        endDate: e.end_date,
+        seasonId: e.season_id,
+        round: e.round_number,
+      }));
+      setEvents(list);
+
+      // Default season: the current year if it has events, else the most recent one
+      const ys = [...new Set(list.map((e) => e.year))].sort((a, b) => b - a);
+      const thisYear = new Date().getFullYear();
+      setYear((cur) => cur || String(ys.includes(thisYear) ? thisYear : ys[0] ?? thisYear));
+
+      const past = list.filter((e) => e.date && e.date <= today);
+      const [w, cc] = await Promise.all([
+        fetchClassWinners(past.map((e) => e.id), 1),
+        fetchSeasonClassColors([...new Set(list.map((e) => e.seasonId))]),
+      ]);
+      setWinners(w);
+      setColors(cc);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      const today = new Date().toISOString().split("T")[0];
+  const years = useMemo(() => [...new Set((events || []).map((e) => e.year))].sort((a, b) => b - a), [events]);
+  const upcomingAll = useMemo(() => (events || []).filter((e) => !e.date || e.date > today), [events, today]);
+  const lastRun = useMemo(() => [...(events || [])].reverse().find((e) => e.date && e.date <= today), [events, today]);
 
-      let query = supabase
-        .from("race_events")
-        .select("id, event_name, series_name, season_year, category, location, event_date, ticket_url, circuit_id, series_id")
-        .gte("event_date", today)
-        .order("event_date", { ascending: true });
+  const yearEvents = useMemo(() => (events || []).filter((e) => String(e.year) === year), [events, year]);
 
-      if (category !== "all") query = query.eq("category", category as any);
-      if (seriesFilter) query = query.eq("series_name", seriesFilter);
+  const filtered = useMemo(() => {
+    let list = yearEvents;
+    if (seriesFilter !== "all") list = list.filter((e) => e.seriesId === seriesFilter);
+    const q = search.trim().toLowerCase();
+    if (q)
+      list = list.filter(
+        (e) =>
+          e.name.toLowerCase().includes(q) ||
+          (e.series || "").toLowerCase().includes(q) ||
+          (e.circuitName || "").toLowerCase().includes(q) ||
+          (e.country || "").toLowerCase().includes(q),
+      );
+    return list;
+  }, [yearEvents, seriesFilter, search]);
 
-      const { data } = await query.limit(200);
-      let filtered = (data as RaceEvent[]) ?? [];
+  const months = useMemo(() => {
+    const m = new Map<string, CalEvent[]>();
+    for (const e of filtered) {
+      const key = e.date ? toDate(e.date).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) : "Date TBA";
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(e);
+    }
+    return [...m.entries()];
+  }, [filtered]);
 
-      if (search) {
-        const lower = search.toLowerCase();
-        filtered = filtered.filter(e =>
-          e.event_name.toLowerCase().includes(lower) ||
-          e.series_name.toLowerCase().includes(lower) ||
-          (e.location || "").toLowerCase().includes(lower)
-        );
-      }
+  const seriesInYear = useMemo(() => {
+    const ids = new Set(yearEvents.map((e) => e.seriesId));
+    return series.filter((s) => ids.has(s.id));
+  }, [series, yearEvents]);
 
-      setEvents(filtered);
-      setLoading(false);
-    };
-
-    const debounce = setTimeout(fetchEvents, 300);
-    return () => clearTimeout(debounce);
-  }, [search, category, seriesFilter]);
-
-  // Group by month
-  const monthGroups = events.reduce<Record<string, RaceEvent[]>>((acc, ev) => {
-    const date = ev.event_date ? new Date(ev.event_date + "T00:00:00Z") : null;
-    const key = date
-      ? date.toLocaleDateString("en-US", { year: "numeric", month: "long", timeZone: "UTC" })
-      : "Date TBD";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(ev);
-    return acc;
-  }, {});
+  const yearUpcoming = yearEvents.filter((e) => !e.date || e.date > today).length;
+  const nextUp = upcomingAll[0];
 
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead title="Upcoming Races" description="Browse upcoming motorsport events. Filter by series, category, or search by name." canonical="/calendar" />
+      <SEOHead title="Race Calendar" description="Season schedules for every series — upcoming rounds and completed races with class winners." canonical="/calendar" />
       <Header />
 
-      <section className="pt-24 pb-10 bg-card border-b border-border">
-        <div className="container">
-          <h1 className="font-display text-3xl font-bold text-foreground">Upcoming Races</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Browse upcoming motorsport events. Filter by series, category, or search by name.
-          </p>
-        </div>
-      </section>
+      <PageHeader
+        kicker="Schedule"
+        title="Calendar"
+        meta={
+          events && (
+            <>
+              <span>
+                <span className="num text-foreground">{yearEvents.length}</span> events in <span className="num text-foreground">{year}</span>
+              </span>
+              <span>
+                <span className="num text-foreground">{yearEvents.length - yearUpcoming}</span> completed
+              </span>
+              <span>
+                <span className={cn("num", yearUpcoming ? "text-primary" : "text-foreground")}>{yearUpcoming}</span> upcoming
+              </span>
+            </>
+          )
+        }
+        actions={
+          years.length > 1 && (
+            <Segmented label="Season" value={year} onChange={setYear} options={years.map((y) => ({ value: String(y), label: <span className="num">{y}</span> }))} />
+          )
+        }
+      />
 
-      <div className="container py-8">
-        {/* Filters */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-8">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search events, locations, cities…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="w-full sm:w-[180px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={seriesFilter || "all"} onValueChange={v => setSeriesFilter(v === "all" ? "" : v)}>
-            <SelectTrigger className="w-full sm:w-[220px]"><SelectValue placeholder="All Series" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Series</SelectItem>
-              {allSeries.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Timeline */}
-        {loading ? (
-          <p className="text-center text-muted-foreground py-12">Loading events…</p>
-        ) : events.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground">No upcoming events found.</p>
-            <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or check past results.</p>
-          </div>
-        ) : (
-          <div className="space-y-10">
-            {Object.entries(monthGroups).map(([month, monthEvents]) => (
-              <div key={month}>
-                <h2 className="font-display text-lg font-semibold text-foreground mb-4 border-b border-border pb-2">{month}</h2>
-                <div className="space-y-3">
-                  {monthEvents.map(ev => {
-                    const date = ev.event_date ? new Date(ev.event_date + "T00:00:00Z") : null;
-                    return (
-                      <div key={ev.id} className="flex gap-4 items-start rounded-lg border border-border bg-card p-4 hover:border-primary/30 transition-colors">
-                        {/* Date badge */}
-                        {date && (
-                          <div className="flex flex-col items-center justify-center w-14 shrink-0 text-center">
-                            <span className="text-xs font-medium text-muted-foreground uppercase">
-                              {date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}
-                            </span>
-                            <span className="font-display text-2xl font-bold text-foreground leading-none">
-                              {date.getUTCDate()}
-                            </span>
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <Link to={`/event/${ev.id}`} className="font-display text-base font-semibold text-card-foreground hover:text-primary transition-colors">
-                            {ev.event_name}
-                          </Link>
-                          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                            {ev.series_id ? (
-                              <Link to={`/series/${ev.series_id}`} className="hover:text-primary transition-colors">{ev.series_name}</Link>
-                            ) : (
-                              <span>{ev.series_name}</span>
-                            )}
-                            {ev.location && (
-                              ev.circuit_id ? (
-                                <Link to={`/circuit/${ev.circuit_id}`} className="hover:text-primary transition-colors">{ev.location}</Link>
-                              ) : (
-                                <span>{ev.location}</span>
-                              )
-                            )}
-                            {ev.category && <Badge variant="secondary" className="text-xs">{categoryLabels[ev.category] || ev.category}</Badge>}
-                          </div>
-                        </div>
-                        {ev.ticket_url && (
-                          <a
-                            href={ev.ticket_url}
-                            target="_blank"
-                            rel="noopener"
-                            className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                          >
-                            <Ticket className="h-3.5 w-3.5" /> Tickets
-                          </a>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+      <main className="container py-8">
+        {/* Next-up banner, or a clear note when nothing is scheduled */}
+        {events &&
+          (nextUp ? (
+            <Link
+              to={`/events/${nextUp.id}`}
+              className="group mb-6 flex flex-col gap-1 rounded border border-primary/40 bg-card px-4 py-3 transition-colors hover:bg-accent/60 sm:flex-row sm:items-center sm:gap-4"
+            >
+              <span className="label-caps flex items-center gap-2 text-primary">
+                <span className="h-1.5 w-1.5 rounded-full bg-signal" /> Next up
+              </span>
+              <span className="font-display text-base font-bold uppercase leading-tight group-hover:text-primary">{nextUp.name}</span>
+              <span className="num text-xs text-muted-foreground sm:ml-auto">{formatDateRange(nextUp.date, nextUp.endDate)}</span>
+            </Link>
+          ) : (
+            <div className="mb-6 flex items-start gap-3 rounded border bg-card px-4 py-3">
+              <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div className="text-sm">
+                <span className="font-display font-bold uppercase tracking-wide text-foreground">No upcoming events scheduled.</span>{" "}
+                <span className="text-muted-foreground">
+                  New rounds appear here as soon as they are added.
+                  {lastRun && (
+                    <>
+                      {" "}
+                      Most recent:{" "}
+                      <Link to={`/events/${lastRun.id}`} className="text-foreground underline-offset-2 hover:text-primary hover:underline">
+                        {lastRun.name}
+                      </Link>{" "}
+                      <span className="num">({formatDateRange(lastRun.date, lastRun.endDate)})</span>.
+                    </>
+                  )}
+                </span>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+
+        <Toolbar>
+          <FilterInput value={search} onChange={setSearch} placeholder="Filter by event, circuit or country…" className="flex-1" />
+          {seriesInYear.length > 1 && (
+            <Segmented
+              label="Series"
+              value={seriesFilter}
+              onChange={setSeriesFilter}
+              options={[
+                { value: "all", label: "All series" },
+                ...seriesInYear.map((s) => ({ value: s.id, label: s.short_name || s.name, count: yearEvents.filter((e) => e.seriesId === s.id).length })),
+              ]}
+            />
+          )}
+        </Toolbar>
+
+        <div className="mt-8">
+          {!events ? (
+            <RowsSkeleton rows={6} />
+          ) : filtered.length === 0 ? (
+            <EmptyState title="No events found">
+              {search || seriesFilter !== "all" ? "Try clearing the filters." : `No events are published for ${year} yet.`}
+            </EmptyState>
+          ) : (
+            <div className="space-y-8">
+              {months.map(([month, list]) => (
+                <section key={month}>
+                  <div className="mb-3 flex items-end justify-between gap-4 border-b pb-2">
+                    <h2 className="font-display text-xl font-bold uppercase tracking-wide">{month}</h2>
+                    <Count n={list.length} label={list.length === 1 ? "event" : "events"} />
+                  </div>
+                  <div className="grid gap-px overflow-hidden rounded border bg-border">
+                    <EventListHead lead="Day" winners="Status / class winners" />
+                    {list.map((ev) => {
+                      const past = !!ev.date && ev.date <= today;
+                      const live = past && !!ev.endDate && ev.endDate >= today;
+                      return (
+                        <EventCard
+                          key={ev.id}
+                          event={ev}
+                          showSeries
+                          hideYear
+                          colors={colors[ev.seasonId]}
+                          winners={past ? (winners ? winners[ev.id] || [] : undefined) : undefined}
+                          aside={
+                            !past ? (
+                              <UpcomingTag />
+                            ) : live ? (
+                              <span className="label-caps flex items-center gap-1.5 text-pb">
+                                <span className="h-1.5 w-1.5 rounded-full bg-pb" /> On track now
+                              </span>
+                            ) : undefined
+                          }
+                          lead={<DayBlock start={ev.date} end={ev.endDate} past={past} />}
+                        />
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
       <Footer />
     </div>
   );

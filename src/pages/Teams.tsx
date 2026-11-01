@@ -1,78 +1,181 @@
-import { useState, useEffect } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Search as SearchIcon, Car } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import FlagImage from "@/components/FlagImage";
 import SEOHead from "@/components/SEOHead";
+import { EmptyState, FilterInput, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
+import { Count, Segmented, Toolbar } from "@/components/browse/Segmented";
+import { fetchTeamSeasonCars, uniqSorted } from "@/components/browse/directory-data";
+
+interface TeamRow {
+  id: string;
+  name: string;
+  shortName: string | null;
+  nationality: string | null;
+  series: { id: string; label: string }[];
+  cars: { id: string; label: string }[];
+  years: number[];
+}
 
 const TeamsPage = () => {
-  const [teams, setTeams] = useState<any[]>([]);
+  const [teams, setTeams] = useState<TeamRow[] | null>(null);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [seriesFilter, setSeriesFilter] = useState("all");
 
   useEffect(() => {
-    const fetchTeams = async () => {
-      setLoading(true);
-      let query = supabase.from("v2_teams").select("*").order("full_name");
-      if (search) query = query.ilike("full_name", `%${search}%`);
-      const { data } = await query;
-      setTeams(data ?? []);
-      setLoading(false);
-    };
-    const debounce = setTimeout(fetchTeams, 300);
-    return () => clearTimeout(debounce);
-  }, [search]);
+    Promise.all([
+      supabase.from("v2_teams").select("id, full_name, short_name, nationality").order("full_name"),
+      supabase.from("v2_cars").select("id, manufacturer, model_name"),
+      fetchTeamSeasonCars(),
+    ]).then(([{ data: t }, { data: c }, links]) => {
+      const carLabel = Object.fromEntries(((c || []) as any[]).map((x) => [x.id, [x.manufacturer?.trim(), x.model_name].filter(Boolean).join(" ")]));
+      setTeams(
+        ((t || []) as any[]).map((team) => {
+          const mine = links.filter((l) => l.teamId === team.id);
+          const series = new Map<string, string>();
+          for (const l of mine) if (l.seriesId) series.set(l.seriesId, l.seriesShort || "");
+          return {
+            id: team.id,
+            name: team.full_name,
+            shortName: team.short_name,
+            nationality: team.nationality,
+            series: [...series.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label)),
+            cars: uniqSorted(mine.map((l) => l.carId)).map((id) => ({ id, label: carLabel[id] || "Unknown car" })),
+            years: uniqSorted(mine.map((l) => l.year), (a, b) => b - a),
+          };
+        }),
+      );
+    });
+  }, []);
+
+  const seriesOptions = useMemo(() => {
+    const m = new Map<string, { label: string; n: number }>();
+    for (const t of teams || []) for (const s of t.series) m.set(s.id, { label: s.label, n: (m.get(s.id)?.n || 0) + 1 });
+    return [...m.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label));
+  }, [teams]);
+
+  const filtered = useMemo(() => {
+    let list = teams || [];
+    if (seriesFilter !== "all") list = list.filter((t) => t.series.some((s) => s.id === seriesFilter));
+    const q = search.trim().toLowerCase();
+    if (q)
+      list = list.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          (t.shortName || "").toLowerCase().includes(q) ||
+          t.cars.some((c) => c.label.toLowerCase().includes(q)),
+      );
+    return list;
+  }, [teams, search, seriesFilter]);
 
   return (
     <div className="min-h-screen bg-background">
-      <SEOHead title="Teams" description="Browse motorsport teams." canonical="/teams" />
+      <SEOHead title="Teams" description="Every team in the database, with the series they race in and the cars they run." canonical="/teams" />
       <Header />
-      <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
-        <div className="container">
-          <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>Teams</h1>
-          <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>Browse motorsport teams.</p>
-        </div>
-      </section>
+      <PageHeader
+        kicker="Directory"
+        title="Teams"
+        meta={
+          teams && (
+            <>
+              <span>
+                <span className="num text-foreground">{teams.length}</span> teams
+              </span>
+              <span>
+                <span className="num text-foreground">{seriesOptions.length}</span> series
+              </span>
+            </>
+          )
+        }
+      />
 
-      <div className="container py-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-8">
-          <div className="relative flex-1">
-            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search by team name…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
-          </div>
-        </div>
+      <main className="container py-8">
+        <Toolbar>
+          <FilterInput value={search} onChange={setSearch} placeholder="Filter by team or car…" className="flex-1" />
+          {seriesOptions.length > 1 && (
+            <Segmented
+              label="Series"
+              value={seriesFilter}
+              onChange={setSeriesFilter}
+              options={[{ value: "all", label: "All" }, ...seriesOptions.map(([id, s]) => ({ value: id, label: s.label, count: s.n }))]}
+            />
+          )}
+        </Toolbar>
 
-        {loading ? (
-          <p className="text-center text-muted-foreground py-12">Loading teams…</p>
-        ) : teams.length === 0 ? (
-          <div className="text-center py-16"><p className="text-muted-foreground">No teams found.</p></div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teams.map((team: any) => (
-              <Link key={team.id} to={`/team/${team.id}`} className="group rounded-lg border border-border bg-card p-5 shadow-sm transition-all hover:shadow-md hover:border-primary/30">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <Car className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-display text-base font-semibold text-card-foreground group-hover:text-primary transition-colors truncate">
-                      {team.full_name}
-                    </h3>
-                    {team.nationality && (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                        <FlagImage nationality={team.nationality} size={16} /> {team.nationality}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="mt-6">
+          {!teams ? (
+            <RowsSkeleton rows={10} />
+          ) : filtered.length === 0 ? (
+            <EmptyState title="No teams found">{search ? <>Nothing matches “{search}”.</> : "Try another series."}</EmptyState>
+          ) : (
+            <>
+              <div className="mb-2 flex justify-end">
+                <Count n={filtered.length} label={filtered.length === 1 ? "team" : "teams"} />
+              </div>
+              <div className="overflow-hidden rounded border bg-card">
+                <table className="data-table table-fixed">
+                  <thead>
+                    <tr>
+                      <th>Team</th>
+                      <th className="hidden w-40 md:table-cell">Series</th>
+                      <th className="hidden lg:table-cell">Cars</th>
+                      <th className="w-28 text-right sm:w-32">Seasons</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((t) => (
+                      <tr key={t.id} className="group">
+                        <td className="py-2">
+                          <Link to={`/team/${t.id}`} className="flex min-w-0 items-center gap-2 font-medium text-foreground group-hover:text-primary">
+                            {t.nationality && <FlagImage nationality={t.nationality} size={16} />}
+                            <span className="truncate">{t.name}</span>
+                          </Link>
+                          {(t.series.length > 0 || t.cars.length > 0) && (
+                            <div className="mt-0.5 truncate text-xs text-muted-foreground lg:hidden">
+                              <span className="md:hidden">{t.series.map((s) => s.label).join(", ")}</span>
+                              {t.series.length > 0 && t.cars.length > 0 && <span className="md:hidden"> · </span>}
+                              {t.cars.map((c) => c.label).join(", ")}
+                            </div>
+                          )}
+                        </td>
+                        <td className="hidden md:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {t.series.length ? (
+                              t.series.map((s) => (
+                                <Link key={s.id} to={`/series/${s.id}`} className="label-caps rounded-sm border px-1.5 py-0.5 hover:border-foreground/30 hover:text-foreground">
+                                  {s.label}
+                                </Link>
+                              ))
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="hidden truncate text-muted-foreground lg:table-cell">
+                          {t.cars.length
+                            ? t.cars.map((c, i) => (
+                                <span key={c.id}>
+                                  {i > 0 && ", "}
+                                  <Link to={`/car/${c.id}`} className="hover:text-foreground">
+                                    {c.label}
+                                  </Link>
+                                </span>
+                              ))
+                            : "—"}
+                        </td>
+                        <td className="num whitespace-nowrap text-right text-xs text-muted-foreground">{t.years.length ? t.years.join(" · ") : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
       <Footer />
     </div>
   );
