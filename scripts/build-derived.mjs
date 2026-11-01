@@ -7,6 +7,7 @@
  *   public/data/derived/records/{drivers,teams,cars}/<id>.json — one entity's record (every race
  *     entry, names it references, driver poles, fingerprint and championship places)
  *   public/data/derived/records/index.json — compact directory for /drivers, /teams, /cars, Compare
+ *   public/data/credits.md — docs/CREDITS.md for the /credits page
  * Run after build-data.mjs (npm scripts do this automatically).
  * Requires: node --experimental-strip-types
  */
@@ -16,6 +17,15 @@ import { openStore, ROOT } from "./lib/local-store.mjs";
 import { digestEvent } from "../src/lib/insights.ts";
 import { buildChampionship, loadSeasonStandingsInput } from "../src/lib/season-standings.ts";
 import { buildRecordBook, buildRecordIndex, loadRecordTables, sliceRecordBook } from "../src/lib/record-book.ts";
+
+// Credits page (/credits) reads docs/CREDITS.md, published as public/data/credits.md.
+{
+  const src = path.join(ROOT, "docs", "CREDITS.md");
+  const dest = path.join(ROOT, "public", "data", "credits.md");
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  if (fs.existsSync(src)) fs.copyFileSync(src, dest);
+  else fs.rmSync(dest, { force: true });
+}
 
 const store = openStore();
 const all = async (t) => (await store.from(t).select("*")).data || [];

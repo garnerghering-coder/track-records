@@ -45,8 +45,8 @@ const Index = () => {
   return (
     <div className="min-h-screen">
       <SEOHead
-        title="Track Records – The record of sportscar racing"
-        description="Replay every race, read the story in the numbers, and follow every driver's record across IMSA and beyond."
+        title="Track Records – The record of motorsport, lap by lap"
+        description="Replay every race, read the story in the numbers, and follow every driver's record across every series on the record."
         canonical="/"
       />
       <Header />

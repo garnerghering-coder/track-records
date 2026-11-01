@@ -1,6 +1,6 @@
 # Track Records
 
-Multi-class sportscar results, timing analysis and driver records — IMSA and beyond.
+The record of motorsport, lap by lap: results, race replays, championships and career records for every series on the record.
 
 The site is a static React app. **All data lives in this repository** under `data/`; there is no database server. Every data change is a commit you can review and revert.
 
@@ -14,6 +14,8 @@ The site is a static React app. **All data lives in this repository** under `dat
 | Scoring | `supabase/functions/_shared/fingerprint-math.ts`, `driver-fingerprint.ts` (driver & circuit fingerprints), `imsa-points.ts` (official points rules), `src/lib/standings.ts` (championship standings) |
 | Design | `docs/REIMAGINE.md` (product + visual identity), `src/index.css`, `src/site/` |
 | Race digests | `src/lib/insights.ts` → `public/data/derived/digests.json` at build time (winners, podiums, insights, stats) |
+| Records | `src/lib/record-book.ts` → `public/data/derived/records/` at build time (one small file per driver, team and car, plus a directory index) |
+| Credits | `docs/CREDITS.md` → `public/data/credits.md` → `/credits` |
 | Race Replay | `src/site/race/replay.ts` (pure engine) + `Replay.tsx` |
 | Data sources | `docs/DATA-SOURCES.md` — importable series and events from official timing |
 
