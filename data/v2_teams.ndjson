@@ -48,8 +48,10 @@
 {"id":"3e816149-5176-4d99-bf32-7b9eab2a1db2","full_name":"CETILAR RACING","short_name":null,"nationality":null,"created_at":"2026-02-22T17:00:36.57871+00:00","updated_at":"2026-02-22T17:00:36.57871+00:00"}
 {"full_name":"Performance Tech Motorsports","id":"40a32628-7ca8-491a-a967-a881dd7e40e4","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
 {"full_name":"Korthoff/Preston Motorsports","id":"40f24d3e-76d4-4234-8136-bfc974a47775","created_at":"2026-11-01T15:10:00.513Z","updated_at":"2026-11-01T15:10:00.513Z"}
+{"full_name":"HMD Motorsports","short_name":null,"nationality":null,"id":"442d6f1f-ac6e-4fd3-9deb-d20fa3f4e3ca","created_at":"2026-11-01T19:40:42.638Z","updated_at":"2026-11-01T19:40:42.638Z"}
 {"full_name":"PREMA Racing","short_name":null,"nationality":null,"id":"468003cd-5965-414e-aede-2c0c2887a31c","created_at":"2026-11-01T19:40:17.795Z","updated_at":"2026-11-01T19:40:17.795Z"}
 {"id":"47c95e26-6043-430a-b174-9bc6c351b029","full_name":"Proton Competition","short_name":null,"nationality":null,"created_at":"2026-02-22T17:00:36.57871+00:00","updated_at":"2026-02-22T17:00:36.57871+00:00"}
+{"full_name":"Abel Motorsports","short_name":null,"nationality":null,"id":"48a73863-5e21-4f7b-95e0-eb61931666cc","created_at":"2026-11-01T19:40:42.625Z","updated_at":"2026-11-01T19:40:42.625Z"}
 {"full_name":"Iron Lynx","id":"49471d01-831c-4451-b5fc-2b89e957d8c0","created_at":"2026-11-01T15:10:00.513Z","updated_at":"2026-11-01T15:10:00.513Z"}
 {"full_name":"Forbush Performance","id":"49e426ee-da2c-468c-97b4-04f555662a7b","created_at":"2026-11-01T15:39:20.645Z","updated_at":"2026-11-01T15:39:20.645Z"}
 {"id":"4aff29cd-bc02-420a-b411-98eb32466488","full_name":"Baker Racing","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-02-24T18:36:02.353922+00:00"}
