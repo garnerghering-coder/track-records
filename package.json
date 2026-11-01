@@ -14,7 +14,8 @@
     "data": "node scripts/build-data.mjs && node --experimental-strip-types --no-warnings scripts/build-derived.mjs",
     "predev": "node scripts/build-data.mjs && node --experimental-strip-types --no-warnings scripts/build-derived.mjs",
     "prebuild": "node scripts/build-data.mjs && node --experimental-strip-types --no-warnings scripts/build-derived.mjs",
-    "prebuild:dev": "node scripts/build-data.mjs && node --experimental-strip-types --no-warnings scripts/build-derived.mjs"
+    "prebuild:dev": "node scripts/build-data.mjs && node --experimental-strip-types --no-warnings scripts/build-derived.mjs",
+    "postbuild": "node scripts/build-routes.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
