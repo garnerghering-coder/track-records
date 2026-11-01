@@ -90,7 +90,16 @@ const SeriesProfile = () => {
   const [active, setActive] = useState<number | null>(null);
   useEffect(() => setActive(null), [cls, mode, season?.id]);
 
-  const finished = season ? season.year < new Date().getFullYear() : false;
+  // A season is over once its year has passed, or once its last round (a
+  // September-or-later finale, e.g. Petit Le Mans) is behind us.
+  const finished = useMemo(() => {
+    if (!season) return false;
+    if (season.year < new Date().getFullYear()) return true;
+    const today = new Date().toISOString().slice(0, 10);
+    const dates = seasonEvents.map((e) => e.end_date || e.start_date || "").filter(Boolean).sort();
+    const last = dates[dates.length - 1];
+    return !!last && last < today && Number(last.slice(5, 7)) >= 9;
+  }, [season, seasonEvents]);
   const winnersCount = useMemo(() => {
     const set = new Set<string>();
     for (const e of seasonEvents) for (const r of digests?.[e.id]?.races || []) for (const w of r.winners) set.add(`${w.className}|${[...w.driverIds].sort().join(",")}`);
