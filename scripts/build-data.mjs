@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Prepare the repo data store (data/) for the static site:
- *   public/data/<table>.ndjson, public/data/<table>/<session_id>.ndjson
+ *   public/data/<table>.json, public/data/<table>/<session_id>.json (JSON arrays)
  *   public/data/_schema.json  — table list, partitions and foreign keys
  * Foreign keys are read from the generated Supabase types so nested
  * selects like `v2_events(v2_seasons(year))` resolve the same way.
@@ -43,7 +43,21 @@ export function readSchema() {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   fs.rmSync(OUT, { recursive: true, force: true });
-  fs.cpSync(SRC, OUT, { recursive: true, filter: (p) => !p.endsWith("_manifest.json") });
+  // Publish each table as a JSON array (.json): static hosts such as GitHub Pages
+  // gzip application/json (~5x smaller) but serve .ndjson uncompressed.
+  const publish = (from, to) => {
+    const lines = fs.readFileSync(from, "utf8").split("\n").filter(Boolean);
+    fs.writeFileSync(to, `[${lines.join(",")}]`);
+  };
+  fs.mkdirSync(OUT, { recursive: true });
+  for (const entry of fs.readdirSync(SRC, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith(".ndjson")) publish(path.join(SRC, entry.name), path.join(OUT, entry.name.replace(/\.ndjson$/, ".json")));
+    if (entry.isDirectory()) {
+      fs.mkdirSync(path.join(OUT, entry.name), { recursive: true });
+      for (const f of fs.readdirSync(path.join(SRC, entry.name)))
+        if (f.endsWith(".ndjson")) publish(path.join(SRC, entry.name, f), path.join(OUT, entry.name, f.replace(/\.ndjson$/, ".json")));
+    }
+  }
   const schema = readSchema();
   fs.writeFileSync(path.join(OUT, "_schema.json"), JSON.stringify(schema));
   console.log(`data: ${Object.keys(schema.tables).length} tables, ${schema.relationships.length} relationships → public/data`);

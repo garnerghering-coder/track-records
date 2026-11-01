@@ -11,7 +11,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
-import { LocalDB, parseNdjson, type Loader, type Schema } from "./local-db";
+import { LocalDB, type Loader, type Schema } from "./local-db";
 
 const BASE = `${import.meta.env.BASE_URL || "/"}data/`.replace(/\/{2,}/g, "/");
 
@@ -22,10 +22,10 @@ const browserLoader: Loader = {
     return (await res.json()) as Schema;
   },
   async load(table, partitions) {
-    const url = partitions ? `${BASE}${table}/${encodeURIComponent(partitions[0])}.ndjson` : `${BASE}${table}.ndjson`;
+    const url = partitions ? `${BASE}${table}/${encodeURIComponent(partitions[0])}.json` : `${BASE}${table}.json`;
     const res = await fetch(url);
     if (!res.ok) return [];
-    return parseNdjson(await res.text());
+    return (await res.json()) as Record<string, unknown>[];
   },
 };
 

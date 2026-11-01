@@ -12,7 +12,9 @@ The site is a static React app. **All data lives in this repository** under `dat
 | Images | `public/media/` (car liveries, circuit layouts) |
 | Query engine | `src/integrations/supabase/local-db.ts` — runs the same supabase-js style queries the pages use, over the data files, in the browser and in Node |
 | Scoring | `supabase/functions/_shared/fingerprint-math.ts`, `driver-fingerprint.ts` (driver & circuit fingerprints), `imsa-points.ts` (official points rules), `src/lib/standings.ts` (championship standings) |
-| Design system | `docs/REDESIGN.md`, `src/index.css`, `src/components/tr/` |
+| Design | `docs/REIMAGINE.md` (product + visual identity), `src/index.css`, `src/site/` |
+| Race digests | `src/lib/insights.ts` → `public/data/derived/digests.json` at build time (winners, podiums, insights, stats) |
+| Race Replay | `src/site/race/replay.ts` (pure engine) + `Replay.tsx` |
 | Data sources | `docs/DATA-SOURCES.md` — importable series and events from official timing |
 
 ## Develop
