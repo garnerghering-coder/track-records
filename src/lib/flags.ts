@@ -9,8 +9,9 @@ export function normalizeFlag(state: string | null | undefined): FlagKey {
   const s = (state || "").toUpperCase().replace(/[\s_-]+/g, " ").trim();
   if (/VSC|VIRTUAL/.test(s)) return "VSC";
   if (/\bSC\b|SAFETY/.test(s)) return "SC";
-  if (/RED/.test(s)) return "RED";
+  // chequered first: "CHEQUERED" contains the letters "RED"
   if (/CHEQ|CHECK|FINISH/.test(s)) return "CHEQUERED";
+  if (/\bRED\b/.test(s)) return "RED";
   if (/CODE ?60/.test(s)) return "CODE60";
   if (/FCY|FULL/.test(s)) return "FCY";
   if (/CAUTION/.test(s)) return "CAUTION";

@@ -73,6 +73,12 @@ export default function Replay({
   const rowH = rowHeight(model.cars.length);
   const flag = flagAt(model, t);
   const fs = flagStyle(flag);
+  const periods = useMemo(() => {
+    const lapAt = (time: number) => Math.max(1, model.leaderCrossings.filter((x) => x <= time).length + 1);
+    return model.flags
+      .filter((f) => !/GREEN/i.test(f.state) && normalizeFlag(f.state) !== "CHEQUERED" && f.end - f.start >= 5)
+      .map((f) => ({ ...f, fromLap: lapAt(f.start), toLap: lapAt(f.end) }));
+  }, [model]);
   const msgs = useMemo(() => messagesUntil(model, t, 6), [model, t]);
   const leaderLaps = rows.length ? Math.max(...rows.map((r) => r.laps)) : 0;
   const totalLaps = model.leaderCrossings.length;
@@ -155,8 +161,8 @@ export default function Replay({
         </div>
 
         {/* timeline */}
-        <div className="relative mt-6 h-10">
-          <div className="absolute inset-x-0 top-3 h-4 overflow-hidden rounded-full bg-ink/[0.06]">
+        <div className="relative mt-6 h-12">
+          <div className="absolute inset-x-0 top-3 h-6 overflow-hidden rounded-md bg-ink/[0.06]">
             {model.flags
               .filter((f) => !/GREEN/i.test(f.state))
               .map((f, i) => (
@@ -175,7 +181,7 @@ export default function Replay({
             .map((m, i) => (
               <span key={i} className="absolute top-0 h-1.5 w-px bg-ink/40" style={{ left: `${(m.t / model.duration) * 100}%` }} />
             ))}
-          <span className="pointer-events-none absolute top-1 h-8 w-[3px] -translate-x-1/2 rounded-full bg-ink shadow" style={{ left: `${(t / model.duration) * 100}%` }} />
+          <span className="pointer-events-none absolute top-1 h-10 w-[3px] -translate-x-1/2 rounded-full bg-ink shadow" style={{ left: `${(t / model.duration) * 100}%` }} />
           <input
             type="range"
             min={0}
@@ -191,6 +197,31 @@ export default function Replay({
           <div className="num absolute -bottom-3 left-0 text-[10px] text-ink-3">START</div>
           <div className="num absolute -bottom-3 right-0 text-[10px] text-ink-3">FINISH</div>
         </div>
+
+        {/* flag periods: what happened, when, and a way to jump there */}
+        {periods.length > 0 && (
+          <div className="mt-6 flex flex-wrap gap-2">
+            <span className="eyebrow mr-1 self-center">{periods.length} {periods.length === 1 ? "neutralisation" : "neutralisations"}</span>
+            {periods.map((p, i) => {
+              const st = flagStyle(p.state);
+              const active = t >= p.start && t < p.end;
+              return (
+                <button
+                  key={i}
+                  onClick={() => setT(Math.max(0, p.start - 3))}
+                  title={`Jump to ${st.label.toLowerCase()} at ${clock(p.start)}`}
+                  className={cn("inline-flex h-8 items-center gap-2 rounded-full border px-3 text-[12px] transition-colors hover:border-ink/40", active && "border-ink bg-ink/[0.06]")}
+                >
+                  <span className="h-3 w-3 rounded-sm" style={{ background: st.fill || st.bg }} />
+                  <span className="font-medium">{st.label}</span>
+                  <span className="num text-ink-3">
+                    {p.fromLap === p.toLap ? `L${p.fromLap}` : `L${p.fromLap}–${p.toLap}`} · {clock(p.end - p.start)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-[1fr_320px]">
