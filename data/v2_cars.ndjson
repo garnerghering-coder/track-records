@@ -10,6 +10,7 @@
 {"model_name":"Vantage GT4","manufacturer":"Aston Martin","id":"323ad665-4800-4009-b896-eb5136092fa4","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
 {"id":"37e4b7f1-9199-46a6-8e52-c3c33c80a43f","model_name":"Mustang GT3","manufacturer":"Ford","created_at":"2026-02-22T12:42:28.474547+00:00","updated_at":"2026-02-22T14:59:52.087068+00:00"}
 {"id":"39b3b17e-f521-4e09-ada3-0ffa8c43ee07","model_name":"720S GT3 EVO","manufacturer":"McLaren","created_at":"2026-02-22T12:42:27.573032+00:00","updated_at":"2026-02-22T15:00:09.144795+00:00"}
+{"manufacturer":"Dallara","model_name":"IR-18 Chevrolet","id":"4130c2ec-2cd8-4fd8-a64d-65f232d4e031","created_at":"2026-11-01T19:39:53.836Z","updated_at":"2026-11-01T19:39:53.836Z"}
 {"id":"42666022-325a-471d-9cb9-3326b4b383c7","model_name":"Elantra N TCR","manufacturer":"Hyundai","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:13.4725+00:00"}
 {"id":"45c1f89b-df8b-4561-81b3-ecade974f1f3","model_name":"RC F GT3","manufacturer":"Lexus","created_at":"2026-02-22T12:42:32.50955+00:00","updated_at":"2026-02-22T15:00:03.053832+00:00"}
 {"id":"57f225e6-35bc-4522-9b17-235ced92abc0","model_name":"296 GT3 EVO","manufacturer":"Ferrari","created_at":"2026-02-22T12:42:27.294993+00:00","updated_at":"2026-02-22T14:59:46.832118+00:00"}
@@ -40,3 +41,4 @@
 {"model_name":"Corvette Z06 GT3.R","manufacturer":"Chevrolet","id":"e852acf8-da38-41f0-a6cf-cf35dc1b2e2c","created_at":"2026-11-01T14:46:09.036Z","updated_at":"2026-11-01T14:46:09.036Z"}
 {"id":"f349c8aa-ec9e-48f9-ad5b-b715e0b34130","model_name":"Valkyrie","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:23.914782+00:00","updated_at":"2026-02-22T14:59:14.576034+00:00"}
 {"model_name":"D08","manufacturer":"Duqueine","id":"f82b96d7-01f9-4c55-8514-89d36e3379c6","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
+{"manufacturer":"Dallara","model_name":"IR-18 Honda","id":"ff7b72e2-fbbb-4681-abec-b5f660ad6909","created_at":"2026-11-01T19:39:53.828Z","updated_at":"2026-11-01T19:39:53.828Z"}

@@ -1,5 +1,6 @@
 {"full_name":"MBM Performance","id":"0075b61f-2f1d-446b-b217-59d8d4374989","created_at":"2026-11-01T15:33:32.063Z","updated_at":"2026-11-01T15:33:32.063Z"}
 {"id":"00a102a1-bb6f-41bb-bf90-33542d88f97e","full_name":"Pfaff Motorsports","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:31.905488+00:00","updated_at":"2026-02-22T12:42:31.905488+00:00"}
+{"full_name":"Andretti Global","short_name":null,"nationality":null,"id":"00e22d5e-6893-4d2d-9244-c038e5ae08bc","created_at":"2026-11-01T19:39:53.850Z","updated_at":"2026-11-01T19:39:53.850Z"}
 {"full_name":"OORE","id":"024386cf-e4ad-4b89-a09e-3573a920f750","created_at":"2026-11-01T15:28:58.901Z","updated_at":"2026-11-01T15:28:58.901Z"}
 {"full_name":"Rick Ware Racing LLC","id":"02e65943-bf9b-443c-ae30-f2f6babc6544","created_at":"2026-11-01T15:32:03.198Z","updated_at":"2026-11-01T15:32:03.198Z"}
 {"full_name":"Escuderia ABRO","id":"05b845a4-e324-4e72-8717-3a142d82ae72","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
@@ -13,6 +14,7 @@
 {"id":"1025b261-4f44-411a-ae4c-035d277b574b","full_name":"Paul Miller Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:33.88411+00:00","updated_at":"2026-02-22T12:42:33.88411+00:00"}
 {"full_name":"RaceWife Racing","id":"10324958-bf20-4ae4-9316-73108155ebfb","created_at":"2026-11-01T15:28:58.901Z","updated_at":"2026-11-01T15:28:58.901Z"}
 {"id":"11e38a93-639c-4d36-97a2-09e6697fee64","full_name":"Gou Racing","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-02-24T18:36:02.353922+00:00"}
+{"full_name":"Rahal Letterman Lanigan Racing","short_name":null,"nationality":null,"id":"129ea3b9-0b8b-4a18-b1a6-fc079abef62a","created_at":"2026-11-01T19:39:53.853Z","updated_at":"2026-11-01T19:39:53.853Z"}
 {"id":"12ea4441-153b-46a5-987f-899fcaece1af","full_name":"BMW M Team RLL","short_name":null,"nationality":null,"created_at":"2026-02-22T17:00:36.57871+00:00","updated_at":"2026-02-22T17:00:36.57871+00:00"}
 {"id":"1337f18d-1e4a-4f2f-81ec-bf31cd7fa084","full_name":"DXDT Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:31.166071+00:00","updated_at":"2026-02-22T12:42:31.166071+00:00"}
 {"full_name":"AR Motorsports","id":"136f95e4-c4ad-4a7b-a628-d4b1f918e120","created_at":"2026-11-01T15:27:46.288Z","updated_at":"2026-11-01T15:27:46.288Z"}
@@ -20,6 +22,7 @@
 {"id":"1637f29d-a9b5-4490-abbb-979637e3a08c","full_name":"Advanced Autosports","short_name":null,"nationality":null,"created_at":"2026-03-02T12:35:47.420208+00:00","updated_at":"2026-03-02T12:35:47.420208+00:00"}
 {"id":"163f4359-eafe-4bfb-b1eb-feea98a83c20","full_name":"Medusa Motorsports","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"id":"173535f7-6102-4f14-83d1-e680b13efcea","full_name":"Wright Motorsports","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:29.887885+00:00","updated_at":"2026-02-22T12:42:29.887885+00:00"}
+{"full_name":"Team Penske","short_name":null,"nationality":null,"id":"17da2a0c-5e99-42dc-90bf-4cd9ba0adc97","created_at":"2026-11-01T19:39:53.841Z","updated_at":"2026-11-01T19:39:53.841Z"}
 {"id":"18a5d34f-e03e-4b9b-8475-4c23ad500a7c","full_name":"Wheels America Racing","short_name":null,"nationality":null,"created_at":"2026-03-02T12:35:47.420208+00:00","updated_at":"2026-03-02T12:35:47.420208+00:00"}
 {"id":"1afec8ea-331a-4e65-a0ee-d0d2e40584ad","full_name":"TDS Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:26.001829+00:00","updated_at":"2026-02-22T12:42:26.001829+00:00"}
 {"id":"1b366e95-162a-48ce-b4ce-4c5956635239","full_name":"Rs1","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:33.534256+00:00","updated_at":"2026-02-22T12:42:33.534256+00:00"}
@@ -30,6 +33,7 @@
 {"id":"22fd1ef9-3ff5-431e-938b-6d7ee25f86e4","full_name":"Stallion Motorsports w/ GOU","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"id":"23f34288-3a59-4508-a674-8ddb9ff5f9dd","full_name":"Manthey","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:30.173913+00:00","updated_at":"2026-02-22T12:42:30.173913+00:00"}
 {"full_name":"Car Blanche","id":"24076943-1b4c-437f-a286-dbe0debfba28","created_at":"2026-11-01T15:13:31.263Z","updated_at":"2026-11-01T15:13:31.263Z"}
+{"full_name":"Dale Coyne Racing","short_name":null,"nationality":null,"id":"27516ad2-2e8e-43fe-9a26-aded7286566d","created_at":"2026-11-01T19:39:53.870Z","updated_at":"2026-11-01T19:39:53.870Z"}
 {"full_name":"Deily Motorsports LLC","id":"2adc8959-c622-4258-bbe6-39db5e1d4a95","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"2d318516-a556-49ab-8db7-7ad2d681ffdc","full_name":"RLL Team McLaren","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:27.513544+00:00","updated_at":"2026-02-22T12:42:27.513544+00:00"}
 {"full_name":"Hattori Motorsports","id":"2f37ff8b-24a5-4691-9ef0-dcd47865c906","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
@@ -66,12 +70,15 @@
 {"id":"621185f9-1e99-4a40-81aa-66cfd1199986","full_name":"JDC-Miller MotorSports","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:23.285257+00:00","updated_at":"2026-02-22T12:42:23.285257+00:00"}
 {"full_name":"CDR Valkyrie","id":"6442f0cf-fc92-4577-b540-26ef6866b912","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
 {"id":"645397cf-e7ba-4b74-94e6-3f601f8783aa","full_name":"Cadillac Whelen","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:23.517534+00:00","updated_at":"2026-02-22T12:42:23.517534+00:00"}
+{"full_name":"Ed Carpenter Racing","short_name":null,"nationality":null,"id":"65b38677-961e-4fa6-a6d1-73cc89ff5150","created_at":"2026-11-01T19:39:53.842Z","updated_at":"2026-11-01T19:39:53.842Z"}
 {"id":"68c2524f-69de-428a-ad2a-b0a9b139fcd0","full_name":"KOHR MOTORSPORTS","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-02-24T18:36:02.353922+00:00"}
+{"full_name":"Arrow McLaren","short_name":null,"nationality":null,"id":"6931f2d9-634c-47d0-a63e-10c76b99af69","created_at":"2026-11-01T19:39:53.835Z","updated_at":"2026-11-01T19:39:53.835Z"}
 {"full_name":"Czabok-Simpson Motorsport","id":"6b0844d7-95bd-4175-b982-3c06a488cff8","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"6d74726f-bcd4-4326-96a5-cc71fc874f66","full_name":"Random Vandals Racing","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"id":"6d98f9ea-2484-49a1-8e87-7e4e9118d3ca","full_name":"Shopify Racing","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"id":"7032749e-c5df-430d-ae9e-c9a664ed972e","full_name":"Myers Riley Motorsports","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:34.456492+00:00","updated_at":"2026-02-22T12:42:34.456492+00:00"}
 {"full_name":"Richard Mille AF Corse","id":"725abfee-9d75-47de-9690-6fb793f277c2","created_at":"2026-11-01T15:10:00.513Z","updated_at":"2026-11-01T15:10:00.513Z"}
+{"full_name":"Chip Ganassi Racing","short_name":null,"nationality":null,"id":"77718059-aa01-4234-ba75-6d1e10828bf9","created_at":"2026-11-01T19:39:53.838Z","updated_at":"2026-11-01T19:39:53.838Z"}
 {"full_name":"Swish Motorsports","id":"77dd8914-5e8b-4cd5-9b78-11a71507c9ff","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
 {"id":"78ae8fe3-4ceb-481f-9f63-99df545f4b5c","full_name":"Inception Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:28.20257+00:00","updated_at":"2026-02-22T12:42:28.20257+00:00"}
 {"full_name":"Road Shagger Racing","id":"799a8ea2-239d-476a-a855-e48cffc073dc","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
@@ -112,6 +119,7 @@
 {"id":"ab8240d6-b531-4584-8e80-eed53b94754c","full_name":"CarBahn with Peregrine Racing","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-11-01T18:32:42.683Z"}
 {"id":"ae343654-dc68-404a-bb54-b14a0934d51d","full_name":"Thunder Bunny","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"id":"ae9de6ce-68b1-4aba-8279-35efe77929f6","full_name":"Magnus Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:27.96807+00:00","updated_at":"2026-02-22T12:42:27.96807+00:00"}
+{"full_name":"Meyer Shank Racing","short_name":null,"nationality":null,"id":"aeff6460-db39-4907-a150-79dba2a4cbd4","created_at":"2026-11-01T19:39:53.827Z","updated_at":"2026-11-01T19:39:53.827Z"}
 {"id":"b154c48b-c101-4b28-a710-85e246850d07","full_name":"Pratt Miller Motorsports","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:24.655026+00:00","updated_at":"2026-02-22T12:42:24.655026+00:00"}
 {"id":"b4899631-6330-42d1-8a9c-fa14c7be56e9","full_name":"Conquest Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:28.966751+00:00","updated_at":"2026-02-22T12:42:28.966751+00:00"}
 {"id":"b606b00a-55f7-4807-8b8b-9c9d1908df60","full_name":"PANAM MOTORSPORT","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
@@ -123,6 +131,7 @@
 {"full_name":"Split Decision Motorsports","id":"c3043d89-65c2-4f49-b368-9e7d5ec0e231","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
 {"id":"c3481689-d466-4f43-acea-aa6e2f6f3f39","full_name":"Aston Martin THOR Team","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:23.860286+00:00","updated_at":"2026-11-01T18:32:44.237Z"}
 {"id":"c4084d2b-4d05-4c28-adae-fbd02aeb76ae","full_name":"Rockwell Autosport Development","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-02-24T18:36:02.353922+00:00"}
+{"full_name":"Juncos Hollinger Racing","short_name":null,"nationality":null,"id":"c5cc6520-520a-4000-895b-a209b0404040","created_at":"2026-11-01T19:39:53.849Z","updated_at":"2026-11-01T19:39:53.849Z"}
 {"id":"cb6a106e-a219-45fa-a64e-0e70dd4fbdb4","full_name":"ST Racing by Random Vandals","short_name":null,"nationality":null,"created_at":"2026-02-27T10:02:52.995016+00:00","updated_at":"2026-02-27T10:02:52.995016+00:00"}
 {"full_name":"StarCom Racing","id":"cbe59c19-773d-4bf6-ae82-2db46a1a27f6","created_at":"2026-11-01T15:27:03.441Z","updated_at":"2026-11-01T15:27:03.441Z"}
 {"full_name":"Archangel Motorsports","id":"d069a354-cbd5-4fcf-9257-a36d850ebf96","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
@@ -146,10 +155,12 @@
 {"full_name":"Prosport Competition","id":"ebb94824-b594-49b6-9166-5307815ef6c3","created_at":"2026-11-01T15:37:56.699Z","updated_at":"2026-11-01T15:37:56.699Z"}
 {"id":"ed012660-dab4-4cf9-b8e0-cac0822c1754","full_name":"Ford Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:28.419348+00:00","updated_at":"2026-02-22T12:42:28.419348+00:00"}
 {"full_name":"Di Benedetto Racing","id":"ed6710c3-d63c-4546-b3dc-b93fbbb16e61","created_at":"2026-11-01T15:38:22.275Z","updated_at":"2026-11-01T15:38:22.275Z"}
+{"full_name":"A.J. Foyt Enterprises","short_name":null,"nationality":null,"id":"ee88d1bb-2fb4-4520-98c5-951a8acbcbb9","created_at":"2026-11-01T19:39:53.867Z","updated_at":"2026-11-01T19:39:53.867Z"}
 {"full_name":"Automatic Racing","id":"f0087ee8-b1da-4a7e-a410-ef48600027e2","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"f0caea24-2c79-4127-8d27-3fb6f4e11e4b","full_name":"van der Steur Racing","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:26.961441+00:00","updated_at":"2026-02-22T12:42:26.961441+00:00"}
 {"full_name":"Goldcrest Motorsports","id":"f16cd822-1fbc-44db-bb7a-bb86888088ef","created_at":"2026-11-01T15:27:37.514Z","updated_at":"2026-11-01T15:27:37.514Z"}
 {"id":"f36802fc-34b6-4e25-8c00-68251f689d1d","full_name":"Bryan Herta Autosport with PR1/Mathiasen","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:25.784289+00:00","updated_at":"2026-02-22T12:42:25.784289+00:00"}
+{"full_name":"Dreyer & Reinbold Racing","short_name":null,"nationality":null,"id":"f394b42d-854b-4d4d-97e5-985b47401a59","created_at":"2026-11-01T19:39:57.391Z","updated_at":"2026-11-01T19:39:57.391Z"}
 {"id":"f4e97b94-faaf-46ce-a530-d25d7b6add83","full_name":"Muehlner Motorsports America, LLC","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:34.678284+00:00","updated_at":"2026-02-22T12:42:34.678284+00:00"}
 {"id":"f6f1eee4-2c3c-47f7-b8c2-766be9b23555","full_name":"Rebel Rock Racing","short_name":null,"nationality":null,"created_at":"2026-02-24T18:36:02.353922+00:00","updated_at":"2026-02-24T18:36:02.353922+00:00"}
 {"id":"f7d3ad49-c1df-4e4b-b37b-72b491aada86","full_name":"GetSpeed","short_name":null,"nationality":null,"created_at":"2026-02-22T12:42:32.183666+00:00","updated_at":"2026-02-22T12:42:32.183666+00:00"}

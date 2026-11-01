@@ -1,5 +1,8 @@
 {"id":"17e86bd9-496c-4f6f-8ce1-f76e7218f32b","series_id":"f7cb9fc9-27fe-47aa-89b7-770f8e7f251c","alias":"MX-5 CUP","created_at":"2026-02-27T15:55:21.285997+00:00"}
+{"series_id":"eebb1af6-fb2f-456b-ad98-d3c96bdef793","alias":"IndyCar","id":"17ea9e9c-7702-4aa0-9595-7412011fcdd4","created_at":"2026-11-01T19:39:53.798Z"}
+{"series_id":"eebb1af6-fb2f-456b-ad98-d3c96bdef793","alias":"IndyCar Series","id":"1990eabf-3198-4329-ae8e-b56840136d40","created_at":"2026-11-01T19:39:53.798Z"}
 {"id":"57c94cd7-2d1b-4cb4-a989-0b057ce36c86","series_id":"f7cb9fc9-27fe-47aa-89b7-770f8e7f251c","alias":"IMSA","created_at":"2026-02-27T15:55:21.285997+00:00"}
 {"id":"58412392-e87b-4bc5-8527-53dbba19b04d","series_id":"a20a05b9-cd43-450a-9497-b8abf990377a","alias":"IMSA MPC","created_at":"2026-02-24T18:33:17.316357+00:00"}
 {"id":"6671b7d1-d23d-44d6-b288-34951d2343e8","series_id":"5b0e1181-7436-40c2-83b7-a2810e77e4da","alias":"IMSA","created_at":"2026-02-22T11:17:03.987069+00:00"}
 {"id":"6b32f98f-777e-418d-89d6-20a2c0c5f85f","series_id":"a20a05b9-cd43-450a-9497-b8abf990377a","alias":"IMSA","created_at":"2026-02-24T18:33:17.316357+00:00"}
+{"series_id":"eebb1af6-fb2f-456b-ad98-d3c96bdef793","alias":"NTT IndyCar Series","id":"8c148ac1-946a-42f6-b0fe-fcbf7cf9a9f4","created_at":"2026-11-01T19:39:53.798Z"}
