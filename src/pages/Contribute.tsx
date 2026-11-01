@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { pgQuote } from "@/lib/utils";
+import { cn, pgQuote } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Search, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Plus, Trash2, Search, Clock, CheckCircle2, XCircle, Loader2, ChevronRight } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import CountrySelect from "@/components/CountrySelect";
 import { checkFieldsForProfanity } from "@/lib/profanity-filter";
+import { EmptyState, PageHeader, RowsSkeleton } from "@/components/tr/primitives";
+
+const INPUT = "h-10 rounded bg-background focus-visible:ring-1 focus-visible:ring-offset-0";
+const TEXTAREA = "rounded bg-background focus-visible:ring-1 focus-visible:ring-offset-0";
+const PRIMARY_BTN =
+  "h-10 rounded bg-signal px-5 font-display text-sm font-bold uppercase tracking-[0.14em] text-signal-foreground hover:bg-signal/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100";
+const SECONDARY_BTN = "h-9 gap-1.5 rounded font-display text-xs font-semibold uppercase tracking-[0.1em]";
 
 const RACING_CATEGORIES = [
   "karting", "single_seater", "gt", "touring_car", "sports_car",
@@ -91,8 +97,8 @@ function useAutocomplete(fetchFn: (q: string) => Promise<string[]>) {
 }
 
 // Autocomplete input component
-function AutocompleteInput({ value, onValueChange, placeholder, fetchFn, className }: {
-  value: string; onValueChange: (v: string) => void; placeholder?: string; fetchFn: (q: string) => Promise<string[]>; className?: string;
+function AutocompleteInput({ id, value, onValueChange, placeholder, fetchFn, className }: {
+  id?: string; value: string; onValueChange: (v: string) => void; placeholder?: string; fetchFn: (q: string) => Promise<string[]>; className?: string;
 }) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
@@ -120,11 +126,11 @@ function AutocompleteInput({ value, onValueChange, placeholder, fetchFn, classNa
 
   return (
     <div ref={containerRef} className="relative">
-      <Input value={value} onChange={e => handleChange(e.target.value)} placeholder={placeholder} className={className} />
+      <Input id={id} value={value} onChange={e => handleChange(e.target.value)} placeholder={placeholder} className={cn(INPUT, className)} />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-[9999] top-full left-0 min-w-[220px] mt-1 max-h-40 overflow-y-auto rounded-md border border-border bg-popover shadow-lg" style={{ position: "absolute" }}>
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-48 w-max min-w-full max-w-[calc(100vw-2rem)] overflow-y-auto rounded border bg-popover py-1">
           {suggestions.map((s, i) => (
-            <button key={i} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-accent transition-colors text-popover-foreground" onClick={() => { onValueChange(s); setOpen(false); }}>
+            <button key={i} type="button" className="block w-full truncate px-3 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent" onClick={() => { onValueChange(s); setOpen(false); }}>
               {s}
             </button>
           ))}
@@ -420,261 +426,329 @@ const ContributePage = () => {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-background"><Header /><div className="flex items-center justify-center pt-32"><p className="text-muted-foreground">Loading…</p></div></div>;
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
   }
+
+  const categoryOptions = RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>);
+  const spinner = (label: string) => <><Loader2 className="animate-spin" /> {label}</>;
 
   return (
     <div className="min-h-screen bg-background">
       <SEOHead title="Contribute" description="Help build the motorsport database. Add results, drivers, or teams." canonical="/contribute" />
       <Header />
 
-      <section className="pt-24 pb-10" style={{ background: "linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(220 25% 14%) 100%)" }}>
-        <div className="container">
-          <h1 className="font-display text-3xl font-bold sm:text-4xl" style={{ color: "hsl(0 0% 100%)" }}>Contribute</h1>
-          <p className="mt-2 text-sm" style={{ color: "hsl(0 0% 100% / 0.6)" }}>Help build the motorsport database. All contributions are reviewed by admins.</p>
-        </div>
-      </section>
+      <PageHeader
+        kicker={<><span className="h-1.5 w-1.5 rounded-full bg-signal" /> Community</>}
+        title="Contribute"
+        meta={<span>Help build the motorsport database. Every contribution is reviewed by an admin before it goes live.</span>}
+      />
 
-      <div className="container py-8">
+      <main className="container py-6 md:py-8">
         <Tabs defaultValue="add-results">
-          <TabsList className="mb-6 flex-wrap">
-            <TabsTrigger value="add-results">Add Race Results</TabsTrigger>
-            <TabsTrigger value="add-driver">Add Driver</TabsTrigger>
-            <TabsTrigger value="add-team">Add Team</TabsTrigger>
-            <TabsTrigger value="edit-existing">Edit Existing</TabsTrigger>
-            <TabsTrigger value="my-contributions" onClick={fetchContributions}>My Contributions</TabsTrigger>
-          </TabsList>
+          <div className="-mx-4 mb-6 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0">
+            <TabsList className="h-auto w-max justify-start gap-1 rounded-none bg-transparent p-0">
+              {[
+                ["add-results", "Add results"],
+                ["add-driver", "Add driver"],
+                ["add-team", "Add team"],
+                ["edit-existing", "Edit existing"],
+                ["my-contributions", "My contributions"],
+              ].map(([v, label]) => (
+                <TabsTrigger
+                  key={v}
+                  value={v}
+                  onClick={v === "my-contributions" ? fetchContributions : undefined}
+                  className="-mb-px rounded-none border-b-2 border-transparent px-3 pb-3 pt-2 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                >
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
           {/* ADD RACE RESULTS */}
-          <TabsContent value="add-results">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4">
-              <h2 className="font-display text-lg font-semibold text-card-foreground">Add Race Results</h2>
-              <div className="grid grid-cols-2 gap-4 max-w-2xl">
-                <div>
-                  <Label className="text-card-foreground text-xs">Series Name *</Label>
-                  <AutocompleteInput value={seriesName} onValueChange={setSeriesName} placeholder="e.g. IMSA WeatherTech" fetchFn={fetchSeriesSuggestions} />
+          <TabsContent value="add-results" className="mt-0">
+            <div className="rounded border bg-card">
+              <FormSection n="01" title="Event">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Field id="c-series" label="Series name" required>
+                    <AutocompleteInput id="c-series" value={seriesName} onValueChange={setSeriesName} placeholder="e.g. IMSA WeatherTech" fetchFn={fetchSeriesSuggestions} />
+                  </Field>
+                  <Field id="c-event" label="Event name" required>
+                    <Input id="c-event" className={INPUT} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Rolex 24 at Daytona" />
+                  </Field>
+                  <Field id="c-location" label="Location">
+                    <Input id="c-location" className={INPUT} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Daytona, FL" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-4 sm:col-span-2 lg:col-span-3 lg:grid-cols-3">
+                    <Field id="c-year" label="Season year">
+                      <Input id="c-year" className={cn(INPUT, "num")} type="number" value={seasonYear} onChange={e => setSeasonYear(e.target.value)} />
+                    </Field>
+                    <Field id="c-date" label="Event date">
+                      <Input id="c-date" className={cn(INPUT, "num")} type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
+                    </Field>
+                    <Field id="c-cat" label="Category" className="col-span-2 lg:col-span-1">
+                      <Select value={eventCategory} onValueChange={setEventCategory}>
+                        <SelectTrigger id="c-cat" className={INPUT}><SelectValue /></SelectTrigger>
+                        <SelectContent>{categoryOptions}</SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
                 </div>
-                <div><Label className="text-card-foreground text-xs">Event Name *</Label><Input value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Rolex 24 at Daytona" /></div>
-                <div><Label className="text-card-foreground text-xs">Season Year</Label><Input type="number" value={seasonYear} onChange={e => setSeasonYear(e.target.value)} /></div>
-                <div><Label className="text-card-foreground text-xs">Event Date</Label><Input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} /></div>
-                <div><Label className="text-card-foreground text-xs">Location</Label><Input value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Daytona, FL" /></div>
-                <div>
-                  <Label className="text-card-foreground text-xs">Category</Label>
-                  <Select value={eventCategory} onValueChange={setEventCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
+              </FormSection>
 
-              <div className="space-y-2">
-                <Label className="text-card-foreground text-xs">Entries</Label>
-                <div className="overflow-x-auto" style={{ overflow: "visible" }}>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-muted-foreground border-b border-border">
-                        <th className="text-left py-1 px-1 font-medium w-14">Pos</th>
-                        <th className="text-left py-1 px-1 font-medium w-14">Cls Pos</th>
-                        <th className="text-left py-1 px-1 font-medium w-16">Car #</th>
-                        <th className="text-left py-1 px-1 font-medium w-40">Team</th>
-                        <th className="text-left py-1 px-1 font-medium min-w-[200px]">Driver(s) *</th>
-                        <th className="text-left py-1 px-1 font-medium w-36">Car</th>
-                        <th className="text-left py-1 px-1 font-medium w-16">Laps</th>
-                        <th className="text-left py-1 px-1 font-medium w-20">Gap</th>
-                        <th className="text-left py-1 px-1 font-medium w-20">Cls Gap</th>
-                        <th className="text-left py-1 px-1 font-medium w-14">Pits</th>
-                        <th className="text-left py-1 px-1 font-medium w-20">Class</th>
-                        <th className="text-left py-1 px-1 font-medium w-28">Status</th>
-                        <th className="w-8"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {entries.map((entry, i) => (
-                        <tr key={entry.key} className="border-b border-border/50">
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Pos" value={entry.finishing_position} onChange={e => updateEntry(i, "finishing_position", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Cls" value={entry.class_position} onChange={e => updateEntry(i, "class_position", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="#" value={entry.car_number} onChange={e => updateEntry(i, "car_number", e.target.value)} /></td>
-                          <td className="py-1 px-1">
-                            <AutocompleteInput value={entry.team_name} onValueChange={v => updateEntry(i, "team_name", v)} placeholder="Team" fetchFn={fetchTeamSuggestions} className="h-8 text-xs" />
-                          </td>
-                          <td className="py-1 px-1">
-                            <AutocompleteInput value={entry.driver_names} onValueChange={v => updateEntry(i, "driver_names", v)} placeholder="Driver(s), comma-sep" fetchFn={fetchDriverSuggestions} className="h-8 text-xs" />
-                          </td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="e.g. Porsche 963" value={entry.car_model_name} onChange={e => updateEntry(i, "car_model_name", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Laps" value={entry.laps_completed} onChange={e => updateEntry(i, "laps_completed", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Gap" value={entry.gap_to_leader} onChange={e => updateEntry(i, "gap_to_leader", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Cls Gap" value={entry.gap_to_class_leader} onChange={e => updateEntry(i, "gap_to_class_leader", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Pits" value={entry.pit_stops} onChange={e => updateEntry(i, "pit_stops", e.target.value)} /></td>
-                          <td className="py-1 px-1"><Input className="h-8 text-xs" placeholder="Class" value={entry.race_class} onChange={e => updateEntry(i, "race_class", e.target.value)} /></td>
-                          <td className="py-1 px-1">
+              <FormSection
+                n="02"
+                title="Entries"
+                right={<span className="label-caps"><span className="num text-foreground">{entries.length}</span> {entries.length === 1 ? "entry" : "entries"}</span>}
+              >
+                {/* Column heads (wide screens only) */}
+                <div className={cn(ENTRY_GRID, "hidden border-b pb-2 xl:grid")}>
+                  {ENTRY_COLS.map(c => <div key={c} className="label-caps truncate">{c}</div>)}
+                  <div />
+                </div>
+                <div className="space-y-3 xl:space-y-1.5">
+                  {entries.map((entry, i) => {
+                    const remove = () => setEntries(entries.filter((_, idx) => idx !== i));
+                    const cell = (field: keyof EntryRow, label: string, placeholder: string, span = "") => (
+                      <EntryCell label={label} className={span}>
+                        <Input className={cn(ENTRY_INPUT, "num")} placeholder={placeholder} value={entry[field]} onChange={e => updateEntry(i, field, e.target.value)} aria-label={label} />
+                      </EntryCell>
+                    );
+                    return (
+                      <div key={entry.key} className="rounded border bg-background/40 p-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0">
+                        <div className="mb-3 flex items-center justify-between xl:hidden">
+                          <span className="label-caps">Entry <span className="num text-foreground">{String(i + 1).padStart(2, "0")}</span></span>
+                          {entries.length > 1 && (
+                            <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-dnf" onClick={remove}>
+                              <Trash2 className="!size-3.5" /> Remove
+                            </Button>
+                          )}
+                        </div>
+                        <div className={cn(ENTRY_GRID, "grid-cols-3 sm:grid-cols-6")}>
+                          {cell("finishing_position", "Pos", "Pos")}
+                          {cell("class_position", "Cls pos", "Cls")}
+                          {cell("car_number", "Car #", "#")}
+                          <EntryCell label="Team" className="col-span-3 sm:col-span-3 xl:col-span-1">
+                            <AutocompleteInput value={entry.team_name} onValueChange={v => updateEntry(i, "team_name", v)} placeholder="Team" fetchFn={fetchTeamSuggestions} className={ENTRY_INPUT} />
+                          </EntryCell>
+                          <EntryCell label="Driver(s) *" className="col-span-3 sm:col-span-3 xl:col-span-1">
+                            <AutocompleteInput value={entry.driver_names} onValueChange={v => updateEntry(i, "driver_names", v)} placeholder="Driver(s), comma-sep" fetchFn={fetchDriverSuggestions} className={ENTRY_INPUT} />
+                          </EntryCell>
+                          <EntryCell label="Car" className="col-span-3 sm:col-span-3 xl:col-span-1">
+                            <Input className={ENTRY_INPUT} placeholder="e.g. Porsche 963" value={entry.car_model_name} onChange={e => updateEntry(i, "car_model_name", e.target.value)} aria-label="Car" />
+                          </EntryCell>
+                          {cell("laps_completed", "Laps", "Laps")}
+                          {cell("gap_to_leader", "Gap", "Gap")}
+                          {cell("gap_to_class_leader", "Cls gap", "Cls gap")}
+                          {cell("pit_stops", "Pits", "Pits")}
+                          <EntryCell label="Class">
+                            <Input className={ENTRY_INPUT} placeholder="Class" value={entry.race_class} onChange={e => updateEntry(i, "race_class", e.target.value)} aria-label="Class" />
+                          </EntryCell>
+                          <EntryCell label="Status">
                             <Select value={entry.status} onValueChange={v => updateEntry(i, "status", v)}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                              <SelectTrigger className={ENTRY_INPUT} aria-label="Status"><SelectValue placeholder="Status" /></SelectTrigger>
                               <SelectContent>
-                                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                {STATUS_OPTIONS.map(st => <SelectItem key={st} value={st}>{st}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                          </td>
-                          <td className="py-1 px-1">
-                            {entries.length > 1 && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEntries(entries.filter((_, idx) => idx !== i))}><Trash2 className="h-3.5 w-3.5" /></Button>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </EntryCell>
+                          <div className="hidden items-center justify-center xl:flex">
+                            {entries.length > 1 && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-dnf" onClick={remove} aria-label={`Remove entry ${i + 1}`}>
+                                <Trash2 className="!size-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setEntries([...entries, emptyEntry()])} className="gap-1"><Plus className="h-3 w-3" /> Add Entry</Button>
-              </div>
+                <Button variant="outline" size="sm" onClick={() => setEntries([...entries, emptyEntry()])} className={SECONDARY_BTN}>
+                  <Plus className="!size-3.5" /> Add entry
+                </Button>
+              </FormSection>
 
-              <Button onClick={handleSubmitResults} disabled={submittingResults || !seriesName.trim() || !eventName.trim()}>
-                {submittingResults ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Results"}
-              </Button>
+              <ActionBar>
+                <Button onClick={handleSubmitResults} disabled={submittingResults || !seriesName.trim() || !eventName.trim()} className={PRIMARY_BTN}>
+                  {submittingResults ? spinner("Submitting…") : "Submit results"}
+                </Button>
+              </ActionBar>
             </div>
           </TabsContent>
 
           {/* ADD DRIVER */}
-          <TabsContent value="add-driver">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4 max-w-lg">
-              <h2 className="font-display text-lg font-semibold text-card-foreground">Add Driver</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label className="text-card-foreground text-xs">First Name *</Label><Input value={driverFirst} onChange={e => setDriverFirst(e.target.value)} /></div>
-                <div><Label className="text-card-foreground text-xs">Last Name *</Label><Input value={driverLast} onChange={e => setDriverLast(e.target.value)} /></div>
-              </div>
-              <div><Label className="text-card-foreground text-xs">Nationality</Label><CountrySelect value={driverNationality} onChange={setDriverNationality} /></div>
-              <div>
-                <Label className="text-card-foreground text-xs">Primary Category</Label>
-                <Select value={driverCategory} onValueChange={setDriverCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label className="text-card-foreground text-xs">Bio</Label><Textarea value={driverBio} onChange={e => setDriverBio(e.target.value)} rows={3} /></div>
-              <div className="space-y-2">
-                <Label className="text-card-foreground text-xs">Social Links</Label>
-                <Input placeholder="Website URL" value={driverSocialWebsite} onChange={e => setDriverSocialWebsite(e.target.value)} />
-                <Input placeholder="Instagram URL" value={driverSocialInstagram} onChange={e => setDriverSocialInstagram(e.target.value)} />
-                <Input placeholder="Twitter / X URL" value={driverSocialTwitter} onChange={e => setDriverSocialTwitter(e.target.value)} />
-                <Input placeholder="LinkedIn URL" value={driverSocialLinkedin} onChange={e => setDriverSocialLinkedin(e.target.value)} />
-              </div>
-              <Button onClick={handleSubmitDriver} disabled={submittingDriver || !driverFirst.trim() || !driverLast.trim()}>
-                {submittingDriver ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Driver"}
-              </Button>
+          <TabsContent value="add-driver" className="mt-0">
+            <div className="max-w-2xl rounded border bg-card">
+              <FormSection n="01" title="Driver">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id="d-first" label="First name" required><Input id="d-first" className={INPUT} value={driverFirst} onChange={e => setDriverFirst(e.target.value)} /></Field>
+                  <Field id="d-last" label="Last name" required><Input id="d-last" className={INPUT} value={driverLast} onChange={e => setDriverLast(e.target.value)} /></Field>
+                  <Field id="d-nat" label="Nationality"><CountrySelect value={driverNationality} onChange={setDriverNationality} /></Field>
+                  <Field id="d-cat" label="Primary category">
+                    <Select value={driverCategory} onValueChange={setDriverCategory}>
+                      <SelectTrigger id="d-cat" className={INPUT}><SelectValue /></SelectTrigger>
+                      <SelectContent>{categoryOptions}</SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <Field id="d-bio" label="Bio"><Textarea id="d-bio" className={TEXTAREA} value={driverBio} onChange={e => setDriverBio(e.target.value)} rows={3} /></Field>
+              </FormSection>
+              <FormSection n="02" title="Links">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id="d-web" label="Website"><Input id="d-web" className={INPUT} placeholder="https://" value={driverSocialWebsite} onChange={e => setDriverSocialWebsite(e.target.value)} /></Field>
+                  <Field id="d-ig" label="Instagram"><Input id="d-ig" className={INPUT} placeholder="Instagram URL" value={driverSocialInstagram} onChange={e => setDriverSocialInstagram(e.target.value)} /></Field>
+                  <Field id="d-x" label="Twitter / X"><Input id="d-x" className={INPUT} placeholder="Twitter / X URL" value={driverSocialTwitter} onChange={e => setDriverSocialTwitter(e.target.value)} /></Field>
+                  <Field id="d-li" label="LinkedIn"><Input id="d-li" className={INPUT} placeholder="LinkedIn URL" value={driverSocialLinkedin} onChange={e => setDriverSocialLinkedin(e.target.value)} /></Field>
+                </div>
+              </FormSection>
+              <ActionBar>
+                <Button onClick={handleSubmitDriver} disabled={submittingDriver || !driverFirst.trim() || !driverLast.trim()} className={PRIMARY_BTN}>
+                  {submittingDriver ? spinner("Submitting…") : "Submit driver"}
+                </Button>
+              </ActionBar>
             </div>
           </TabsContent>
 
           {/* ADD TEAM */}
-          <TabsContent value="add-team">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4 max-w-lg">
-              <h2 className="font-display text-lg font-semibold text-card-foreground">Add Team</h2>
-              <div><Label className="text-card-foreground text-xs">Team Name *</Label><Input value={teamName} onChange={e => setTeamName(e.target.value)} /></div>
-              <div><Label className="text-card-foreground text-xs">Nationality</Label><CountrySelect value={teamNationality} onChange={setTeamNationality} /></div>
-              <div>
-                <Label className="text-card-foreground text-xs">Primary Category</Label>
-                <Select value={teamCategory} onValueChange={setTeamCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label className="text-card-foreground text-xs">Website</Label><Input value={teamWebsite} onChange={e => setTeamWebsite(e.target.value)} placeholder="https://" /></div>
-              <div><Label className="text-card-foreground text-xs">Bio</Label><Textarea value={teamBio} onChange={e => setTeamBio(e.target.value)} rows={3} /></div>
-              <div className="space-y-2">
-                <Label className="text-card-foreground text-xs">Social Links</Label>
-                <Input placeholder="Instagram URL" value={teamSocialInstagram} onChange={e => setTeamSocialInstagram(e.target.value)} />
-                <Input placeholder="Twitter / X URL" value={teamSocialTwitter} onChange={e => setTeamSocialTwitter(e.target.value)} />
-              </div>
-              <Button onClick={handleSubmitTeam} disabled={submittingTeam || !teamName.trim()}>
-                {submittingTeam ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Team"}
-              </Button>
+          <TabsContent value="add-team" className="mt-0">
+            <div className="max-w-2xl rounded border bg-card">
+              <FormSection n="01" title="Team">
+                <Field id="t-name" label="Team name" required><Input id="t-name" className={INPUT} value={teamName} onChange={e => setTeamName(e.target.value)} /></Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id="t-nat" label="Nationality"><CountrySelect value={teamNationality} onChange={setTeamNationality} /></Field>
+                  <Field id="t-cat" label="Primary category">
+                    <Select value={teamCategory} onValueChange={setTeamCategory}>
+                      <SelectTrigger id="t-cat" className={INPUT}><SelectValue /></SelectTrigger>
+                      <SelectContent>{categoryOptions}</SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+                <Field id="t-bio" label="Bio"><Textarea id="t-bio" className={TEXTAREA} value={teamBio} onChange={e => setTeamBio(e.target.value)} rows={3} /></Field>
+              </FormSection>
+              <FormSection n="02" title="Links">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field id="t-web" label="Website" className="sm:col-span-2"><Input id="t-web" className={INPUT} value={teamWebsite} onChange={e => setTeamWebsite(e.target.value)} placeholder="https://" /></Field>
+                  <Field id="t-ig" label="Instagram"><Input id="t-ig" className={INPUT} placeholder="Instagram URL" value={teamSocialInstagram} onChange={e => setTeamSocialInstagram(e.target.value)} /></Field>
+                  <Field id="t-x" label="Twitter / X"><Input id="t-x" className={INPUT} placeholder="Twitter / X URL" value={teamSocialTwitter} onChange={e => setTeamSocialTwitter(e.target.value)} /></Field>
+                </div>
+              </FormSection>
+              <ActionBar>
+                <Button onClick={handleSubmitTeam} disabled={submittingTeam || !teamName.trim()} className={PRIMARY_BTN}>
+                  {submittingTeam ? spinner("Submitting…") : "Submit team"}
+                </Button>
+              </ActionBar>
             </div>
           </TabsContent>
 
           {/* EDIT EXISTING */}
-          <TabsContent value="edit-existing">
-            <div className="rounded-lg border border-border bg-card p-6 space-y-4 max-w-2xl">
-              <h2 className="font-display text-lg font-semibold text-card-foreground">Edit Existing Data</h2>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input placeholder="Search drivers, teams, or events…" value={editSearch} onChange={e => setEditSearch(e.target.value)} className="pl-10" onKeyDown={e => e.key === "Enter" && handleEditSearch()} />
-                </div>
-                <Button onClick={handleEditSearch} disabled={editSearching}>{editSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}</Button>
-              </div>
-
-              {!editingItem && editResults.length > 0 && (
-                <div className="space-y-2">
-                  {editResults.map(item => (
-                    <button key={`${item._type}-${item.id}`} onClick={() => startEditing(item)} className="w-full text-left rounded-lg border border-border p-3 hover:border-primary/40 transition-colors">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">{item._type}</Badge>
-                        <span className="text-sm font-medium text-card-foreground">{item._label}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {editingItem && (
-                <div className="space-y-3 border-t border-border pt-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-display text-sm font-semibold text-card-foreground">
-                      Editing: {editingItem._label}
-                    </h3>
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingItem(null); setEditFields({}); }}>Cancel</Button>
+          <TabsContent value="edit-existing" className="mt-0">
+            <div className="max-w-2xl rounded border bg-card">
+              <FormSection n="01" title="Find a record">
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input placeholder="Search drivers, teams, or events…" value={editSearch} onChange={e => setEditSearch(e.target.value)} className={cn(INPUT, "pl-9")} onKeyDown={e => e.key === "Enter" && handleEditSearch()} aria-label="Search records" />
                   </div>
-                  {Object.entries(editFields).map(([key, value]) => (
-                    <div key={key}>
-                      <Label className="text-card-foreground text-xs capitalize">{key.replace(/_/g, " ")}</Label>
-                      {key === "primary_category" || key === "category" ? (
-                        <Select value={value} onValueChange={v => setEditFields({ ...editFields, [key]: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>{RACING_CATEGORIES.map(c => <SelectItem key={c} value={c}>{categoryLabels[c]}</SelectItem>)}</SelectContent>
-                        </Select>
-                      ) : key === "nationality" ? (
-                        <CountrySelect value={value} onChange={v => setEditFields({ ...editFields, [key]: v })} />
-                      ) : key === "bio" ? (
-                        <Textarea value={value} onChange={e => setEditFields({ ...editFields, [key]: e.target.value })} rows={3} />
-                      ) : (
-                        <Input value={value} onChange={e => setEditFields({ ...editFields, [key]: e.target.value })} />
-                      )}
-                    </div>
-                  ))}
-                  <Button onClick={handleSubmitEdit} disabled={submittingEdit}>
-                    {submittingEdit ? <><Loader2 className="h-4 w-4 animate-spin mr-1" /> Submitting…</> : "Submit Edit"}
+                  <Button onClick={handleEditSearch} disabled={editSearching} className={cn(SECONDARY_BTN, "h-10 px-4")} variant="outline">
+                    {editSearching ? <Loader2 className="animate-spin" /> : "Search"}
                   </Button>
                 </div>
+
+                {!editingItem && editResults.length > 0 && (
+                  <div className="divide-y overflow-hidden rounded border">
+                    {editResults.map(item => (
+                      <button key={`${item._type}-${item.id}`} onClick={() => startEditing(item)} className="flex w-full items-center gap-3 bg-background/40 px-3 py-2.5 text-left transition-colors hover:bg-accent">
+                        <span className="label-caps w-12 shrink-0">{item._type}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{item._label}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </FormSection>
+
+              {editingItem && (
+                <>
+                  <FormSection
+                    n="02"
+                    title={`Editing ${editingItem._type}`}
+                    right={<Button variant="ghost" size="sm" className="h-7 px-2 font-display text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground" onClick={() => { setEditingItem(null); setEditFields({}); }}>Cancel</Button>}
+                  >
+                    <p className="-mt-2 truncate text-sm text-muted-foreground">{editingItem._label}</p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {Object.entries(editFields).map(([key, value]) => {
+                        const id = `e-${key}`;
+                        const wide = key === "bio";
+                        return (
+                          <Field key={key} id={id} label={key.replace(/_/g, " ")} className={wide ? "sm:col-span-2" : undefined}>
+                            {key === "primary_category" || key === "category" ? (
+                              <Select value={value} onValueChange={v => setEditFields({ ...editFields, [key]: v })}>
+                                <SelectTrigger id={id} className={INPUT}><SelectValue /></SelectTrigger>
+                                <SelectContent>{categoryOptions}</SelectContent>
+                              </Select>
+                            ) : key === "nationality" ? (
+                              <CountrySelect value={value} onChange={v => setEditFields({ ...editFields, [key]: v })} />
+                            ) : key === "bio" ? (
+                              <Textarea id={id} className={TEXTAREA} value={value} onChange={e => setEditFields({ ...editFields, [key]: e.target.value })} rows={3} />
+                            ) : (
+                              <Input id={id} className={INPUT} value={value} onChange={e => setEditFields({ ...editFields, [key]: e.target.value })} />
+                            )}
+                          </Field>
+                        );
+                      })}
+                    </div>
+                  </FormSection>
+                  <ActionBar>
+                    <Button onClick={handleSubmitEdit} disabled={submittingEdit} className={PRIMARY_BTN}>
+                      {submittingEdit ? spinner("Submitting…") : "Submit edit"}
+                    </Button>
+                  </ActionBar>
+                </>
               )}
             </div>
           </TabsContent>
 
           {/* MY CONTRIBUTIONS */}
-          <TabsContent value="my-contributions">
-            <div className="rounded-lg border border-border bg-card p-6 max-w-2xl">
-              <h2 className="font-display text-lg font-semibold text-card-foreground mb-4">My Contributions</h2>
+          <TabsContent value="my-contributions" className="mt-0">
+            <div className="max-w-3xl">
               {loadingContributions ? (
-                <p className="text-muted-foreground text-sm">Loading…</p>
+                <RowsSkeleton rows={4} />
               ) : myContributions.length === 0 ? (
-                <p className="text-muted-foreground text-sm">You haven't made any contributions yet.</p>
+                <EmptyState title="No contributions yet" icon={<Clock className="h-5 w-5" />}>
+                  Results, drivers, teams and edits you submit will appear here with their review status.
+                </EmptyState>
               ) : (
-                <div className="space-y-2">
+                <div className="divide-y overflow-hidden rounded border bg-card">
                   {myContributions.map(c => (
-                    <div key={c.id} className="flex items-center justify-between rounded-lg border border-border p-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">{c.edit_type.replace(/_/g, " ")}</Badge>
-                          <span className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleDateString()}</span>
+                    <div key={c.id} className="flex items-start justify-between gap-3 px-4 py-3.5">
+                      <div className="min-w-0">
+                        <div className="label-caps flex flex-wrap items-center gap-x-2">
+                          <span className="text-foreground">{c.edit_type.replace(/_/g, " ")}</span>
+                          <span aria-hidden>/</span>
+                          <span className="num normal-case tracking-normal">{new Date(c.created_at).toLocaleDateString()}</span>
                         </div>
-                        <p className="text-sm text-card-foreground mt-1">
-                          {c.target_table.replace(/_/g, " ")}
+                        <p className="mt-1 text-sm text-foreground">
+                          <span className="capitalize text-muted-foreground">{c.target_table.replace(/_/g, " ")}</span>
                           {c.proposed_data?.first_name ? `: ${c.proposed_data.first_name} ${c.proposed_data.last_name || ""}` : ""}
                           {c.proposed_data?.name ? `: ${c.proposed_data.name}` : ""}
                           {c.proposed_data?.event_name ? `: ${c.proposed_data.event_name}` : ""}
                         </p>
-                        {c.admin_notes && <p className="text-xs text-muted-foreground mt-1">Admin: {c.admin_notes}</p>}
+                        {c.admin_notes && (
+                          <p className="mt-2 border-l-2 pl-2.5 text-xs text-muted-foreground">
+                            <span className="label-caps mr-1">Admin</span>{c.admin_notes}
+                          </p>
+                        )}
                       </div>
-                      <div>
-                        {c.status === "pending" && <Badge variant="secondary" className="gap-1"><Clock className="h-3 w-3" /> Pending</Badge>}
-                        {c.status === "approved" && <Badge className="gap-1 bg-primary text-primary-foreground"><CheckCircle2 className="h-3 w-3" /> Approved</Badge>}
-                        {c.status === "rejected" && <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" /> Rejected</Badge>}
-                      </div>
+                      <StatusChip status={c.status} />
                     </div>
                   ))}
                 </div>
@@ -682,11 +756,80 @@ const ContributePage = () => {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
 
       <Footer />
     </div>
   );
 };
+
+/* ── Layout helpers ───────────────────────────────────────────── */
+const ENTRY_COLS = ["Pos", "Cls pos", "Car #", "Team", "Driver(s) *", "Car", "Laps", "Gap", "Cls gap", "Pits", "Class", "Status"];
+const ENTRY_GRID =
+  "grid gap-2 xl:grid-cols-[52px_56px_60px_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_56px_80px_80px_52px_72px_110px_32px] xl:gap-1.5";
+const ENTRY_INPUT = "h-9 rounded bg-background px-2.5 text-sm focus-visible:ring-1 focus-visible:ring-offset-0 xl:h-8 xl:px-2 xl:text-xs";
+
+function EntryCell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <div className="label-caps mb-1 xl:hidden">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function FormSection({ n, title, right, children }: { n: string; title: string; right?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-4 border-b px-4 py-5 last-of-type:border-b-0 sm:px-6 sm:py-6">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-baseline gap-2.5">
+          <span className="num text-xs text-primary">{n}</span>
+          <span className="font-display text-lg font-bold uppercase tracking-wide text-foreground">{title}</span>
+        </h2>
+        {right}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Field({ id, label, required, className, children }: { id: string; label: string; required?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("min-w-0 space-y-1.5", className)}>
+      <Label htmlFor={id} className="label-caps block text-[11px] font-semibold leading-none">
+        {label}
+        {required && <span className="ml-0.5 text-dnf">*</span>}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function ActionBar({ children }: { children: ReactNode }) {
+  return (
+    <div className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-b border-t bg-card px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <p className="text-xs text-muted-foreground">
+        <span className="text-dnf">*</span> Required. Reviewed by an admin before publishing.
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function StatusChip({ status }: { status: string }) {
+  const map: Record<string, { cls: string; icon: ReactNode; label: string }> = {
+    approved: { cls: "border-pb/40 text-pb", icon: <CheckCircle2 className="h-3 w-3" />, label: "Approved" },
+    rejected: { cls: "border-dnf/40 text-dnf", icon: <XCircle className="h-3 w-3" />, label: "Rejected" },
+    pending: { cls: "border-border text-muted-foreground", icon: <Clock className="h-3 w-3" />, label: "Pending" },
+  };
+  const m = map[status];
+  if (!m) return null;
+  return (
+    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-sm border px-1.5 font-display text-[11px] font-bold uppercase tracking-wider", m.cls)}>
+      {m.icon}
+      {m.label}
+    </span>
+  );
+}
 
 export default ContributePage;

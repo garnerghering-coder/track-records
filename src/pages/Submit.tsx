@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
 import { Loader2, Send, Clock, CheckCircle2, XCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
+import { EmptyState, PageHeader, SectionHeader } from "@/components/tr/primitives";
+import { cn } from "@/lib/utils";
+
+const INPUT = "h-10 rounded bg-background focus-visible:ring-1 focus-visible:ring-offset-0";
+const PRIMARY_BTN =
+  "h-10 rounded bg-signal px-5 font-display text-sm font-bold uppercase tracking-[0.14em] text-signal-foreground hover:bg-signal/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100";
 
 const RACING_CATEGORIES = [
   "karting", "single_seater", "gt", "touring_car", "sports_car",
@@ -120,128 +125,242 @@ const Submit = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="flex min-h-screen items-center justify-center pt-16">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="flex min-h-screen flex-col bg-background">
       <SEOHead title="Submit Race Results" description="Submit race results to the Track Records database." canonical="/submit" noIndex />
       <Header />
-      <main className="flex-1 container pt-24 pb-16">
-        <h1 className="font-display text-3xl font-bold text-foreground mb-2">Submit Race Results</h1>
-        <p className="text-muted-foreground mb-8">Help us build the most complete racing database. Submit results and an admin will review them.</p>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Form */}
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h2 className="font-display text-xl font-bold text-card-foreground mb-4">New Submission</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-card-foreground">Series Name *</Label>
-                  <Input value={seriesName} onChange={(e) => setSeriesName(e.target.value)} placeholder="e.g. IMSA SportsCar Championship" required />
-                </div>
-                <div>
-                  <Label className="text-card-foreground">Event Name</Label>
-                  <Input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. Rolex 24 at Daytona" />
-                </div>
+      <PageHeader
+        kicker={
+          <>
+            <span className="h-1.5 w-1.5 rounded-full bg-signal" /> Community
+          </>
+        }
+        title="Submit race results"
+        meta={<span>Paste results from any timing sheet. We parse them automatically and an admin reviews them before they go live.</span>}
+      />
+
+      <main className="container flex-1 py-8 md:py-10">
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-10">
+          {/* ── Form ─────────────────────────────────────────── */}
+          <form onSubmit={handleSubmit} className="rounded border bg-card">
+            <FormSection n="01" title="Event">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field id="seriesName" label="Series name" required>
+                  <Input
+                    id="seriesName"
+                    value={seriesName}
+                    onChange={(e) => setSeriesName(e.target.value)}
+                    placeholder="e.g. IMSA SportsCar Championship"
+                    required
+                    className={INPUT}
+                  />
+                </Field>
+                <Field id="eventName" label="Event name">
+                  <Input
+                    id="eventName"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    placeholder="e.g. Rolex 24 at Daytona"
+                    className={INPUT}
+                  />
+                </Field>
               </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-card-foreground">Season Year *</Label>
-                  <Input value={seasonYear} onChange={(e) => setSeasonYear(e.target.value)} type="number" required />
-                </div>
-                <div>
-                  <Label className="text-card-foreground">Event Date</Label>
-                  <Input value={eventDate} onChange={(e) => setEventDate(e.target.value)} type="date" />
-                </div>
-                <div>
-                  <Label className="text-card-foreground">Category</Label>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field id="seasonYear" label="Season year" required>
+                  <Input
+                    id="seasonYear"
+                    value={seasonYear}
+                    onChange={(e) => setSeasonYear(e.target.value)}
+                    type="number"
+                    required
+                    className={cn(INPUT, "num")}
+                  />
+                </Field>
+                <Field id="eventDate" label="Event date">
+                  <Input id="eventDate" value={eventDate} onChange={(e) => setEventDate(e.target.value)} type="date" className={cn(INPUT, "num")} />
+                </Field>
+                <Field id="category" label="Category" className="col-span-2 sm:col-span-1">
                   <Select value={category} onValueChange={setCategory}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="category" className={INPUT}>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      {RACING_CATEGORIES.map(cat => (
-                        <SelectItem key={cat} value={cat}>{cat.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</SelectItem>
+                      {RACING_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </Field>
               </div>
+              <Field id="location" label="Location">
+                <Input
+                  id="location"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g. Daytona International Speedway"
+                  className={INPUT}
+                />
+              </Field>
+            </FormSection>
 
-              <div>
-                <Label className="text-card-foreground">Location</Label>
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Daytona International Speedway" />
-              </div>
-
-              <div>
-                <Label className="text-card-foreground">Race Results *</Label>
+            <FormSection n="02" title="Results">
+              <Field
+                id="rawData"
+                label="Race results"
+                required
+                hint="Paste from timing sheets, websites or any format. Our AI parses it automatically."
+              >
                 <Textarea
+                  id="rawData"
                   value={rawData}
                   onChange={(e) => setRawData(e.target.value)}
                   placeholder={"Paste race results here…\n\nExample:\n1. Max Verstappen - Red Bull Racing - 58 laps\n2. Lewis Hamilton - Mercedes - +5.023s\n..."}
-                  className="min-h-[200px] font-mono text-xs"
+                  className="min-h-[240px] rounded bg-background font-mono text-xs leading-relaxed focus-visible:ring-1 focus-visible:ring-offset-0"
                   required
                 />
-                <p className="text-xs text-muted-foreground mt-1">Paste results from timing sheets, websites, or any format. Our AI will parse them automatically.</p>
-              </div>
+              </Field>
+            </FormSection>
 
-              <Button type="submit" disabled={submitting} className="w-full">
-                {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Processing…</> : <><Send className="h-4 w-4 mr-2" /> Submit for Review</>}
+            {/* Action bar */}
+            <div className="sticky bottom-0 z-10 flex flex-col gap-3 rounded-b border-t bg-card px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+              <p className="text-xs text-muted-foreground">
+                <span className="text-dnf">*</span> Required. Submissions are reviewed by an admin.
+              </p>
+              <Button type="submit" disabled={submitting} className={PRIMARY_BTN}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="animate-spin" /> Processing…
+                  </>
+                ) : (
+                  <>
+                    <Send /> Submit for review
+                  </>
+                )}
               </Button>
-            </form>
-          </div>
+            </div>
+          </form>
 
-          {/* Past Submissions */}
-          <div>
-            <h2 className="font-display text-xl font-bold text-foreground mb-4">Your Submissions</h2>
+          {/* ── Past submissions ─────────────────────────────── */}
+          <aside className="lg:sticky lg:top-20">
+            <SectionHeader
+              kicker="History"
+              title="Your submissions"
+              right={submissions.length > 0 ? <span className="label-caps num">{submissions.length}</span> : undefined}
+            />
             {submissions.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
-                <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">No submissions yet. Submit your first race results!</p>
-              </div>
+              <EmptyState title="No submissions yet" icon={<Clock className="h-5 w-5" />}>
+                Submit your first race results and track their review status here.
+              </EmptyState>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-y overflow-hidden rounded border bg-card">
                 {submissions.map((s: any) => (
-                  <div key={s.id} className="rounded-lg border border-border bg-card p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-medium text-card-foreground">{s.event_name || "Untitled Event"}</h3>
-                        <p className="text-sm text-muted-foreground">{s.series_name} · {s.season_year}</p>
+                  <div key={s.id} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-display text-base font-bold uppercase leading-tight tracking-wide text-foreground">
+                          {s.event_name || "Untitled event"}
+                        </h3>
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                          {s.series_name} <span aria-hidden>·</span> <span className="num">{s.season_year}</span>
+                        </p>
                       </div>
-                      <Badge
-                        variant={s.status === "approved" ? "default" : s.status === "rejected" ? "destructive" : "secondary"}
-                        className="flex items-center gap-1"
-                      >
-                        {s.status === "approved" && <CheckCircle2 className="h-3 w-3" />}
-                        {s.status === "rejected" && <XCircle className="h-3 w-3" />}
-                        {s.status === "pending" && <Clock className="h-3 w-3" />}
-                        {s.status}
-                      </Badge>
+                      <StatusChip status={s.status} />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Submitted {new Date(s.created_at).toLocaleDateString()}
-                      {s.parsed_entries?.entries && ` · ${s.parsed_entries.entries.length} entries parsed`}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Submitted <span className="num">{new Date(s.created_at).toLocaleDateString()}</span>
+                      {s.parsed_entries?.entries && (
+                        <>
+                          {" "}
+                          · <span className="num">{s.parsed_entries.entries.length}</span> entries parsed
+                        </>
+                      )}
                     </p>
                     {s.admin_notes && (
-                      <p className="text-xs text-muted-foreground mt-1 border-t border-border pt-1">
-                        Admin notes: {s.admin_notes}
+                      <p className="mt-2 border-l-2 pl-2.5 text-xs text-muted-foreground">
+                        <span className="label-caps mr-1">Admin</span>
+                        {s.admin_notes}
                       </p>
                     )}
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </aside>
         </div>
       </main>
       <Footer />
     </div>
   );
 };
+
+/* ── Form helpers ─────────────────────────────────────────────── */
+function FormSection({ n, title, children }: { n: string; title: string; children: ReactNode }) {
+  return (
+    <fieldset className="space-y-4 border-b px-4 py-5 last-of-type:border-b-0 sm:px-6 sm:py-6">
+      <legend className="float-left mb-1 flex w-full items-baseline gap-2.5">
+        <span className="num text-xs text-primary">{n}</span>
+        <span className="font-display text-lg font-bold uppercase tracking-wide text-foreground">{title}</span>
+      </legend>
+      <div className="clear-both space-y-4">{children}</div>
+    </fieldset>
+  );
+}
+
+function Field({
+  id,
+  label,
+  required,
+  hint,
+  className,
+  children,
+}: {
+  id: string;
+  label: string;
+  required?: boolean;
+  hint?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("min-w-0 space-y-1.5", className)}>
+      <Label htmlFor={id} className="label-caps block text-[11px] font-semibold leading-none">
+        {label}
+        {required && <span className="ml-0.5 text-dnf">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function StatusChip({ status }: { status: string }) {
+  const map: Record<string, { cls: string; icon: ReactNode }> = {
+    approved: { cls: "border-pb/40 text-pb", icon: <CheckCircle2 className="h-3 w-3" /> },
+    rejected: { cls: "border-dnf/40 text-dnf", icon: <XCircle className="h-3 w-3" /> },
+    pending: { cls: "border-border text-muted-foreground", icon: <Clock className="h-3 w-3" /> },
+  };
+  const m = map[status] || map.pending;
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center gap-1 rounded-sm border px-1.5 font-display text-[11px] font-bold uppercase tracking-wider",
+        m.cls,
+      )}
+    >
+      {m.icon}
+      {status}
+    </span>
+  );
+}
 
 export default Submit;
