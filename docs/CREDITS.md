@@ -55,3 +55,18 @@ The derived PNGs are shared under the same licence as their source file.
 | Texas Motor Speedway · Oval | 0626710f-2e05-4a44-9d58-4f9adae11ca9.png | [Texas Motor Speedway 2024.svg](https://commons.wikimedia.org/wiki/File:Texas_Motor_Speedway_2024.svg) | Stl66dmk | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | Watkins Glen International · Short Course with Inner Loop | 5fda9de6-b82e-48c4-9351-3aeeed54a775.png | [Watkins Glen International Short Circuit 2024.svg](https://commons.wikimedia.org/wiki/File:Watkins_Glen_International_Short_Circuit_2024.svg) | Stl66dmk | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | World Wide Technology Raceway · Oval | 13769530-7c96-4ae9-914a-ae8f296142aa.png | [World Wide Technology Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:World_Wide_Technology_Raceway_2024.svg) | Stl66dmk | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+
+| Barber Motorsports Park — Full Course | [File:Barber Motorsports Park.svg](https://commons.wikimedia.org/wiki/File:Barber_Motorsports_Park.svg) | Will Pittenger | CC BY-SA 3.0 |
+| Indianapolis Motor Speedway — Oval | [File:Indianapolis Motor Speedway 2024.svg](https://commons.wikimedia.org/wiki/File:Indianapolis_Motor_Speedway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+| Iowa Speedway — Oval | [File:Iowa Speedway 2024.svg](https://commons.wikimedia.org/wiki/File:Iowa_Speedway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+| Markham Street Circuit — Street Circuit | [File:Streets of Markham Track Map.png](https://commons.wikimedia.org/wiki/File:Streets_of_Markham_Track_Map.png) | WL2392 | CC BY-SA 4.0 |
+| Nashville Superspeedway — Oval | [File:Nashville Superspeedway 2024.svg](https://commons.wikimedia.org/wiki/File:Nashville_Superspeedway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+| Portland International Raceway — Grand Prix | [File:Portland international raceway.svg](https://commons.wikimedia.org/wiki/File:Portland_international_raceway.svg) | Readro | CC BY-SA 3.0 |
+| Phoenix Raceway — Oval | [File:Phoenix Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:Phoenix_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+| World Wide Technology Raceway — Oval | [File:World Wide Technology Raceway 2024.svg](https://commons.wikimedia.org/wiki/File:World_Wide_Technology_Raceway_2024.svg) | Stl66dmk | CC BY-SA 4.0 |
+
+## Car liveries (NTT INDYCAR SERIES)
+
+INDYCAR side-profile car illustrations (2026) are INDYCAR's official car artwork published on indycar.com team pages
+(`/-/media/IndyCar/Cars/<year>/IndyCar-Series/Liveries/...`), © INDYCAR and the teams; mirrored so the nose
+points left like the site's other liveries, trimmed and resized only (`scripts/indycar-liveries.mjs`).

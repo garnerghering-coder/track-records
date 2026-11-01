@@ -22,7 +22,7 @@
  * races (session_type "sprint_race") are kept as entries but never count as
  * starts, wins or podiums.
  */
-import { getClassColor } from "./classes.ts";
+import { classLabel, getClassColor } from "./classes.ts";
 import { classRank } from "./insights.ts";
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -495,7 +495,11 @@ export function tally(list: Entry[], poles?: number): Tally {
   const pics = fin.map((e) => e.pic).filter((n): n is number => n != null);
   const best = pics.length ? Math.min(...pics) : null;
   const bestRows = best != null ? fin.filter((e) => e.pic === best) : [];
-  const bestClasses = [...new Set(bestRows.map((e) => e.className).filter(Boolean) as string[])].sort((a, b) => classRank(a) - classRank(b));
+  // Label each best result by its class, or by its series when the race had no classes
+  // (an INDYCAR win must not be labelled with an IMSA class from the same driver's record).
+  const bestClasses = [
+    ...new Set(bestRows.map((e) => (e.className ? classLabel(e.className) : e.seriesShort || e.seriesName || null)).filter(Boolean) as string[]),
+  ].sort((a, b) => classRank(a) - classRank(b));
   const bestClass = bestClasses.length ? bestClasses.join(" & ") : null;
   return {
     starts: s.length,

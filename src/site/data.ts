@@ -129,7 +129,19 @@ export function shortName(full?: string | null) {
 }
 export const cleanName = (full?: string | null) => (full || "").replace(/\s*\(R\)\s*$/i, "").trim();
 export const isRookie = (full?: string | null) => /\(R\)\s*$/i.test(full || "");
-export const lastName = (full?: string | null) => cleanName(full).split(/\s+/).slice(1).join(" ") || cleanName(full);
+const PARTICLES = new Set(["van", "von", "der", "den", "de", "da", "di", "dos", "das", "du", "del", "della", "le", "la", "st", "st.", "ter", "ten", "al", "bin", "mac"]);
+/**
+ * Surname for compact labels: the last word, plus any name particles before it
+ * ("Sting Ray Robb" → "Robb", "Juan Pablo Montoya" → "Montoya",
+ * "Giedo van der Garde" → "van der Garde", "Kevin Estre" → "Estre").
+ */
+export const lastName = (full?: string | null) => {
+  const parts = cleanName(full).split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return parts[0] || "";
+  let i = parts.length - 1;
+  while (i > 1 && PARTICLES.has(parts[i - 1].toLowerCase())) i--;
+  return parts.slice(i).join(" ");
+};
 
 /* ── Championships ────────────────────────────────────────────── */
 
