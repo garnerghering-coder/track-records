@@ -30,8 +30,6 @@ jobs:
           # "/" for a custom domain; set the repo variable VITE_BASE=/track-records/
           # to serve from https://<user>.github.io/track-records/ instead.
           VITE_BASE: ${{ vars.VITE_BASE || '/' }}
-      # Single-page app: unknown paths fall back to the app shell
-      - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
