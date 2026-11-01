@@ -173,10 +173,10 @@ export default function SessionBottomTabs({
     : null;
   const trackMetrics = layoutData
     ? computeTrackMetrics(
-        layoutData.length_km ? Number(layoutData.length_km) : null,
+        layoutData.length_km,
         layoutData.turns,
-        layoutData.total_straight_length_km ? Number(layoutData.total_straight_length_km) : null,
-        layoutData.total_elevation_change_m ? Number(layoutData.total_elevation_change_m) : null,
+        layoutData.total_straight_length_km,
+        layoutData.total_elevation_change_m,
         layoutData.heavy_braking_corners
       )
     : null;

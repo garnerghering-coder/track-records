@@ -191,10 +191,10 @@ export default function ManageCircuits() {
                             <div className="space-y-1">
                               {circuitLayouts.map((l: any) => {
                                 const metrics = computeTrackMetrics(
-                                  l.length_km ? Number(l.length_km) : null,
+                                  l.length_km,
                                   l.turns,
-                                  l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
-                                  l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
+                                  l.total_straight_length_km,
+                                  l.total_elevation_change_m,
                                   l.heavy_braking_corners
                                 );
                                 return (

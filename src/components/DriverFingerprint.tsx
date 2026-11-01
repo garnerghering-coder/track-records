@@ -3,6 +3,7 @@ import { ChevronDown, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { dasBand, dcsBand, dwsBand, MIN_EVENTS } from "../../supabase/functions/_shared/fingerprint-math";
 
 import type { DriverStandingsResult } from "@/hooks/useDriverStandings";
 
@@ -115,7 +116,36 @@ function Meter({ value, color, mid }: { value: number | null; color: string; mid
   );
 }
 
-function MetricCell({ value, band, title }: { value: number | null; band: string | null; title: string }) {
+/** What each metric needs before it is calculated (mirrors the edge function's thresholds). */
+const REQUIREMENTS: Record<string, string> = {
+  Consistency: `Needs at least ${MIN_EVENTS.dcs} scored events.`,
+  Adaptability: `Needs at least ${MIN_EVENTS.das} scored events spread over different circuit types (${MIN_EVENTS.dasPerBand}+ events per type).`,
+  Weather: `Needs at least ${MIN_EVENTS.dwsWet} wet and ${MIN_EVENTS.dwsDry} dry events.`,
+};
+
+/**
+ * The band is derived from the stored value with the same function the edge function uses, so the
+ * label always matches the number shown (older rows were banded on unrounded values).
+ */
+const BAND_FOR: Record<string, (v: number) => string> = {
+  Consistency: dcsBand,
+  Adaptability: dasBand,
+  Weather: dwsBand,
+};
+
+function MetricCell({
+  value: rawValue,
+  band: storedBand,
+  title,
+  eventsIncluded,
+}: {
+  value: number | null;
+  band: string | null;
+  title: string;
+  eventsIncluded?: number;
+}) {
+  const value = rawValue != null && Number.isFinite(Number(rawValue)) ? Math.max(0, Math.min(100, Number(rawValue))) : null;
+  const band = value != null ? (BAND_FOR[title]?.(value) ?? storedBand) : null;
   const has = value != null && !!band;
   const color = has ? BAND_TONE[band!] || TONE.neutral : TONE.muted;
   return (
@@ -126,7 +156,12 @@ function MetricCell({ value, band, title }: { value: number | null; band: string
         <>
           <p className="font-medium text-foreground">{METRIC_DESCRIPTIONS[title]}</p>
           {has && BAND_EXPLANATIONS[band!] && <p className="text-muted-foreground">{BAND_EXPLANATIONS[band!]}</p>}
-          {!has && <p className="text-muted-foreground">Not enough data to calculate this metric yet.</p>}
+          {!has && (
+            <p className="text-muted-foreground">
+              Not enough data to calculate this metric yet. {REQUIREMENTS[title]}
+              {eventsIncluded != null && ` Scored events so far: ${eventsIncluded}.`}
+            </p>
+          )}
         </>
       }
     >
@@ -259,7 +294,7 @@ export default function DriverFingerprint({ data, standingsData }: DriverFingerp
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded border bg-border lg:grid-cols-4">
         <StandingsCell standingsData={standingsData} />
         {gauges.map((g) => (
-          <MetricCell key={g.key} value={g.value} band={g.band} title={g.title} />
+          <MetricCell key={g.key} value={g.value} band={g.band} title={g.title} eventsIncluded={d?.events_included} />
         ))}
       </div>
     </TooltipProvider>

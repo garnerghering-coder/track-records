@@ -31,7 +31,7 @@ const METRIC_DESCRIPTIONS: Record<string, string> = {
   "Circuit Demand": "Overall difficulty score (0–100). Combines how technical, hilly, and brake-heavy a circuit is. Higher = more demanding on car and driver.",
   "Circuit Character": "Layout style score (0–100). Low = tight, technical corners dominate. High = long straights and raw speed dominate.",
   "Corner Severity": "Braking intensity score (0–100). Measures what percentage of corners need heavy braking. Higher = more punishing on brakes.",
-  "Elevation": "Altitude change score (0–100). Rates total climb and descent per lap relative to track length. Higher = hillier terrain.",
+  "Elevation": "Altitude change score (0–100). Elevation range (lowest to highest point) per km of lap; 100 = 20 m per km or more. Higher = hillier terrain.",
 };
 
 interface MetricProps {

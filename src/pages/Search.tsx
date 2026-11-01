@@ -116,10 +116,10 @@ const SearchPage = () => {
             const l = layout[c.id];
             const m = l
               ? computeTrackMetrics(
-                  l.length_km ? Number(l.length_km) : null,
+                  l.length_km,
                   l.turns,
-                  l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
-                  l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
+                  l.total_straight_length_km,
+                  l.total_elevation_change_m,
                   l.heavy_braking_corners,
                 )
               : null;
@@ -296,10 +296,10 @@ const SearchPage = () => {
                   const tags: { label: string; color: string }[] = [];
                   if (l) {
                     const m = computeTrackMetrics(
-                      l.length_km ? Number(l.length_km) : null,
+                      l.length_km,
                       l.turns,
-                      l.total_straight_length_km ? Number(l.total_straight_length_km) : null,
-                      l.total_elevation_change_m ? Number(l.total_elevation_change_m) : null,
+                      l.total_straight_length_km,
+                      l.total_elevation_change_m,
                       l.heavy_braking_corners,
                     );
                     for (const cat of [m.tcsCategory, m.eiCategory, m.csiCategory, m.tdiCategory]) if (cat) tags.push({ label: cat, color: categoryHexColor(cat) });
