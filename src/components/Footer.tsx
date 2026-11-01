@@ -5,7 +5,6 @@ const COLS = [
     title: "Results",
     links: [
       { to: "/results", label: "Latest results" },
-      { to: "/calendar", label: "Calendar" },
       { to: "/series", label: "Series" },
     ],
   },
@@ -22,8 +21,7 @@ const COLS = [
     title: "Track Records",
     links: [
       { to: "/articles", label: "Articles" },
-      { to: "/contribute", label: "Contribute data" },
-      { to: "/auth?signup=true", label: "Sign up" },
+      { to: "/calendar", label: "Calendar" },
       { to: "/privacy", label: "Privacy" },
     ],
   },

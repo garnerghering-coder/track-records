@@ -10,10 +10,9 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { formatDateRange } from "@/lib/date-utils";
 import { computeTrackMetrics } from "@/lib/track-calculations";
-import ReportDialog from "@/components/ReportDialog";
 import FlagImage from "@/components/FlagImage";
 import { EmptyState, PageHeader, Panel, Pos, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
-import { ProfileLoading, ProfileNotFound, ReportStrip, ShareButton, yearSpan } from "@/components/profile-kit";
+import { ProfileLoading, ProfileNotFound, ShareButton, yearSpan } from "@/components/profile-kit";
 import { shortName } from "@/lib/race-data";
 
 interface PodiumEntry {
@@ -195,7 +194,6 @@ const CircuitProfile = () => {
         actions={
           <>
             <ShareButton title={`${circuit.name} · Track Records`} />
-            <ReportDialog reportType="circuit" targetId={circuit.id} targetName={circuit.name} />
           </>
         }
       >
@@ -346,8 +344,6 @@ const CircuitProfile = () => {
             </div>
           )}
         </section>
-
-        <ReportStrip reportType="circuit" targetId={id!} targetName={circuit.name} noun="circuit" />
       </main>
       <Footer />
     </div>

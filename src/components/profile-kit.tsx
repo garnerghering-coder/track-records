@@ -8,7 +8,6 @@ import { Link } from "react-router-dom";
 import { Link2, Share2 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ReportDialog, { actionBtn } from "@/components/ReportDialog";
 import FlagImage from "@/components/FlagImage";
 import { ClassBadge, EmptyState, Pos, RowsSkeleton } from "@/components/tr/primitives";
 import { useToast } from "@/hooks/use-toast";
@@ -17,7 +16,9 @@ import { getClassColor } from "@/lib/classes";
 import { shortName } from "@/lib/race-data";
 import { formatDateRange } from "@/lib/date-utils";
 
-export { actionBtn };
+/** Compact outlined action button (Copy link, etc.) */
+export const actionBtn =
+  "inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded border bg-card px-3 font-display text-xs font-semibold uppercase tracking-[0.12em] text-foreground transition-colors hover:border-foreground/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:shrink-0";
 
 /* ── Share / copy link ─────────────────────────────────────────── */
 export function ShareButton({ title, text }: { title: string; text?: string }) {
@@ -94,19 +95,6 @@ export function ProfileNotFound({ what, backTo, backLabel }: { what: string; bac
   );
 }
 
-/* ── "Missing or incorrect?" strip at the foot of a profile ───── */
-export function ReportStrip({ reportType, targetId, targetName, noun }: { reportType: string; targetId: string; targetName: string; noun: string }) {
-  return (
-    <div className="mt-12 flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <div className="font-display text-sm font-bold uppercase tracking-wide text-foreground">Missing or incorrect information?</div>
-        <div className="text-sm text-muted-foreground">Help us improve this {noun} profile. Reports are reviewed by an admin.</div>
-      </div>
-      <ReportDialog reportType={reportType} targetId={targetId} targetName={targetName} />
-    </div>
-  );
-}
-
 /* ── Result helpers ───────────────────────────────────────────── */
 export const isRaceSessionType = (t?: string | null) => t === "race" || t === "endurance_race" || t === "sprint_race";
 
@@ -118,6 +106,9 @@ export function classInfo(r: any): { cls: string | null; classPos: number | null
   const overall = typeof r?.position === "number" ? r.position : null;
   return { cls, classPos: cls && Number.isFinite(pic) ? pic : overall, overall };
 }
+
+/** A car that never took the start (Al Kamel "Not Started"): not a start, no points. */
+export const isNonStart = (r: { status?: string | null } | null | undefined) => r?.status === "dns";
 
 /** A race result that counts as a classified finish. */
 export const isClassified = (r: any) => r?.position != null && (!r.status || r.status === "finished" || r.status === "classified");
@@ -255,7 +246,7 @@ export function entryStats(entries: Entry[]) {
   const events = new Set(entries.map((e) => e.event?.id).filter(Boolean)).size;
   const classAware = entries.some((e) => e.cls);
   const dnfs = entries.filter((e) => e.status === "dnf").length;
-  return { starts: entries.length, finishes: fin.length, wins, podiums, best, bestCount, years, events, classAware, dnfs };
+  return { starts: entries.filter((e) => !isNonStart(e)).length, finishes: fin.length, wins, podiums, best, bestCount, years, events, classAware, dnfs };
 }
 
 /** Per-driver tallies across entries, sorted by starts. */
@@ -264,7 +255,7 @@ export function driverTallies(entries: Entry[]) {
   for (const e of entries) {
     for (const d of e.drivers) {
       const t = m.get(d.id) ?? { driver: d, starts: 0, wins: 0, podiums: 0, best: null, years: new Set<number>() };
-      t.starts++;
+      if (!isNonStart(e)) t.starts++;
       if (e.year) t.years.add(e.year);
       if (e.classified && e.classPos != null) {
         if (e.classPos === 1) t.wins++;

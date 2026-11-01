@@ -12,6 +12,8 @@ import { ClassBadge, EmptyState, PageHeader, Pos, RowsSkeleton, SectionHeader, S
 import { Count, Segmented } from "@/components/browse/Segmented";
 import { Progress } from "@/components/ui/progress";
 import { exportStandingsPdf } from "@/lib/standings-pdf-export";
+import { computeDriverStandings, computeTeamStandings } from "@/lib/standings";
+import { fetchSeasonStandingsInput } from "@/lib/standings-data";
 import { fetchClassWinners, fetchSeasonClassColors, shortName, type ClassWinner } from "@/lib/race-data";
 import { getClassColor } from "@/lib/classes";
 import { formatDateRange } from "@/lib/date-utils";
@@ -36,6 +38,7 @@ interface StandingDriver {
 }
 
 interface StandingEntry {
+  key: string;
   carNumber: string;
   drivers: StandingDriver[];
   teamName: string | null;
@@ -46,6 +49,13 @@ interface StandingEntry {
   wins: number;
   podiums: number;
 }
+
+interface SeasonStandings {
+  teams: StandingEntry[];
+  drivers: StandingEntry[];
+}
+
+type StandingsMode = "drivers" | "teams";
 
 const fmtPts = (n: number) => (Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1));
 
@@ -88,7 +98,7 @@ function StandingsTable({ standings, className, color }: { standings: StandingEn
           </thead>
           <tbody>
             {rows.map((e) => (
-              <tr key={e.carNumber}>
+              <tr key={e.key}>
                 <td>
                   <Pos value={e.position} />
                 </td>
@@ -241,7 +251,8 @@ const SeriesProfile = () => {
   const { id } = useParams<{ id: string }>();
   const [series, setSeries] = useState<any>(null);
   const [events, setEvents] = useState<DisplayEvent[]>([]);
-  const [seasonStandings, setSeasonStandings] = useState<Record<string, StandingEntry[]>>({});
+  const [seasonStandings, setSeasonStandings] = useState<Record<string, SeasonStandings>>({});
+  const [standingsMode, setStandingsMode] = useState<StandingsMode>("drivers");
   const [standingsLoading, setStandingsLoading] = useState(true);
   const [seasonClassMap, setSeasonClassMap] = useState<Record<string, { id: string; name: string }[]>>({});
   const [classColors, setClassColors] = useState<Record<string, Record<string, string>>>({});
@@ -319,91 +330,44 @@ const SeriesProfile = () => {
       const teamAliasMap = new Map<string, string>();
       for (const tsn of (teamSeasonNames || []) as any[]) teamAliasMap.set(`${tsn.team_id}|${tsn.season_id}`, tsn.display_name);
 
-      // Compute standings per season from points data
-      const standingsMap: Record<string, StandingEntry[]> = {};
+      // Standings per season (rules in src/lib/standings.ts)
+      const standingsMap: Record<string, SeasonStandings> = {};
       await Promise.all(
         seasonIds.map(async (sid) => {
-          const evtIds = mappedEvents.filter((e) => e.seasonId === sid).map((e) => e.id);
-          if (evtIds.length === 0) return;
-
-          const { data: sessions } = await supabase.from("v2_sessions").select("id, parent_session_id, session_type, name").in("event_id", evtIds);
-          if (!sessions || sessions.length === 0) return;
-          const parentSessions = sessions.filter((x) => !x.parent_session_id);
-          const sessIds = parentSessions.map((x) => x.id);
-          if (sessIds.length === 0) return;
-
-          // Main races (not sprints / qualifying) count towards wins and podiums
-          const raceSessionIds = new Set(
-            parentSessions
-              .filter((x) => (x.session_type === "race" || x.session_type === "endurance_race") && !x.name?.toLowerCase().includes("sprint"))
-              .map((x) => x.id),
-          );
-
-          const [{ data: raceRes }, { data: qualRes }] = await Promise.all([
-            supabase
-              .from("v2_race_results" as any)
-              .select("car_number, driver_id, points, position, session_id, extra_data, v2_drivers(full_name, nationality), v2_teams(id, full_name)")
-              .in("session_id", sessIds),
-            supabase
-              .from("v2_qualifying_results" as any)
-              .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name, nationality), v2_teams(id, full_name)")
-              .in("session_id", sessIds),
-          ]);
-          const allResults = [...((raceRes || []) as any[]), ...((qualRes || []) as any[])];
-
-          const carMap = new Map<string, Omit<StandingEntry, "position" | "drivers"> & { drivers: Map<string, StandingDriver> }>();
-          const countedPoints = new Set<string>();
-          const countedWins = new Set<string>();
-
-          for (const r of allResults) {
-            if (!r.car_number) continue;
-            const pts = r.points != null ? Number(r.points) : 0;
-            const cls = r.extra_data?.Class || r.extra_data?.class || null;
-            const teamId = r.v2_teams?.id || null;
-            const teamDisplayName = (teamId ? teamAliasMap.get(`${teamId}|${sid}`) : null) || r.v2_teams?.full_name || null;
-
-            if (!carMap.has(r.car_number))
-              carMap.set(r.car_number, {
-                carNumber: r.car_number,
-                drivers: new Map(),
-                teamName: teamDisplayName,
-                teamId,
-                totalPoints: 0,
-                className: cls,
-                wins: 0,
-                podiums: 0,
-              });
-            const entry = carMap.get(r.car_number)!;
-
-            // Points once per car per session (endurance cars have one row per driver)
-            const key = `${r.car_number}|${r.session_id}`;
-            if (pts > 0 && !countedPoints.has(key)) {
-              entry.totalPoints += pts;
-              countedPoints.add(key);
-            }
-            if (r.driver_id && r.v2_drivers?.full_name && !entry.drivers.has(r.driver_id))
-              entry.drivers.set(r.driver_id, { id: r.driver_id, name: r.v2_drivers.full_name, nationality: r.v2_drivers.nationality ?? null });
-            if (!entry.teamName && teamDisplayName) {
-              entry.teamName = teamDisplayName;
-              entry.teamId = teamId;
-            }
-            if (!entry.className && cls) entry.className = cls;
-
-            // Wins / podiums: by class position in multi-class races, else overall
-            if (r.position != null && r.session_id && raceSessionIds.has(r.session_id) && !countedWins.has(key)) {
-              countedWins.add(key);
-              const pic = Number(r.extra_data?.PIC);
-              const rank = cls && pic > 0 ? pic : r.position;
-              if (rank === 1) entry.wins++;
-              if (rank <= 3) entry.podiums++;
-            }
+          if (!mappedEvents.some((e) => e.seasonId === sid)) return;
+          try {
+            const input = await fetchSeasonStandingsInput(sid);
+            const teamName = (teamId: string | null) =>
+              (teamId ? teamAliasMap.get(`${teamId}|${sid}`) || input.teams.get(teamId) : null) || null;
+            const driverList = (ids: string[]) => ids.map((d) => input.drivers.get(d)).filter((d): d is StandingDriver => !!d);
+            const teams: StandingEntry[] = computeTeamStandings(input.sessions, input.rows).map((t) => ({
+              key: t.key,
+              carNumber: t.carNumber,
+              drivers: driverList(t.driverIds),
+              teamName: teamName(t.teamId),
+              teamId: t.teamId,
+              totalPoints: t.totalPoints,
+              position: t.position,
+              className: t.className || null,
+              wins: t.wins,
+              podiums: t.podiums,
+            }));
+            const drivers: StandingEntry[] = computeDriverStandings(input.sessions, input.rows).map((d) => ({
+              key: d.key,
+              carNumber: d.carNumbers.join(" / "),
+              drivers: driverList([d.driverId]),
+              teamName: teamName(d.teamId),
+              teamId: d.teamId,
+              totalPoints: d.totalPoints,
+              position: d.position,
+              className: d.className || null,
+              wins: d.wins,
+              podiums: d.podiums,
+            }));
+            if (teams.length > 0) standingsMap[sid] = { teams, drivers };
+          } catch (err) {
+            console.error("Standings failed for season", sid, err);
           }
-
-          const standings = [...carMap.values()]
-            .filter((e) => e.totalPoints > 0)
-            .sort((a, b) => b.totalPoints - a.totalPoints)
-            .map((e, i) => ({ ...e, drivers: [...e.drivers.values()], position: i + 1 }));
-          if (standings.length > 0) standingsMap[sid] = standings;
         }),
       );
       setSeasonStandings(standingsMap);
@@ -424,7 +388,12 @@ const SeriesProfile = () => {
   const classes = useMemo(() => seasonClassMap[seasonId] || [], [seasonClassMap, seasonId]);
   const isMulticlass = classes.length > 0;
   const colors = classColors[seasonId];
-  const standings = useMemo(() => seasonStandings[seasonId] || [], [seasonStandings, seasonId]);
+  // Teams (cars) drive the class tabs and counts; the table shows the chosen mode
+  const standings = useMemo(() => seasonStandings[seasonId]?.teams || [], [seasonStandings, seasonId]);
+  const modeStandings = useMemo(
+    () => (standingsMode === "drivers" ? seasonStandings[seasonId]?.drivers : seasonStandings[seasonId]?.teams) || [],
+    [seasonStandings, seasonId, standingsMode],
+  );
 
   // Reset class tab when the season changes
   useEffect(() => {
@@ -440,13 +409,11 @@ const SeriesProfile = () => {
     });
   }, [seasonId, seasonEvents, winnersLoaded]);
 
+  // Positions are already ranked per class (countback tie-breaks, shared positions)
   const classStandings = useMemo(() => {
-    if (!isMulticlass) return standings;
-    return standings
-      .filter((s) => s.className === activeClass)
-      .sort((a, b) => b.totalPoints - a.totalPoints)
-      .map((s, i) => ({ ...s, position: i + 1 }));
-  }, [standings, isMulticlass, activeClass]);
+    if (!isMulticlass) return modeStandings;
+    return modeStandings.filter((s) => s.className === activeClass);
+  }, [modeStandings, isMulticlass, activeClass]);
 
   const today = new Date().toISOString().slice(0, 10);
   const completed = seasonEvents.filter((e) => e.date && e.date <= today);
@@ -543,7 +510,18 @@ const SeriesProfile = () => {
                 title="Standings"
                 right={
                   standings.length > 0 && (
-                    <ExportButton classes={classes} isMulticlass={isMulticlass} year={year} seasonId={seasonId} seriesName={series.name} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Segmented<StandingsMode>
+                        label="Championship"
+                        value={standingsMode}
+                        onChange={setStandingsMode}
+                        options={[
+                          { value: "drivers", label: "Drivers" },
+                          { value: "teams", label: "Teams" },
+                        ]}
+                      />
+                      <ExportButton classes={classes} isMulticlass={isMulticlass} year={year} seasonId={seasonId} seriesName={series.name} />
+                    </div>
                   )
                 }
               />
@@ -576,7 +554,7 @@ const SeriesProfile = () => {
                 <RowsSkeleton rows={8} />
               ) : (
                 <StandingsTable
-                  key={`${seasonId}-${activeClass}`}
+                  key={`${seasonId}-${activeClass}-${standingsMode}`}
                   standings={classStandings}
                   className={isMulticlass ? activeClass : null}
                   color={isMulticlass ? getClassColor(activeClass, colors) : undefined}

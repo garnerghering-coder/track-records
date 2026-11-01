@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
-import ReportDialog from "@/components/ReportDialog";
 import { ClassBadge, EmptyState, PageHeader, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
 import {
   CountList,
@@ -13,7 +12,6 @@ import {
   EntriesTable,
   ProfileLoading,
   ProfileNotFound,
-  ReportStrip,
   ShareButton,
   buildEntries,
   driverTallies,
@@ -136,7 +134,6 @@ const CarProfilePage = () => {
         actions={
           <>
             <ShareButton title={`${displayName} · Track Records`} />
-            <ReportDialog reportType="car" targetId={car.id} targetName={car.model_name} />
           </>
         }
       >
@@ -190,8 +187,6 @@ const CarProfilePage = () => {
             </section>
           </>
         )}
-
-        <ReportStrip reportType="car" targetId={id!} targetName={car.model_name} noun="car" />
       </main>
       <Footer />
     </div>

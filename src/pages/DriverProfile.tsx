@@ -9,14 +9,12 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
-import ReportDialog from "@/components/ReportDialog";
 import DriverFingerprint, { DriverFingerprintData } from "@/components/DriverFingerprint";
 import { ClassBadge, EmptyState, PageHeader, Pos, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
 import {
   CountList,
   ProfileLoading,
   ProfileNotFound,
-  ReportStrip,
   ShareButton,
   StatusCell,
   classInfo,
@@ -102,7 +100,7 @@ const DriverProfilePage = () => {
     const years = [...new Set(races.map((r) => r.event?.v2_seasons?.year).filter(Boolean))] as number[];
 
     return {
-      starts: races.length,
+      starts: races.filter((r) => r.status !== "dns").length,
       finishes: finished.length,
       dnfs,
       wins,
@@ -390,7 +388,6 @@ const DriverProfilePage = () => {
         actions={
           <>
             <ShareButton title={`${driver.full_name} · Track Records`} text={`${driver.full_name}'s racing record`} />
-            <ReportDialog reportType="driver" targetId={driver.id} targetName={driver.full_name} />
           </>
         }
       >
@@ -667,8 +664,6 @@ const DriverProfilePage = () => {
             </div>
           )}
         </section>
-
-        <ReportStrip reportType="driver" targetId={id!} targetName={driver.full_name} noun="driver" />
       </main>
       <Footer />
     </div>

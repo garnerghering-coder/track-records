@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import CommandPalette from "@/components/tr/CommandPalette";
 
@@ -33,29 +31,9 @@ export function ThemeToggle({ className }: { className?: string }) {
 }
 
 const Header = () => {
-  const navigate = useNavigate();
   const { pathname, search } = useLocation();
-  const [session, setSession] = useState<Session | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    const checkAdmin = async (userId: string) => {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin");
-      setIsAdmin(!!data && data.length > 0);
-    };
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) checkAdmin(session.user.id);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      if (s) checkAdmin(s.user.id);
-      else setIsAdmin(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
 
   // ⌘K / Ctrl+K / "/" opens search
   useEffect(() => {
@@ -72,11 +50,6 @@ const Header = () => {
   }, []);
 
   useEffect(() => setMobileOpen(false), [pathname, search]);
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    navigate("/");
-  };
 
   return (
     <>
@@ -116,35 +89,6 @@ const Header = () => {
               <kbd className="hidden rounded-sm border bg-muted px-1.5 font-mono text-[10px] md:inline">⌘K</kbd>
             </button>
             <ThemeToggle />
-            <div className="hidden items-center gap-1 lg:flex">
-              {isAdmin && (
-                <Link to="/manage" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
-                  Manage
-                </Link>
-              )}
-              {session ? (
-                <>
-                  <Link to="/contribute" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
-                    Contribute
-                  </Link>
-                  <button onClick={logout} className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
-                    Log out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link to="/auth" className="rounded px-2.5 py-1.5 font-display text-[13px] font-semibold uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground">
-                    Log in
-                  </Link>
-                  <Link
-                    to="/auth?signup=true"
-                    className="rounded bg-signal px-3 py-1.5 font-display text-[13px] font-bold uppercase tracking-[0.1em] text-signal-foreground transition-opacity hover:opacity-90"
-                  >
-                    Sign up
-                  </Link>
-                </>
-              )}
-            </div>
             <button
               onClick={() => setMobileOpen((o) => !o)}
               className="flex h-8 w-8 items-center justify-center rounded text-foreground hover:bg-accent lg:hidden"
@@ -172,32 +116,6 @@ const Header = () => {
                 </Link>
               ))}
             </nav>
-            <div className="container flex flex-wrap gap-2 border-t py-3">
-              {isAdmin && (
-                <Link to="/manage" className="rounded border px-3 py-2 text-sm font-medium">
-                  Manage
-                </Link>
-              )}
-              {session ? (
-                <>
-                  <Link to="/contribute" className="rounded border px-3 py-2 text-sm font-medium">
-                    Contribute
-                  </Link>
-                  <button onClick={logout} className="rounded border px-3 py-2 text-sm font-medium">
-                    Log out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link to="/auth" className="rounded border px-3 py-2 text-sm font-medium">
-                    Log in
-                  </Link>
-                  <Link to="/auth?signup=true" className="rounded bg-signal px-3 py-2 text-sm font-bold text-signal-foreground">
-                    Sign up
-                  </Link>
-                </>
-              )}
-            </div>
           </div>
         )}
       </header>

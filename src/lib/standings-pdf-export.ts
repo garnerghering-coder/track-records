@@ -2,6 +2,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import trackRecordsLogo from "@/assets/track-records-logo.png";
 import { supabase } from "@/integrations/supabase/client";
+import { computeTeamStandings } from "@/lib/standings";
+import { fetchSeasonStandingsInput } from "@/lib/standings-data";
 
 function loadImageAsBase64(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -46,6 +48,7 @@ interface CarRow {
   className: string | null;
   pointsBySession: Record<string, number>; // sessionId -> points
   totalPoints: number;
+  position?: number;
 }
 
 export async function exportStandingsPdf(params: StandingsPdfParams) {
@@ -116,21 +119,10 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     return;
   }
 
-  // 3. Fetch all results with points
-  const [{ data: raceRes }, { data: qualRes }, { data: pracRes }] = await Promise.all([
-    supabase
-      .from("v2_race_results" as any)
-      .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-      .in("session_id", allSessionIds),
-    supabase
-      .from("v2_qualifying_results" as any)
-      .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-      .in("session_id", allSessionIds),
-    supabase
-      .from("v2_practice_results" as any)
-      .select("car_number, driver_id, points, session_id, extra_data, v2_drivers(full_name), v2_teams(id, full_name)")
-      .in("session_id", allSessionIds),
-  ]);
+  // 3. Points-bearing results and team (car) standings: shared rules in
+  //    src/lib/standings.ts (parent sessions only, paginated fetch, one score
+  //    per car per session, countback tie-breaks).
+  const input = await fetchSeasonStandingsInput(seasonId);
 
   onProgress?.(50);
 
@@ -145,57 +137,19 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     teamAliasMap.set(tsn.team_id, tsn.display_name);
   }
 
-  const allResults = [
-    ...((raceRes || []) as any[]),
-    ...((qualRes || []) as any[]),
-    ...((pracRes || []) as any[]),
-  ];
-
-  // 4. Group by car_number
-  const carMap = new Map<string, CarRow>();
-  const countedPoints = new Set<string>();
-
-  for (const r of allResults) {
-    if (!r.car_number) continue;
-    const pts = r.points != null ? Number(r.points) : 0;
-    const resultClass = r.extra_data?.Class || r.extra_data?.class || null;
-
-    const teamId = r.v2_teams?.id || null;
-    const teamDisplayName =
-      (teamId ? teamAliasMap.get(teamId) : null) || r.v2_teams?.full_name || null;
-
-    if (!carMap.has(r.car_number)) {
-      carMap.set(r.car_number, {
-        carNumber: r.car_number,
-        driverNames: [],
-        teamName: teamDisplayName,
-        className: resultClass,
-        pointsBySession: {},
-        totalPoints: 0,
-      });
-    }
-
-    const entry = carMap.get(r.car_number)!;
-
-    // Deduplicate points per car per session
-    const pointsKey = `${r.car_number}|${r.session_id}`;
-    if (pts > 0 && !countedPoints.has(pointsKey)) {
-      entry.pointsBySession[r.session_id] =
-        (entry.pointsBySession[r.session_id] || 0) + pts;
-      entry.totalPoints += pts;
-      countedPoints.add(pointsKey);
-    }
-
-    // Collect unique driver names
-    if (r.v2_drivers?.full_name && !entry.driverNames.includes(r.v2_drivers.full_name)) {
-      entry.driverNames.push(r.v2_drivers.full_name);
-    }
-    if (!entry.teamName && teamDisplayName) entry.teamName = teamDisplayName;
-    if (!entry.className && resultClass) entry.className = resultClass;
-  }
+  // 4. One row per car (car number + class)
+  const carRows: CarRow[] = computeTeamStandings(input.sessions, input.rows).map((t) => ({
+    carNumber: t.carNumber,
+    driverNames: t.driverIds.map((d) => input.drivers.get(d)?.name).filter((n): n is string => !!n),
+    teamName: (t.teamId ? teamAliasMap.get(t.teamId) || input.teams.get(t.teamId) : null) || null,
+    className: t.className || null,
+    pointsBySession: Object.fromEntries(t.results.filter((r) => r.points > 0).map((r) => [r.sessionId, r.points])),
+    totalPoints: t.totalPoints,
+    position: t.position,
+  }));
 
   // 5. Determine which classes to render (each gets its own page)
-  const allRows = [...carMap.values()].filter((r) => r.totalPoints > 0);
+  const allRows = carRows.filter((r) => r.totalPoints > 0);
 
   if (allRows.length === 0) {
     alert("No standings data to export.");
@@ -208,13 +162,14 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     for (const cn of classNames) {
       const filtered = allRows.filter((r) => r.className === cn);
       if (filtered.length > 0) {
-        filtered.sort((a, b) => b.totalPoints - a.totalPoints);
+        // already ranked within the class (ties share a position)
         classGroups.push({ className: cn, rows: filtered });
       }
     }
   } else {
-    allRows.sort((a, b) => b.totalPoints - a.totalPoints);
-    classGroups.push({ className: null, rows: allRows });
+    // All classes on one page: order by points, positions renumbered overall
+    const overall = [...allRows].sort((a, b) => b.totalPoints - a.totalPoints).map((r, i) => ({ ...r, position: i + 1 }));
+    classGroups.push({ className: null, rows: overall });
   }
 
   if (classGroups.length === 0) {
@@ -302,7 +257,7 @@ export async function exportStandingsPdf(params: StandingsPdfParams) {
     };
 
     const bodyData = rows.map((row, i) => {
-      const pos = String(i + 1);
+      const pos = String(row.position ?? i + 1);
       const identifier = anyMultiDriver
         ? `#${row.carNumber} – ${row.teamName || "Unknown"}`
         : row.driverNames[0] || "Unknown";

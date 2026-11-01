@@ -6,7 +6,6 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
-import ReportDialog from "@/components/ReportDialog";
 import { ClassBadge, EmptyState, PageHeader, SectionHeader, Stat, StatStrip } from "@/components/tr/primitives";
 import {
   CountList,
@@ -14,7 +13,6 @@ import {
   EntriesTable,
   ProfileLoading,
   ProfileNotFound,
-  ReportStrip,
   ShareButton,
   buildEntries,
   driverTallies,
@@ -137,7 +135,6 @@ const TeamProfilePage = () => {
         actions={
           <>
             <ShareButton title={`${team.full_name} · Track Records`} />
-            <ReportDialog reportType="team" targetId={team.id} targetName={team.full_name} />
           </>
         }
       >
@@ -198,8 +195,6 @@ const TeamProfilePage = () => {
             </section>
           </>
         )}
-
-        <ReportStrip reportType="team" targetId={id!} targetName={team.full_name} noun="team" />
       </main>
       <Footer />
     </div>

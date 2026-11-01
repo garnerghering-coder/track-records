@@ -1,5 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAdmin } from "../_shared/auth.ts";
+import {
+  extractSeriesFolderName,
+  isResultsJsonLink,
+  parseAlKamelSessionDate,
+  resolveAlKamelBaseUrl,
+  resultsLinkRank,
+  seriesFolderMatches,
+} from "./alkamel.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,7 +142,8 @@ function parseStatus(status: string, notFinished: boolean, cause: string): strin
   }
   const s = status.toUpperCase().trim();
   if (s === "DNF" || s === "MECHANICAL" || s === "ACCIDENT" || s === "RETIREMENT") return "dnf";
-  if (s === "DNS") return "dns";
+  // Al Kamel marks a car that never took the start as "Not Started" (it scores 0 points)
+  if (s === "DNS" || s === "NOT STARTED" || s === "DID NOT START") return "dns";
   if (s === "DSQ" || s === "DISQUALIFIED") return "dsq";
   return "finished";
 }
@@ -775,27 +785,82 @@ async function bulkResolveCars(
 }
 
 // ── IMSA Points calculation ──────────────────────────────────────────
+// Scale, eligibility and scheme rules live in the pure, dependency-free
+// module ../_shared/imsa-points.ts (also imported by the web app's tests and
+// by Node scripts). Import declarations are hoisted, so placing them here is
+// equivalent to the top of the file.
+import {
+  assignClassPositions,
+  chooseOfficialSession,
+  computedPointsFor,
+  getPointsRules,
+  mergeOfficialPoints,
+  normaliseName,
+  parseOfficialPointsFile,
+  pickPointsFiles,
+  type PointsRules,
+} from "../_shared/imsa-points.ts";
+import { resolvePointsScheme } from "./series-points.ts";
 
-const IMSA_RACE_POINTS = [350, 320, 300, 280, 260, 250, 240, 230, 220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+/** IMSA's official points for the event being imported, per session kind. */
+type OfficialPointsCandidates = ReturnType<typeof mergeOfficialPoints>;
 
-function getIMSARacePoints(classPosition: number): number {
-  if (classPosition < 1) return 0;
-  if (classPosition <= IMSA_RACE_POINTS.length) return IMSA_RACE_POINTS[classPosition - 1];
-  return 10; // minimum
+/**
+ * Fetch IMSA's own per-car (and per-driver) points for this event from the
+ * POINTS DATA folder on the results page, when published. They include
+ * qualifying penalties and points deductions that cannot be derived from
+ * the results files. Returns null when nothing usable is found.
+ */
+async function fetchOfficialPoints(
+  links: string[],
+  belongsToSeries: (url: string) => boolean,
+  baseUrl: string,
+  rules: PointsRules,
+): Promise<OfficialPointsCandidates | null> {
+  if (!rules.officialPoints) return null;
+  const files = pickPointsFiles(links.filter(belongsToSeries));
+  if (files.length === 0) return null;
+  const parsed = await Promise.all(
+    files.map(async (f) => {
+      try {
+        const res = await fetch(new URL(f, baseUrl).href);
+        if (!res.ok) return null;
+        const text = (await res.text()).replace(/^﻿/, "");
+        return parseOfficialPointsFile(JSON.parse(text), decodeURIComponent(f).split("/").pop() || "");
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const merged = mergeOfficialPoints(parsed);
+  return merged.race.length || merged.qualifying.length ? merged : null;
 }
 
-function getIMSAQualifyingPoints(classPosition: number): number {
-  return Math.max(1, Math.round(getIMSARacePoints(classPosition) / 10));
-}
-
-function isWeatherTechSeries(seriesName: string): boolean {
-  const lower = seriesName.toLowerCase();
-  return lower.includes("weathertech") || lower.includes("sportscar championship") || (lower.includes("imsa") && !lower.includes("pilot") && !lower.includes("michelin"));
-}
-
-function isPilotChallengeSeries(seriesName: string): boolean {
-  const lower = seriesName.toLowerCase();
-  return lower.includes("pilot") || lower.includes("michelin");
+/**
+ * Points per entry (index-aligned with `entries`) for a scoring session, or
+ * null for every entry when the session/series does not score. Official
+ * points win over computed ones when a matching official session exists.
+ */
+function sessionPointsFor(entries: any[], kind: "race" | "qualifying", rules: PointsRules, official: OfficialPointsCandidates | null): (number | null)[] {
+  const placements = assignClassPositions(entries);
+  const computed = placements.map((p) => computedPointsFor(p, kind, rules));
+  const candidates = official?.[kind] || [];
+  const byCar = candidates.filter((c) => c.keyType === "car").map((c) => c.points);
+  const byDriver = candidates.filter((c) => c.keyType === "driver").map((c) => c.points);
+  if (byCar.length > 0) {
+    const keys = placements.map((p) => p.carNumber || "");
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byCar);
+    if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
+  } else if (byDriver.length > 0) {
+    // Single-driver series (MX-5 Cup): official points are keyed by driver name
+    const keys = entries.map((e) => {
+      const d = (e.drivers || [])[0] || {};
+      return normaliseName(`${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`);
+    });
+    const match = chooseOfficialSession(keys.filter(Boolean), new Map(keys.map((k, i) => [k, computed[i]])), byDriver);
+    if (match) return keys.map((k, i) => (placements[i].nonStarter ? 0 : match.has(k) ? match.get(k)! : computed[i]));
+  }
+  return computed;
 }
 
 // ── Build result rows for batch insert ───────────────────────────────
@@ -811,15 +876,25 @@ function buildResultRows(
   summary: any,
   hourNumber?: number,
   timeCardMap?: Map<string, Map<number, string>>,
-  seriesName?: string
+  pointsRules?: PointsRules,
+  officialPoints?: OfficialPointsCandidates | null
 ): { raceRows: any[]; qualifyingRows: any[]; practiceRows: any[] } {
   const raceRows: any[] = [];
   const qualifyingRows: any[] = [];
   const practiceRows: any[] = [];
   const isRace = sessionType === "race" || sessionType === "sprint_race" || sessionType === "endurance_race";
-  const classCounters: Record<string, number> = {};
 
-  for (const entry of entries) {
+  // Class positions are assigned over the whole classification (before any
+  // entry is skipped), in position order; non-starters take no position.
+  const placements = assignClassPositions(entries);
+  // Points only for the final classification of a race (never an hourly
+  // snapshot) and for qualifying; null where the series does not score.
+  const rules = pointsRules ?? getPointsRules("none");
+  const pointsKind: "race" | "qualifying" | null = isRace && !hourNumber ? "race" : sessionType === "qualifying" ? "qualifying" : null;
+  const sessionPoints = pointsKind ? sessionPointsFor(entries, pointsKind, rules, officialPoints ?? null) : entries.map(() => null);
+
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+    const entry = entries[entryIndex];
     const drivers = entry.drivers || [];
     if (drivers.length === 0) continue;
 
@@ -871,10 +946,7 @@ function buildResultRows(
     const carId = vehicleName ? (carMap.get(vehicleName.toLowerCase().trim()) || null) : null;
 
     const raceClass = entry.class || entry.category || null;
-    const classKey = raceClass || "__overall__";
-    if (!classCounters[classKey]) classCounters[classKey] = 0;
-    classCounters[classKey]++;
-    const pic = classCounters[classKey];
+    const pic = placements[entryIndex].classPosition;
 
     const position = typeof entry.position === "number" ? entry.position : null;
     const carNumber = entry.number || null;
@@ -887,18 +959,17 @@ function buildResultRows(
 
     const extraData: Record<string, any> = {};
     if (raceClass) extraData["Class"] = raceClass;
-    if (raceClass) extraData["PIC"] = pic;
+    if (raceClass && pic != null) extraData["PIC"] = pic;
 
-    // Calculate IMSA points based on class position
-    const isIMSA = seriesName ? (isWeatherTechSeries(seriesName) || isPilotChallengeSeries(seriesName)) : false;
-    const shouldAwardRacePoints = isIMSA && isRace && !hourNumber; // Only on parent/overall race, not hour sub-sessions
-    const shouldAwardQualifyingPoints = isIMSA && sessionType === "qualifying" && isWeatherTechSeries(seriesName || "");
-    const racePoints = shouldAwardRacePoints ? getIMSARacePoints(pic) : null;
-    const qualifyingPoints = shouldAwardQualifyingPoints ? getIMSAQualifyingPoints(pic) : null;
+    // Championship points (see ../_shared/imsa-points.ts)
+    const racePoints = pointsKind === "race" ? sessionPoints[entryIndex] : null;
+    const qualifyingPoints = pointsKind === "qualifying" ? sessionPoints[entryIndex] : null;
 
-    // For endurance races (overall/parent view) with multiple drivers per car,
-    // insert one row per driver sharing the same car_number, position, etc.
-    if (isRace && isOverallEndurance && drivers.length > 1) {
+    // For the final classification of any race (endurance or sprint) with
+    // multiple drivers per car, insert one row per driver sharing the same
+    // car_number, position, etc. Every driver of the car scores its points;
+    // a single row would leave co-drivers without the result.
+    if (isRace && !hourNumber && drivers.length > 1) {
       for (const d of drivers) {
         const dn = `${d.firstname || d.first_name || ""} ${d.surname || d.last_name || ""}`.trim();
         if (!dn) continue;
@@ -979,6 +1050,10 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Admin only: this function writes results with the service-role key.
+  const auth = await requireAdmin(req, corsHeaders);
+  if (auth instanceof Response) return auth;
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -1008,8 +1083,18 @@ serve(async (req) => {
       );
     }
 
-    // ── Step 1: Fetch the IMSA results page HTML ──
-    console.log("Fetching IMSA page:", url);
+    // Any Al Kamel results site (imsa.results.alkamelcloud.com, *.alkamelsystems.com, ...).
+    // Relative Results/... links are resolved against the host of the pasted URL.
+    const baseUrl = resolveAlKamelBaseUrl(url);
+    if (!baseUrl) {
+      return new Response(
+        JSON.stringify({ error: "URL must be an Al Kamel results page (e.g. https://imsa.results.alkamelcloud.com/?season=26_2026&evvent=...)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Step 1: Fetch the Al Kamel results page HTML ──
+    console.log("Fetching Al Kamel page:", url);
     const pageResponse = await fetchWithRetry(url);
     if (!pageResponse.ok) {
       return new Response(
@@ -1062,7 +1147,6 @@ serve(async (req) => {
 
     console.log(`Found ${allJsonLinks.length} total .JSON links, ${allTimeCardLinks.length} Time Card CSV links, ${allWeatherJsonLinks.length} Weather JSON links, ${allFlagsJsonLinks.length} Flags Analysis JSON links, ${allFlagsPdfLinks.length} Flags Analysis PDF links in HTML`);
 
-    const baseUrl = "https://imsa.results.alkamelcloud.com/";
     const season = event.v2_seasons as any;
     const seriesObj = season?.v2_series;
     const seriesName: string = seriesObj?.name || "";
@@ -1071,37 +1155,24 @@ serve(async (req) => {
 
     console.log("Series filter names:", allSeriesNames);
 
-    function extractSeriesFolder(urlPath: string): string {
-      const decoded = decodeURIComponent(urlPath);
-      const segments = decoded.split("/").filter(Boolean);
-      for (let i = 0; i < segments.length - 1; i++) {
-        if (segments[i].toLowerCase() === "results" && i + 3 < segments.length) {
-          return segments[i + 3].replace(/^\d+_/, "").toLowerCase().trim();
-        }
-      }
-      return "";
-    }
-
+    // Series folder names differ per series and year ("03_Whelen Mazda MX-5 Cup presented by
+    // Michelin", "05_Mustang Challenge North America", ...): match on normalised labels.
     function matchesSeriesFolder(urlPath: string): boolean {
-      const folder = extractSeriesFolder(urlPath);
+      const folder = extractSeriesFolderName(urlPath);
       if (!folder) return false;
-      return allSeriesNames.some(sn => {
-        if (sn.length > 5) return folder.includes(sn) || sn.includes(folder);
-        return folder === sn;
-      });
+      return seriesFolderMatches(folder, allSeriesNames);
     }
 
-    const resultsFilePattern = /0[234]_Results[_%\s]/i;
     const seriesMatchedLinks = allJsonLinks
-      .filter(l => resultsFilePattern.test(l))
-      .filter(l => !/Results[_%\s]+by[_%\s]+Class/i.test(l) && !/Results[_%\s]+by[_%\s]+Hour[_%\s]+(&|%26)/i.test(l))
+      .filter(l => isResultsJsonLink(l))
       .filter(l => matchesSeriesFolder(l));
 
+    // One results file per session folder: prefer 03_Results, then Official > Provisional > Unofficial.
     const sessionGrouped = new Map<string, string>();
     for (const l of seriesMatchedLinks) {
       const key = l.replace(/0[234]_Results[^/]*$/i, "");
       const existing = sessionGrouped.get(key);
-      if (!existing || /03_Results/i.test(l)) {
+      if (!existing || resultsLinkRank(l) >= resultsLinkRank(existing)) {
         sessionGrouped.set(key, l);
       }
     }
@@ -1112,9 +1183,20 @@ serve(async (req) => {
 
     console.log(`Found ${resultsJsonLinks.length} series-filtered results JSON links`);
 
+    // Championship points rules for this series, plus IMSA's own per-car
+    // points for this event when its POINTS DATA files are published.
+    const pointsRules = getPointsRules(resolvePointsScheme(seriesName, seriesAliasesList));
+    const officialPoints = await fetchOfficialPoints(allJsonLinks, matchesSeriesFolder, baseUrl, pointsRules);
+    console.log(`Points scheme: ${pointsRules.scheme}; official points data: ${officialPoints ? `${officialPoints.race.length} race / ${officialPoints.qualifying.length} qualifying session(s)` : "none"}`);
+
     if (resultsJsonLinks.length === 0) {
       return new Response(
-        JSON.stringify({ error: "No results JSON files found for this series on this page.", debug_json_links_found: allJsonLinks.length }),
+        JSON.stringify({
+          error: "No results JSON files found for this series on this page. Add the Al Kamel series folder name as a series alias, or check that the event publishes .JSON results (some only publish PDF/CSV).",
+          debug_json_links_found: allJsonLinks.length,
+          series_filter_names: allSeriesNames,
+          series_folders_on_page: Array.from(new Set(allJsonLinks.map(l => extractSeriesFolderName(l)).filter(Boolean))),
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -1290,15 +1372,12 @@ serve(async (req) => {
       }
     };
 
-    /** Parse session_date "22/01/2026 10:05" → { date: "2026-01-22", startTime: null }
+    /** Parse session_date "22/01/2026 10:05" (or "22-01-2026 10:05") → { date: "2026-01-22", startTime: null }
      * Note: We only extract the date; start times from IMSA data are unreliable and are omitted.
      */
     const parseSessionDateTime = (sessionData: any): { date: string | null; startTime: string | null } => {
-      if (!sessionData.session_date) return { date: null, startTime: null };
-      const parts = sessionData.session_date.split(" ");
-      const dateParts = parts[0]?.split("/");
-      const date = dateParts && dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : null;
-      return { date, startTime: null };
+      // Feeds use "22/01/2026 10:05" or "31-07-2026 03:45" depending on series/year.
+      return { date: parseAlKamelSessionDate(sessionData.session_date), startTime: null };
     };
 
     const createSession = async (
@@ -1333,7 +1412,7 @@ serve(async (req) => {
     ) => {
       const { raceRows, qualifyingRows, practiceRows } = buildResultRows(
         sessionId, entries, sessionType, driverMap, teamMap, carMap, isOverallEndurance, summary,
-        hourNumber, timeCardMap, seriesName
+        hourNumber, timeCardMap, pointsRules, officialPoints
       );
       // Batch insert all at once
       const inserts: Promise<any>[] = [];
