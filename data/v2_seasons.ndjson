@@ -1,5 +1,6 @@
 {"id":"25f35343-8108-42ce-899b-d69c8475f777","series_id":"a20a05b9-cd43-450a-9497-b8abf990377a","year":2026,"created_at":"2026-02-27T09:53:46.736569+00:00","cdm":null,"is_multiclass":true,"is_spec_series":false,"spec_car_id":null}
 {"series_id":"de8b0f0c-0b7e-417b-933b-75427915f4a5","year":2026,"cdm":null,"is_multiclass":true,"is_spec_series":false,"spec_car_id":null,"id":"2a2cac92-6a65-4341-96eb-7b22c926d6c3","created_at":"2026-11-01T15:37:31.228Z"}
+{"id":"3030bae6-990c-4d53-b789-fc77a998ec27","series_id":"4fa06176-37f8-41b7-bf2a-e9cd6511a2d6","year":2026,"cdm":null,"is_multiclass":false,"is_spec_series":false,"spec_car_id":null,"created_at":"2026-11-01T19:43:45.356Z"}
 {"id":"375349d8-55ad-47ff-a645-f073a75b50e1","series_id":"4fa06176-37f8-41b7-bf2a-e9cd6511a2d6","year":2024,"cdm":null,"is_multiclass":false,"is_spec_series":false,"spec_car_id":null,"created_at":"2026-11-01T19:42:38.904Z"}
 {"series_id":"5b0e1181-7436-40c2-83b7-a2810e77e4da","year":2024,"cdm":null,"is_multiclass":true,"is_spec_series":false,"spec_car_id":null,"id":"598a8dc4-3c9e-49ef-8536-14a58635cb9d","created_at":"2026-11-01T15:09:37.154Z"}
 {"series_id":"de8b0f0c-0b7e-417b-933b-75427915f4a5","year":2025,"cdm":null,"is_multiclass":true,"is_spec_series":false,"spec_car_id":null,"id":"8a34e92f-e388-4531-99b6-6a78eeff57dc","created_at":"2026-11-01T15:37:30.341Z"}
