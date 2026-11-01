@@ -58,6 +58,18 @@ node --experimental-strip-types scripts/import-event.mjs --event <id> \
 node --experimental-strip-types scripts/recompute-fingerprints.mjs
 ```
 
+## What the site expects from an import (any series)
+
+The pages work for any series that fills the same tables as the IMSA importer:
+
+- **Classes are optional.** Multi-class races put the class in `extra_data.Class` and the class position in `extra_data.PIC`; without them the overall `position` is used and the copy says "wins", not "class wins".
+- **Session types:** `race`, `endurance_race`, `sprint_race` (listed, but never counted as starts, wins or podiums), `qualifying`, `practice`. Hourly snapshots of a race set `parent_session_id`. Poles come from the event's main qualifying session (sessions named "Sprint …"/"Shootout" only count when there is no other).
+- **Points:** `points` on race and qualifying rows are summed as stored (stage, sprint, fastest-lap, pole and bonus points included). Tie-breaks and the teams' table depend on the series name (`standingsRulesFor` in `src/lib/standings.ts`): IMSA rules for IMSA championships; elsewhere wins-then-seconds countback, the teams' table per car number (NASCAR owners, INDYCAR entrants) or per team (F1 constructors, from `team_id`).
+- **Flags:** `v2_flag_segments.flag_state` may be `GREEN`, `YELLOW`, `CAUTION`, `FCY`, `SC`, `VSC`, `CODE60`, `RED`, `CHEQUERED` (normalised in `src/lib/flags.ts`).
+- **Stages:** NASCAR-style stage finishes go in race rows' `extra_data` as `"Stage 1": 1`, `"Stage 2": 3`… (1 = stage win) for the stage insight.
+- **Layouts:** a session's `layout_id` (e.g. the oval vs the road course) wins over the event's; lap records are kept per layout and per class or series.
+- **Credits:** `docs/CREDITS.md` is published to `/credits` (headings, lists, pipe tables and links).
+
 ## Deploy
 
 Pushing to `main` runs `.github/workflows/deploy.yml`: tests, build, publish to GitHub Pages. For a custom domain, set it in **Settings → Pages** and point DNS at GitHub Pages.

@@ -137,10 +137,10 @@ const Index = () => {
         <Page className="mt-24 sm:mt-32">
           <SectionHead eyebrow={championships.length > 3 ? `Who leads · ${championships.length} championships` : "Who leads"} title="Championships" to="/series" />
           {championships.length > 3 ? (
-            // Many series: one scrolling row, snapping card by card.
-            <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:thin] sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10" tabIndex={0} aria-label="Championships, scroll sideways for more">
+            // Many series: one row that scrolls sideways (no scroll snapping: the cards reorder as data arrives, and snapping would follow a moved card).
+            <div className="-mx-4 flex scroll-px-4 gap-4 overflow-x-auto px-4 pb-4 [scrollbar-width:thin] sm:-mx-6 sm:scroll-px-6 sm:px-6 lg:-mx-10 lg:scroll-px-10 lg:px-10" tabIndex={0} aria-label="Championships, scroll sideways for more">
               {championships.map((s) => (
-                <div key={s.id} className="flex w-[min(85vw,380px)] shrink-0 snap-start">
+                <div key={s.id} className="flex w-[min(85vw,380px)] shrink-0">
                   <ChampionshipCard season={s} />
                 </div>
               ))}
