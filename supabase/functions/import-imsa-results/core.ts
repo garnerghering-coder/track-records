@@ -137,6 +137,11 @@ function teamKey(name: string): string {
   return normaliseName(name).replace(/\bw\b/g, "with").replace(/\s+/g, "");
 }
 
+/** An entry's drivers without entry-list placeholders ("TBD TBD"), which are not people. */
+function realDrivers(entry: any): any[] {
+  return (entry?.drivers || []).filter((d: any) => !/^(tb[ad]\s*)+$/i.test(alKamelDriverName(d)));
+}
+
 /** "Firstname Surname" of an Al Kamel driver entry, without a rookie marker. */
 function alKamelDriverName(d: any): string {
   return stripRookieMark(`${d?.firstname || d?.first_name || ""} ${d?.surname || d?.last_name || ""}`);
@@ -847,7 +852,7 @@ function collectUniqueEntities(allSessionData: Array<{ entries: any[] }>) {
 
   for (const { entries } of allSessionData) {
     for (const entry of entries) {
-      const entryDrivers = entry.drivers || [];
+      const entryDrivers = realDrivers(entry);
       for (const d of entryDrivers) {
         const name = alKamelDriverName(d);
         if (name) {
@@ -882,6 +887,8 @@ async function bulkResolveDrivers(
 ): Promise<Map<string, string>> {
   const resolved = new Map<string, string>(); // lowercase name -> id
   const toCreate: Array<{ full_name: string; nationality?: string }> = [];
+  const sameAsPending = new Map<string, string>(); // normalised name -> key of the driver to create
+  const aliasOf = new Map<string, string>(); // key -> key of the identical driver being created
   const nationalityUpdates: PromiseLike<unknown>[] = [];
   const toCreateKeys: string[] = [];
 
@@ -898,6 +905,14 @@ async function bulkResolveDrivers(
       }
     } else {
       const iso2 = info.country3 ? (country3to2[info.country3.toUpperCase()] || null) : null;
+      // Two spellings of one new driver in the same import ("Jeremy" / "Jérémy Siffert"): create once
+      const norm = normaliseName(info.name);
+      const pending = sameAsPending.get(norm);
+      if (pending) {
+        aliasOf.set(key, pending);
+        continue;
+      }
+      sameAsPending.set(norm, key);
       toCreate.push({ full_name: info.name, ...(iso2 ? { nationality: iso2 } : {}) });
       toCreateKeys.push(key);
     }
@@ -917,6 +932,10 @@ async function bulkResolveDrivers(
       }
     }
   }
+  for (const [key, target] of aliasOf) {
+    const id = resolved.get(target);
+    if (id) resolved.set(key, id);
+  }
   return resolved;
 }
 
@@ -932,6 +951,8 @@ async function bulkResolveTeams(
   const resolved = new Map<string, string>();
   const toCreate: Array<{ full_name: string }> = [];
   const toCreateKeys: string[] = [];
+  const sameAsPending = new Map<string, string>(); // teamKey -> key of the team to create
+  const aliasOf = new Map<string, string>();
 
   for (const [key, info] of uniqueTeams) {
     const id = matchTeam(info.name, existingTeams, seasonAliases, aliasMap, info.carNumbers, carHistory);
@@ -939,6 +960,14 @@ async function bulkResolveTeams(
       resolved.set(key, id);
       summary.teams_matched++;
     } else {
+      // Two spellings of one new team in the same import ("PINAXIS - ZONE 4" / "PINAXIS \u0096 ZONE 4")
+      const k = teamKey(info.name);
+      const pending = k ? sameAsPending.get(k) : undefined;
+      if (pending) {
+        aliasOf.set(key, pending);
+        continue;
+      }
+      if (k) sameAsPending.set(k, key);
       toCreate.push({ full_name: info.name });
       toCreateKeys.push(key);
     }
@@ -955,6 +984,10 @@ async function bulkResolveTeams(
         summary.teams_created++;
       }
     }
+  }
+  for (const [key, target] of aliasOf) {
+    const id = resolved.get(target);
+    if (id) resolved.set(key, id);
   }
   return resolved;
 }
@@ -1137,7 +1170,7 @@ function buildResultRows(
 
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
     const entry = entries[entryIndex];
-    const drivers = entry.drivers || [];
+    const drivers = realDrivers(entry);
     if (drivers.length === 0) continue;
 
 

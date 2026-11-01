@@ -1,9 +1,11 @@
+{"model_name":"D09","manufacturer":"Duqueine","id":"0196b6b2-02d8-4da6-adf3-84ef918c3829","created_at":"2026-11-01T15:39:03.437Z","updated_at":"2026-11-01T15:39:03.437Z"}
 {"id":"0fd431c9-374d-483b-8d53-d9cb69c06ff3","model_name":"963","manufacturer":"Porsche","created_at":"2026-02-22T12:42:22.268762+00:00","updated_at":"2026-02-22T15:00:28.460838+00:00"}
 {"id":"16c2210d-6265-427c-bb54-565f6eeb3cbc","model_name":"RS3 LMS TCR","manufacturer":"Audi","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:27.513761+00:00"}
 {"model_name":"NSX GT3","manufacturer":"Acura","id":"19f689dc-87c8-4789-9f92-7dc5ec4caf85","created_at":"2026-11-01T15:10:00.513Z","updated_at":"2026-11-01T15:10:00.513Z"}
 {"id":"1a6e000f-6e77-4bcc-8bae-452914f8aa2d","model_name":"Artura GT4","manufacturer":"McLaren","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:24.952196+00:00"}
 {"id":"1ad4a6f1-7839-4ed9-a379-56008f986ca9","model_name":"SC63","manufacturer":"Lamborghini","created_at":"2026-02-22T17:00:36.597728+00:00","updated_at":"2026-02-24T20:28:18.528985+00:00"}
 {"id":"1f7a21c7-29a2-410c-bd5c-4ed463f16e85","model_name":"Leon VZ TCR","manufacturer":"Cupra","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:27:52.015928+00:00"}
+{"model_name":"JS P325","manufacturer":"Ligier","id":"22b5ee32-07a8-40de-8275-9a4509cc2542","created_at":"2026-11-01T15:38:52.823Z","updated_at":"2026-11-01T15:38:52.823Z"}
 {"model_name":"RS3 LMS SEQ","manufacturer":"Audi","id":"233ac3a3-ab2d-424d-a9ae-0af0897b750a","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"model_name":"Vantage GT4","manufacturer":"Aston Martin","id":"323ad665-4800-4009-b896-eb5136092fa4","created_at":"2026-11-01T15:03:56.421Z","updated_at":"2026-11-01T15:03:56.421Z"}
 {"id":"37e4b7f1-9199-46a6-8e52-c3c33c80a43f","model_name":"Mustang GT3","manufacturer":"Ford","created_at":"2026-02-22T12:42:28.474547+00:00","updated_at":"2026-02-22T14:59:52.087068+00:00"}
@@ -22,9 +24,11 @@
 {"id":"abcb1d5d-09e8-47e4-a42d-2294c596c87c","model_name":"LMP2 07","manufacturer":"ORECA ","created_at":"2026-02-22T12:42:24.204741+00:00","updated_at":"2026-02-24T20:28:58.865433+00:00"}
 {"id":"abe2225b-dc90-4841-8cb7-fbdb1732abb9","model_name":"M4 GT3 EVO","manufacturer":"BMW","created_at":"2026-02-22T12:42:32.789785+00:00","updated_at":"2026-02-22T14:59:31.644672+00:00"}
 {"id":"adc5486e-ab1e-4db8-96fc-4cb9085ad344","model_name":"Civic FL5 TCR","manufacturer":"Honda","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:04.469519+00:00"}
+{"model_name":"JS P320","manufacturer":"Ligier","id":"b22ccc95-377d-40e6-b1bf-ce8aa761e7e1","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
 {"model_name":"Giulietta Veloce TCR","manufacturer":"Alfa Romeo","id":"ba6638b2-94cb-4f80-9159-bd08d48a74c5","created_at":"2026-11-01T15:26:58.859Z","updated_at":"2026-11-01T15:26:58.859Z"}
 {"id":"bd1d02f9-bc1e-4ba0-b729-ecba25cc9a1f","model_name":"M Hybrid V8","manufacturer":"BMW","created_at":"2026-02-22T12:42:22.945144+00:00","updated_at":"2026-02-22T14:59:25.102888+00:00"}
 {"id":"bd208e10-8e9c-4846-b550-f8eb9d1e5bbc","model_name":"Vantage GT3 Evo","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:27.03198+00:00","updated_at":"2026-02-22T14:59:18.875022+00:00"}
+{"model_name":"R8 GT4","manufacturer":"Audi","id":"c0465583-14f0-472e-b879-c998acc7778b","created_at":"2026-11-01T15:38:22.275Z","updated_at":"2026-11-01T15:38:22.275Z"}
 {"model_name":"JS P217","manufacturer":"Ligier","id":"c42b4659-c5e5-41da-b4ef-67db3819909b","created_at":"2026-11-01T15:12:15.039Z","updated_at":"2026-11-01T15:12:15.039Z"}
 {"id":"c46636a9-40ca-4d4b-907b-8683ef505406","model_name":"ARX-06","manufacturer":"Acura","created_at":"2026-02-22T12:42:21.911637+00:00","updated_at":"2026-02-22T14:59:05.283096+00:00"}
 {"model_name":"GR Supra GT4 EVO1","manufacturer":"Toyota","id":"cd5f87df-65b5-4ec0-bcd9-cefca7338672","created_at":"2026-11-01T15:27:42.190Z","updated_at":"2026-11-01T15:27:42.190Z"}
@@ -35,3 +39,4 @@
 {"id":"e807fde1-a7b1-4f7a-a82e-f41011eb1bf4","model_name":"V-Series.R","manufacturer":"Cadillac","created_at":"2026-02-22T12:42:22.666062+00:00","updated_at":"2026-02-22T14:59:36.78664+00:00"}
 {"model_name":"Corvette Z06 GT3.R","manufacturer":"Chevrolet","id":"e852acf8-da38-41f0-a6cf-cf35dc1b2e2c","created_at":"2026-11-01T14:46:09.036Z","updated_at":"2026-11-01T14:46:09.036Z"}
 {"id":"f349c8aa-ec9e-48f9-ad5b-b715e0b34130","model_name":"Valkyrie","manufacturer":"Aston Martin","created_at":"2026-02-22T12:42:23.914782+00:00","updated_at":"2026-02-22T14:59:14.576034+00:00"}
+{"model_name":"D08","manufacturer":"Duqueine","id":"f82b96d7-01f9-4c55-8514-89d36e3379c6","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}

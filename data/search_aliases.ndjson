@@ -4,6 +4,7 @@
 {"id":"0cdb4074-3e66-49c2-a35f-2ae08d96b294","alias":"McLaren Mercedes","canonical":"290f24b1-d2f0-4eb6-bdb7-92dbd20d4fe7","entity_type":"team"}
 {"id":"1600b76e-52f3-4a87-af5c-5b79b3d737ea","alias":"Aston Martin Mercedes","canonical":"b71f56b6-d88e-4e9a-9372-74a7d9f76911","entity_type":"team"}
 {"id":"1e579e71-b1a7-4ce3-a9ac-f507a6557579","alias":"Bathurst","canonical":"Mount Panorama Circuit","entity_type":"circuit"}
+{"id":"2831e82c-f94f-499d-9f68-a680ab73733c","alias":"FastMD with Remstar","canonical":"b91c9fc4-4143-403a-8382-3fff47d597b2","entity_type":"team"}
 {"id":"2baca0e7-0206-46e0-9247-25f92f5e5333","alias":"Monza","canonical":"Autodromo Nazionale Monza","entity_type":"circuit"}
 {"id":"36e7d0c1-a565-49cf-84df-df9754bdc5f2","alias":"AlphaTauri RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
 {"id":"37413705-0b29-42ad-8bcc-15d9efc7fd58","alias":"Albert Costa Balboa","canonical":"891152ec-034b-4475-a176-0735543bebe5","entity_type":"driver"}
@@ -40,5 +41,6 @@
 {"id":"d5d56d7b-000d-4e53-b101-c24749300b8c","alias":"GT3","canonical":"GT World Challenge","entity_type":"series"}
 {"id":"e144bcb4-0d48-4f1f-82bc-3c0dc1cafa7a","alias":"Kick Sauber Ferrari","canonical":"b5b1b669-fd4c-4413-b59f-e7e4e2ef77e4","entity_type":"team"}
 {"id":"eed26529-a3d3-45f6-8584-23352079ae81","alias":"RB Honda RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
+{"id":"f36e7660-79be-4aa7-9213-b37aaa474091","alias":"Rafa Martinez","canonical":"a83ddf9c-3444-4015-ae34-0301470d83cb","entity_type":"driver"}
 {"id":"f9072a64-698e-4a21-a9ce-1e935f01a353","alias":"LMDh","canonical":"LMDh","entity_type":"car"}
 {"id":"feb2744f-ed7f-43b8-8e25-31218d93133f","alias":"DTM","canonical":"Deutsche Tourenwagen Masters","entity_type":"series"}
