@@ -9,14 +9,17 @@
 {"id":"1e579e71-b1a7-4ce3-a9ac-f507a6557579","alias":"Bathurst","canonical":"Mount Panorama Circuit","entity_type":"circuit"}
 {"id":"2831e82c-f94f-499d-9f68-a680ab73733c","alias":"FastMD with Remstar","canonical":"b91c9fc4-4143-403a-8382-3fff47d597b2","entity_type":"team"}
 {"id":"2baca0e7-0206-46e0-9247-25f92f5e5333","alias":"Monza","canonical":"Autodromo Nazionale Monza","entity_type":"circuit"}
+{"alias":"Kyle Larson","canonical":"32f59beb-7e72-4e71-a999-f22276b7df1b","entity_type":"driver","id":"2f352cc8-02f6-4d94-9b16-0b931d186219"}
 {"alias":"Team ACP by Random Vandals","canonical":"daac4ebc-5f7b-4429-beb4-879099e534ee","entity_type":"team","id":"350558d5-115b-4939-9c88-d3934ad6105f"}
 {"id":"36e7d0c1-a565-49cf-84df-df9754bdc5f2","alias":"AlphaTauri RBPT","canonical":"f5d798e3-eed3-47ce-b905-960b84151156","entity_type":"team"}
 {"id":"37413705-0b29-42ad-8bcc-15d9efc7fd58","alias":"Albert Costa Balboa","canonical":"891152ec-034b-4475-a176-0735543bebe5","entity_type":"driver"}
 {"id":"381197f6-c90f-47f2-aeb5-40c20bba5ca6","alias":"Spa","canonical":"Circuit de Spa-Francorchamps","entity_type":"circuit"}
 {"id":"3b142a8e-db04-42ff-a1b2-c66a13bd261d","alias":"Red Bull Racing RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
+{"alias":"Team Penske","canonical":"17da2a0c-5e99-42dc-90bf-4cd9ba0adc97","entity_type":"team","id":"3c40b562-cc76-433f-b99f-88d0ded059f9"}
 {"id":"3fd75071-4b88-47fd-b8c3-3554316e2e63","alias":"IndyCar","canonical":"IndyCar Series","entity_type":"series"}
 {"id":"41795e72-33b1-4afb-ad4c-b137297dffb0","alias":"Red Bull Racing Honda RBPT","canonical":"5809cb31-8e86-4db8-9320-ebe1a980c7e3","entity_type":"team"}
 {"id":"4408dbc3-eccb-4d76-b532-383dfc715521","alias":"Le Mans","canonical":"24 Hours of Le Mans","entity_type":"event"}
+{"alias":"Robert Shwartzman","canonical":"0a0e3456-0b01-4eaf-820c-b247a4380b4f","entity_type":"driver","id":"4fac4684-915f-490e-8045-afe789fb6c1a"}
 {"id":"507b2641-e7be-4cb4-9bc0-1eb0ca810374","alias":"F4","canonical":"Formula 4","entity_type":"series"}
 {"alias":"Heart of Racing Team","canonical":"c3481689-d466-4f43-acea-aa6e2f6f3f39","entity_type":"team","id":"53b66d6a-f527-4391-98a9-ba6941279996"}
 {"id":"599f5e1e-4a17-4f58-8902-01ee98425525","alias":"Saito Motorsport Group","canonical":"95676562-b015-4d9a-9aa2-43276b824d3d","entity_type":"team"}
@@ -28,6 +31,7 @@
 {"id":"69c1f981-8b52-43ca-8258-5ffbe11acfa6","alias":"Eduardo Barrichello","canonical":"929f8d42-75b5-4667-b34c-93f66bcc43e7","entity_type":"driver"}
 {"id":"762c6cf2-3487-46c0-9392-84bf7448cb2f","alias":"IMSA","canonical":"IMSA SportsCar Championship","entity_type":"series"}
 {"id":"778fdf6e-0b7c-416d-8a74-b4936e840a57","alias":"Zachary Veach","canonical":"a205162a-8ef8-4f7e-acdc-3aaf15edb984","entity_type":"driver"}
+{"alias":"Helio Castroneves","canonical":"750c2ee6-0805-4f25-858d-3358f6c413f9","entity_type":"driver","id":"7b7567be-a2d2-4f40-b181-a3e0fea2752a"}
 {"id":"7cb083f3-aa9b-4c75-a4de-0091256948b8","alias":"Ligier LMP2","canonical":"c42b4659-c5e5-41da-b4ef-67db3819909b","entity_type":"car"}
 {"id":"7f17a8da-eae6-4c8f-8589-020098ce02ff","alias":"Turner Motorpsort","canonical":"fad258bc-ecd9-4e1c-ad1f-6168c0297564","entity_type":"team"}
 {"id":"82c20884-91f8-4d24-aa9c-d3a92be5297e","alias":"Kimi Antonelli","canonical":"17f22941-9dee-4d47-92d4-48904435d66a","entity_type":"driver"}

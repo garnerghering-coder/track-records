@@ -8,7 +8,7 @@ import FlagImage from "@/components/FlagImage";
 import { cn } from "@/lib/utils";
 import { classRank, fmtLap, type RaceDigest } from "@/lib/insights";
 import { getClassColor } from "@/lib/classes";
-import { useDigests, useEvents, useLayouts, useLoad, useNames, type EventLite } from "@/site/data";
+import { lastName, useDigests, useEvents, useLayouts, useLoad, useNames, type EventLite } from "@/site/data";
 import { CarNum, ClassTag, Eyebrow, Livery, Note, Page, SectionHead, Skeleton, Tabs, TrackMap, dateRange } from "@/site/ui";
 import { characterWords, crewLastNames, fetchLapRecords, fingerprint, layoutsOf, num, plural, stripYear, useCircuits, type LayoutRow } from "@/site/archive";
 
@@ -361,7 +361,7 @@ function WinnerRow({ ev, race, names, loading, layout }: { ev: EventLite; race?:
                   <div className="mt-1.5 space-y-0.5 text-[13.5px] leading-snug">
                     {w.driverIds.slice(0, 4).map((d) => (
                       <Link key={d} to={`/driver/${d}`} className="block truncate hover:underline hover:underline-offset-4">
-                        {names?.drivers[d]?.full_name?.replace(/\s*\(R\)\s*$/i, "").split(/\s+/).slice(1).join(" ") || "…"}
+                        {lastName(names?.drivers[d]?.full_name) || "…"}
                       </Link>
                     ))}
                   </div>

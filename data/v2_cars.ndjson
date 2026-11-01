@@ -17,6 +17,7 @@
 {"id":"39b3b17e-f521-4e09-ada3-0ffa8c43ee07","model_name":"720S GT3 EVO","manufacturer":"McLaren","created_at":"2026-02-22T12:42:27.573032+00:00","updated_at":"2026-02-22T15:00:09.144795+00:00"}
 {"model_name":"AMR26","manufacturer":"Aston Martin","id":"39f93ba9-5113-409c-8c15-dd03eed2e2b8","created_at":"2026-11-01T19:41:28.068Z","updated_at":"2026-11-01T19:41:28.068Z"}
 {"id":"4107b126-5b27-4b6d-a83d-1c0424f6d57a","manufacturer":"Toyota","model_name":"","created_at":"2026-11-01T19:42:38.937Z","updated_at":"2026-11-01T19:42:38.937Z"}
+{"manufacturer":"Dallara","model_name":"IR-18 Chevrolet","id":"4130c2ec-2cd8-4fd8-a64d-65f232d4e031","created_at":"2026-11-01T19:39:53.836Z","updated_at":"2026-11-01T19:39:53.836Z"}
 {"id":"42666022-325a-471d-9cb9-3326b4b383c7","model_name":"Elantra N TCR","manufacturer":"Hyundai","created_at":"2026-02-24T18:36:02.442363+00:00","updated_at":"2026-02-24T20:28:13.4725+00:00"}
 {"model_name":"RB22","manufacturer":"Red Bull","id":"44472851-f7a1-401d-b4db-5c4f0080287c","created_at":"2026-11-01T19:41:28.072Z","updated_at":"2026-11-01T19:41:28.072Z"}
 {"id":"45c1f89b-df8b-4561-81b3-ecade974f1f3","model_name":"RC F GT3","manufacturer":"Lexus","created_at":"2026-02-22T12:42:32.50955+00:00","updated_at":"2026-02-22T15:00:03.053832+00:00"}
@@ -77,3 +78,4 @@
 {"model_name":"D08","manufacturer":"Duqueine","id":"f82b96d7-01f9-4c55-8514-89d36e3379c6","created_at":"2026-11-01T15:37:44.334Z","updated_at":"2026-11-01T15:37:44.334Z"}
 {"model_name":"C45","manufacturer":"Sauber","id":"f84c0028-65c3-483c-9373-eabb65e7f22b","created_at":"2026-11-01T19:41:22.011Z","updated_at":"2026-11-01T19:41:22.011Z"}
 {"model_name":"VF-24","manufacturer":"Haas","id":"fdaeeec8-6374-4440-8d37-70f394d22c63","created_at":"2026-11-01T19:41:16.234Z","updated_at":"2026-11-01T19:41:16.234Z"}
+{"manufacturer":"Dallara","model_name":"IR-18 Honda","id":"ff7b72e2-fbbb-4681-abec-b5f660ad6909","created_at":"2026-11-01T19:39:53.828Z","updated_at":"2026-11-01T19:39:53.828Z"}
