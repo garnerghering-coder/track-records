@@ -6,14 +6,16 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import FlagImage from "@/components/FlagImage";
 import { cn } from "@/lib/utils";
-import { useDigests, useEvents, useLayouts, useNames, layoutFor, cleanName } from "@/site/data";
+import { useDigests, useEvents, useLayouts, useLoad, useNames, layoutFor, cleanName } from "@/site/data";
+import { Chip } from "@/site/record-ui";
+import { loadRecordIndex } from "@/site/records";
 import { Eyebrow, Initials, Livery, Note, Page, Skeleton, Tabs, TrackMap, dateRange } from "@/site/ui";
 import { crewLastNames, fold, headline, layoutsOf, num, overallWinner, plural, stripYear, useAliases, useCircuits, useSeries, winsByDriver } from "@/site/archive";
 
 type Kind = "all" | "drivers" | "teams" | "races" | "circuits" | "cars" | "series";
 const REDIRECT: Record<string, string> = { drivers: "/drivers", circuits: "/circuits", teams: "/teams", cars: "/cars", series: "/series", events: "/results", results: "/results" };
 const KIND_LABEL: Record<Exclude<Kind, "all">, string> = { drivers: "Drivers", teams: "Teams", races: "Races", circuits: "Circuits", cars: "Cars", series: "Championships" };
-const SUGGEST = ["Porsche", "Daytona", "Nasr", "Cadillac", "Sebring", "GTD"];
+const SUGGEST = ["Porsche", "Daytona", "Nasr", "Cadillac", "Sebring", "Indianapolis"];
 
 /** Score a candidate: 0 = no match; higher is better. All query tokens must appear. */
 function score(q: string, fields: (string | null | undefined)[], aliasHit = false) {
@@ -50,6 +52,7 @@ export default function SearchPage() {
   const qParam = params.get("q") || "";
   const [input, setInput] = useState(qParam);
   const kind = ((params.get("type") as Kind) || "all") as Kind;
+  const seriesF = params.get("series") || "";
   const inputRef = useRef<HTMLInputElement>(null);
 
   const names = useNames();
@@ -59,6 +62,31 @@ export default function SearchPage() {
   const layouts = useLayouts();
   const series = useSeries();
   const aliases = useAliases();
+  // The record index (drivers/teams/cars per series) is only needed once a series is picked.
+  const ix = useLoad(seriesF ? "record-index" : null, loadRecordIndex).data;
+
+  // Series membership for the series filter (drivers, teams and cars from the record index).
+  const member = useMemo(() => {
+    if (!seriesF || !ix || !events) return null;
+    const ids = (rows: { id: string; series: string[] }[]) => new Set(rows.filter((r) => r.series.includes(seriesF)).map((r) => r.id));
+    return {
+      drivers: ids(ix.drivers),
+      teams: ids(ix.teams),
+      cars: ids(ix.cars),
+      circuits: new Set(events.filter((e) => e.series?.id === seriesF).map((e) => e.circuit_id)),
+    };
+  }, [seriesF, ix, events]);
+  const seriesChips = useMemo(() => {
+    const m = new Map<string, { id: string; short: string; n: number }>();
+    for (const e of events || []) if (e.series) m.set(e.series.id, { id: e.series.id, short: e.series.short_name || e.series.name, n: (m.get(e.series.id)?.n || 0) + 1 });
+    return [...m.values()].sort((a, b) => b.n - a.n);
+  }, [events]);
+  const setSeries = (id: string) => {
+    const n = new URLSearchParams(params);
+    if (id) n.set("series", id);
+    else n.delete("series");
+    setParams(n, { replace: true });
+  };
 
   // keep the URL in step with typing (debounced)
   useEffect(() => {
@@ -101,8 +129,17 @@ export default function SearchPage() {
       })),
     );
     const ser = rank(series!.map((s) => ({ item: s, s: score(q, [s.name, s.short_name], aliasIds.has(fold(s.id)) || aliasIds.has(fold(s.name))) })));
+    if (seriesF && member)
+      return {
+        drivers: drivers.filter((d) => member.drivers.has(d.id)),
+        teams: teams.filter((t) => member.teams.has(t.id)),
+        races: races.filter((e) => e.series?.id === seriesF),
+        circuits: circ.filter((c) => member.circuits.has(c.id)),
+        cars: cars.filter((c) => member.cars.has(c.id)),
+        series: ser.filter((x) => x.id === seriesF),
+      };
     return { drivers, teams, races, circuits: circ, cars, series: ser };
-  }, [ready, q, names, events, circuits, series, aliases, wins]);
+  }, [ready, q, names, events, circuits, series, aliases, wins, seriesF, member]);
 
   if (tab && REDIRECT[tab]) return <Navigate to={REDIRECT[tab] + (qParam && (tab === "circuits" || tab === "drivers") ? `?q=${encodeURIComponent(qParam)}` : "")} replace />;
 
@@ -154,6 +191,19 @@ export default function SearchPage() {
             )}
           </label>
         </form>
+
+        {seriesChips.length > 1 && (
+          <div className="-mx-4 mt-5 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0" role="group" aria-label="Limit to a series">
+            <Chip active={!seriesF} onClick={() => setSeries("")}>
+              Every series
+            </Chip>
+            {seriesChips.map((x) => (
+              <Chip key={x.id} active={seriesF === x.id} onClick={() => setSeries(seriesF === x.id ? "" : x.id)}>
+                {x.short}
+              </Chip>
+            ))}
+          </div>
+        )}
 
         {!qParam ? (
           <div className="mt-8 flex flex-wrap items-center gap-2">

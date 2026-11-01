@@ -5,9 +5,24 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { classRank } from "@/lib/insights";
-import { useEvents, useLayouts, useSeasons, layoutFor, lastName, type SeasonLite } from "@/site/data";
+import { useEvents, useLayouts, useSeasonLeaders, useSeasons, layoutFor, lastName, type SeasonLite, type SeasonStandings } from "@/site/data";
 import { Eyebrow, Note, Page, PosNum, Skeleton, Sparkline, TrackMap, Ticker } from "@/site/ui";
-import { classColor, groupByPosition, plural, useChampionship, useSeasonClasses, useSeries, type SeriesRow } from "@/site/archive";
+import { classColor, plural, useSeasonClasses, useSeries, type SeriesRow } from "@/site/archive";
+
+/** Leaders (position 1, ties included) and the runner-up's points of each class, from the light leaders file. */
+function leadersOf(st: SeasonStandings | undefined) {
+  if (!st) return null;
+  return st.byClass
+    .map((c) => {
+      const lead = c.rows.filter((r) => r.position === 1);
+      const second = c.rows.find((r) => r.position > 1);
+      return { c: c.className, lead, gap: lead[0] && second ? lead[0].totalPoints - second.totalPoints : null };
+    })
+    .filter((x) => x.lead.length && x.lead[0].totalPoints > 0)
+    .sort((a, b) => classRank(a.c) - classRank(b.c));
+}
+
+const PAST_SHOWN = 4;
 
 const SeriesIndex = () => {
   const series = useSeries();
@@ -21,7 +36,8 @@ const SeriesIndex = () => {
         const list = seasons.filter((x) => x.series.id === s.id).sort((a, b) => b.year - a.year);
         return { series: s, seasons: list, rounds: list.reduce((n, x) => n + x.eventCount, 0) };
       })
-      .sort((a, b) => b.rounds - a.rounds || a.series.name.localeCompare(b.series.name));
+      // Most recently raced first, then the longest record.
+      .sort((a, b) => (b.seasons.find((x) => x.eventCount > 0)?.year ?? 0) - (a.seasons.find((x) => x.eventCount > 0)?.year ?? 0) || b.rounds - a.rounds || a.series.name.localeCompare(b.series.name));
   }, [series, seasons]);
 
   const totalSeasons = seasons?.filter((s) => s.eventCount > 0).length ?? 0;
@@ -75,17 +91,12 @@ const SeriesIndex = () => {
 
 function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLite[] }) {
   const latest = seasons.find((s) => s.eventCount > 0) || seasons[0];
-  const ch = useChampionship(latest?.id).data;
+  const st = useSeasonLeaders(latest?.id);
   const classes = useSeasonClasses();
   const events = useEvents();
   const layouts = useLayouts();
   const rounds = (events || []).filter((e) => e.season_id === latest?.id).sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
-  const leaders = ch
-    ? ch.classes
-        .map((c) => ({ c, g: groupByPosition(ch.drivers[c] || []) }))
-        .filter((x) => x.g[0])
-        .sort((a, b) => classRank(a.c) - classRank(b.c))
-    : null;
+  const leaders = leadersOf(st);
   const finished = latest ? latest.year < new Date().getFullYear() : false;
   const years = seasons.map((s) => s.year);
 
@@ -104,7 +115,7 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
             </Link>
           </h2>
           <div className="relative z-10 mt-6 flex flex-wrap gap-2">
-            {seasons.filter((s) => s.eventCount > 0).map((s) => (
+            {seasons.filter((s) => s.eventCount > 0).slice(0, 12).map((s) => (
               <Link
                 key={s.id}
                 to={`/series/${series.id}?season=${s.year}`}
@@ -115,11 +126,21 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
               </Link>
             ))}
           </div>
-          {seasons
-            .filter((s) => s.id !== latest?.id && s.eventCount > 0 && s.year < new Date().getFullYear())
-            .map((s) => (
-              <PastChampions key={s.id} season={s} />
-            ))}
+          {(() => {
+            const past = seasons.filter((s) => s.id !== latest?.id && s.eventCount > 0 && s.year < new Date().getFullYear());
+            return (
+              <>
+                {past.slice(0, PAST_SHOWN).map((s) => (
+                  <PastChampions key={s.id} season={s} />
+                ))}
+                {past.length > PAST_SHOWN && (
+                  <Link to={`/series/${series.id}?season=${past[PAST_SHOWN].year}`} className="relative z-10 mt-6 text-sm text-ink-2 underline underline-offset-4 hover:text-ink">
+                    {plural(past.length - PAST_SHOWN, "earlier season")} on the record
+                  </Link>
+                )}
+              </>
+            );
+          })()}
           {/* the season in track maps */}
           {rounds.length > 0 && (
             <div className="mt-auto pt-10">
@@ -139,7 +160,7 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
           <div className="flex items-center justify-between">
             <Eyebrow>
               {latest?.year} · {finished ? "Champions" : "Leaders"}
-              {ch && leaders && leaders.length > 0 && <span>· after {plural(ch.rounds.length, "round")}</span>}
+              {st && leaders && leaders.length > 0 && <span>· after {plural(st.rounds, "round")}</span>}
             </Eyebrow>
             <ArrowUpRight className="h-5 w-5 text-ink-3 transition-transform group-hover/card:-translate-y-0.5 group-hover/card:translate-x-0.5 group-hover/card:text-ink" />
           </div>
@@ -148,9 +169,7 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
             {leaders && leaders.length === 0 && (
               <p className="max-w-sm text-[15px] text-ink-2">No championship points have been published for {latest?.year} yet. The results of its rounds are on the record.</p>
             )}
-            {leaders?.map(({ c, g }) => {
-              const lead = g[0];
-              const gap = g[1] ? lead.entries[0].totalPoints - g[1].entries[0].totalPoints : null;
+            {leaders?.slice(0, 5).map(({ c, lead, gap }) => {
               const col = classColor(latest ? classes?.[latest.id] : undefined, c);
               return (
                 <div key={c} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
@@ -164,11 +183,11 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 truncate text-[16px]">{lead.entries.map((e) => lastName(e.name)).join(" / ")}</div>
-                    <Sparkline values={[0, ...lead.entries[0].cumulative]} color={col} className="mt-1.5 h-5" />
+                    <div className="mt-0.5 truncate text-[16px]">{lead.map((e) => lastName(e.name)).join(" / ")}</div>
+                    <Sparkline values={[0, ...lead[0].cumulative]} color={col} className="mt-1.5 h-5" />
                   </div>
                   <div className="text-right">
-                    <div className="num text-xl">{lead.entries[0].totalPoints.toLocaleString()}</div>
+                    <div className="num text-xl">{lead[0].totalPoints.toLocaleString()}</div>
                     {gap != null && <div className="num text-[11px] text-ink-3">+{gap.toLocaleString()}</div>}
                   </div>
                 </div>
@@ -182,20 +201,20 @@ function SeriesCard({ series, seasons }: { series: SeriesRow; seasons: SeasonLit
 }
 
 function PastChampions({ season }: { season: SeasonLite }) {
-  const ch = useChampionship(season.id).data;
+  const st = useSeasonLeaders(season.id);
   const classes = useSeasonClasses();
-  if (!ch) return <Skeleton className="mt-8 h-16" />;
-  const champs = ch.classes.map((c) => ({ c, g: groupByPosition(ch.drivers[c] || [])[0] })).filter((x) => x.g);
+  if (!st) return <Skeleton className="mt-8 h-16" />;
+  const champs = leadersOf(st) || [];
   if (!champs.length) return null;
   return (
     <div className="mt-8">
       <div className="eyebrow mb-2.5">{season.year} champions</div>
       <ul className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-        {champs.map(({ c, g }) => (
+        {champs.map(({ c, lead }) => (
           <li key={c} className="flex min-w-0 items-center gap-2 text-[14px]">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: classColor(classes?.[season.id], c) }} />
             {c && <span className="w-[3.6rem] shrink-0 font-mono text-[10.5px] uppercase tracking-[0.06em] text-ink-3">{c}</span>}
-            <span className="truncate">{g.entries.map((e) => lastName(e.name)).join(" / ")}</span>
+            <span className="truncate">{lead.map((e) => lastName(e.name)).join(" / ")}</span>
           </li>
         ))}
       </ul>

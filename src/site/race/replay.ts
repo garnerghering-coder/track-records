@@ -45,6 +45,8 @@ export interface ReplayModel {
   pits: Map<string, ReplayPit[]>;
   flags: ReplayFlag[];
   messages: ReplayMessage[];
+  /** message times, ascending (for binary search) */
+  messageTimes: number[];
   leaderCrossings: number[]; // elapsed when the race leader completed lap k (index k-1)
   classLeaderCrossings: Map<string, number[]>;
   typicalLap: number;
@@ -157,6 +159,7 @@ export function buildModel(input: {
     pits: group(pits as any) as any,
     flags,
     messages,
+    messageTimes: messages.map((m) => m.t),
     leaderCrossings: leaderOf(cars),
     classLeaderCrossings,
     typicalLap,
@@ -197,7 +200,12 @@ export function towerAt(model: ReplayModel, t: number, classFilter: string | nul
       const pits = model.pits.get(car.carNumber) || [];
       const inPit = pits.some((p) => p.in <= t && t <= p.out);
       const stints = model.stints.get(car.carNumber) || [];
-      const st = stints.find((s) => s.start <= t && t < s.end) || [...stints].reverse().find((s) => s.start <= t);
+      let st: ReplayStint | undefined;
+      for (const s of stints) {
+        if (s.start > t) break;
+        st = s; // the latest stint started by t (stints are sorted by start)
+        if (t < s.end) break;
+      }
       const finished = laps === car.crossings.length;
       const out = finished && t > lastCross + model.typicalLap * 3 && t < model.duration - model.typicalLap * 2;
       const lastLap = laps >= 2 ? car.crossings[laps - 1] - car.crossings[laps - 2] : null;
@@ -245,15 +253,14 @@ export function towerAt(model: ReplayModel, t: number, classFilter: string | nul
 }
 
 export function flagAt(model: ReplayModel, t: number): string {
-  const f = model.flags.find((x) => x.start <= t && t < x.end);
+  // A neutralisation inside a longer period wins (e.g. a VSC within a yellow, a red within a caution).
+  let f: ReplayFlag | undefined;
+  for (const x of model.flags) if (x.start <= t && t < x.end && (!f || x.start >= f.start)) f = x;
   return f?.state || (t <= 0 ? "PRE" : t >= model.duration ? "CHEQUERED" : "GREEN");
 }
 
 export function messagesUntil(model: ReplayModel, t: number, n = 5): ReplayMessage[] {
-  const idx = countLE(
-    model.messages.map((m) => m.t),
-    t,
-  );
+  const idx = countLE(model.messageTimes ?? model.messages.map((m) => m.t), t);
   return model.messages.slice(Math.max(0, idx - n), idx).reverse();
 }
 

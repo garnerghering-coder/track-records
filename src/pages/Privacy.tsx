@@ -158,11 +158,15 @@ const Privacy = () => {
                 <li>Depending on where you live, you may have further rights over personal data; contact us and we&apos;ll help.</li>
               </ul>
               <p>
-                Contact:{" "}
-                <a href="mailto:privacy@track-records.com" className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink">
-                  privacy@track-records.com
+                To ask for a correction or removal, open a request on{" "}
+                <a
+                  href="https://github.com/garnerghering-coder/track-records/issues/new?title=Correction%20or%20removal%20request"
+                  className="text-ink underline decoration-ink/30 underline-offset-4 hover:decoration-ink"
+                >
+                  our public issue tracker
                 </a>
-                .
+                . If your request involves details you&apos;d rather not post publicly, say so in a short note there and we&apos;ll arrange a private
+                channel.
               </p>
             </Section>
 

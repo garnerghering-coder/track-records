@@ -20,10 +20,13 @@ import {
   shapeAxes,
   tally,
   teammatesOf,
-  useRecordBook,
+  useRecord,
+  winWord,
+  type ChampPlace,
   type Entry,
   type RecordBook,
   type ShapeAxis,
+  type TeamMate,
 } from "@/site/records";
 import {
   GhostLink,
@@ -42,7 +45,7 @@ import {
 
 export default function DriverProfile() {
   const { id = "" } = useParams<{ id: string }>();
-  const book = useRecordBook();
+  const book = useRecord("drivers", id);
   const driver = book?.drivers[id];
 
   return (
@@ -50,7 +53,7 @@ export default function DriverProfile() {
       <SEOHead
         title={driver ? `${cleanName(driver.full_name)} – Driver record` : "Driver record"}
         description={
-          driver ? `${cleanName(driver.full_name)}'s sportscar racing record: starts, class wins, podiums, career timeline and teammates.` : undefined
+          driver ? `${cleanName(driver.full_name)}'s racing record: starts, wins, podiums, career timeline and teammates.` : undefined
         }
         canonical={`/driver/${id}`}
       />
@@ -83,9 +86,10 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
   const car = latest?.carId ? carLabel(book.cars[latest.carId]) : "";
   const seasons = bySeason(entries);
   const mates = useMemo(() => teammatesOf(id, entries), [id, entries]);
+  const teamMates = book.teammates?.get(id) || [];
   const teams = countBy(entries, (e) => e.teamId);
   const cars = countBy(entries, (e) => e.carId);
-  const eventsSeen = book.driverEvents.get(id)?.size || 0;
+  const eventsSeen = book.driverEvents.get(id) || 0;
   const parts = name.split(/\s+/);
   const first = parts.length > 1 ? parts.slice(0, -1).join(" ") : "";
   const last = parts[parts.length - 1];
@@ -99,19 +103,20 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
         </>
       );
     const seriesText = t.series.join(" and ");
-    const oneClass = t.classes.length === 1 ? `${t.classes[0]} ` : "";
+    const oneClass = t.classes.length === 1 && !t.outright ? `${t.classes[0]} ` : "";
+    const win = winWord(t);
     const headline =
       t.wins > 0 ? (
         <>
-          , with <span className="mark">{plural(t.wins, `${oneClass}class win`)}</span>
+          , with <span className="mark">{plural(t.wins, `${oneClass}${win}`)}</span>
           {t.podiums > t.wins ? ` and ${plural(t.podiums, "podium")}` : ""}
         </>
       ) : t.podiums > 0 ? (
         <>
-          , with <span className="mark">{plural(t.podiums, `${oneClass}class podium`)}</span>
+          , with <span className="mark">{plural(t.podiums, `${oneClass}${t.classed && !t.outright ? "class " : ""}podium`)}</span>
         </>
       ) : t.best != null ? (
-        <>, with a best class finish of P{t.best}</>
+        <>, with a best {t.classed && !t.outright ? "class " : ""}finish of P{t.best}</>
       ) : null;
     return (
       <>
@@ -208,7 +213,7 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
                   sub: t.events ? `${plural(t.events, "event")}` : "No starts yet",
                 },
                 {
-                  label: "Class wins",
+                  label: t.classed && !t.outright ? "Class wins" : "Wins",
                   value: t.wins,
                   sub: t.starts ? `${Math.round((t.wins / t.starts) * 100)}% of starts` : undefined,
                 },
@@ -222,7 +227,7 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
                   value: t.best != null ? `P${t.best}` : null,
                   sub: t.best != null ? `${t.bestCount > 1 ? `×${t.bestCount} · ` : ""}${t.bestClass || "overall"}` : "No classified finish",
                 },
-                { label: "Class poles", value: t.poles, sub: "In qualifying" },
+                { label: t.classed && !t.outright ? "Class poles" : "Poles", value: t.poles, sub: "In qualifying" },
                 {
                   label: "Finished",
                   value: t.starts ? `${Math.round((t.finishes / t.starts) * 100)}%` : null,
@@ -313,30 +318,52 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
           </section>
 
           {/* ── Teammates ────────────────────────────────────────── */}
-          <section className="mt-24 sm:mt-32">
-            <SectionHead
-              eyebrow={mates.length ? `${plural(mates.length, "co-driver")}` : "Co-drivers"}
-              title={
-                <>
-                  Shared the <em>car</em>
-                </>
-              }
-            />
-            {mates.length ? (
+          {(mates.length > 0 || teamMates.length === 0) && (
+            <section className="mt-24 sm:mt-32">
+              <SectionHead
+                eyebrow={mates.length ? `${plural(mates.length, "co-driver")}` : "Co-drivers"}
+                title={
+                  <>
+                    Shared the <em>car</em>
+                  </>
+                }
+              />
+              {mates.length ? (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {mates.slice(0, 9).map((m) => (
+                    <MateCard key={m.id} book={book} self={id} mateId={m.id} races={m.races} />
+                  ))}
+                </div>
+              ) : (
+                <Note title="Solo so far">
+                  {t.starts
+                    ? `Every start on the record was a solo drive. Co-drivers appear here once ${lastName(driver.full_name)} shares a car in an endurance race.`
+                    : "Co-drivers appear here once races are on the record."}
+                </Note>
+              )}
+              {mates.length > 9 && <p className="mt-4 text-sm text-ink-3">And {plural(mates.length - 9, "more co-driver")} in the results below.</p>}
+            </section>
+          )}
+          {teamMates.length > 0 && (
+            <section className="mt-24 sm:mt-32">
+              <SectionHead
+                eyebrow={`${plural(teamMates.length, "team-mate")} in the other car`}
+                title={
+                  <>
+                    Against the <em>team-mate</em>
+                  </>
+                }
+              />
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {mates.slice(0, 9).map((m) => (
-                  <MateCard key={m.id} book={book} self={id} mateId={m.id} races={m.races} />
+                {teamMates.slice(0, 9).map((m) => (
+                  <TeamMateCard key={m.id} book={book} self={id} mate={m} />
                 ))}
               </div>
-            ) : (
-              <Note title="Solo so far">
-                {t.starts
-                  ? `Every start on the record was a solo drive. Co-drivers appear here once ${lastName(driver.full_name)} shares a car in an endurance race.`
-                  : "Co-drivers appear here once races are on the record."}
-              </Note>
-            )}
-            {mates.length > 9 && <p className="mt-4 text-sm text-ink-3">And {plural(mates.length - 9, "more co-driver")} in the results below.</p>}
-          </section>
+              <p className="mt-4 text-sm text-ink-3">
+                Races where both drove for the same team in different cars. Ahead means the better classified finish; a finisher beats a retirement.
+              </p>
+            </section>
+          )}
 
           {/* ── Results ──────────────────────────────────────────── */}
           <section className="mt-24 sm:mt-32">
@@ -345,7 +372,17 @@ function DriverRecord({ book, id }: { book: RecordBook; id: string }) {
               <div className="space-y-12">
                 {seasons.map((s) => (
                   <div key={s.seasonId}>
-                    <SeasonHead year={s.year} series={s.seriesName} right={<SeasonSummary seasonId={s.seasonId} driverId={id} rows={s.rows} />} />
+                    <SeasonHead
+                      year={s.year}
+                      series={s.seriesName}
+                      right={
+                        book.championships ? (
+                          <SeasonSummary rows={s.rows} places={book.championships.get(id)?.[s.seasonId] || []} />
+                        ) : (
+                          <LiveSeasonSummary seasonId={s.seasonId} driverId={id} rows={s.rows} />
+                        )
+                      }
+                    />
                     <ul>
                       {[...s.rows].reverse().map((e) => (
                         <ResultRow
@@ -409,10 +446,16 @@ function EntryLine({ e, book, self }: { e: Entry; book: RecordBook; self: string
   );
 }
 
-function SeasonSummary({ seasonId, driverId, rows }: { seasonId: string; driverId: string; rows: Entry[] }) {
+/** Fallback when the record was built in the browser: read the season's standings. */
+function LiveSeasonSummary({ seasonId, driverId, rows }: { seasonId: string; driverId: string; rows: Entry[] }) {
   const st = useSeasonStandings(seasonId);
+  const places = (st?.byClass || []).flatMap((c) => c.rows.filter((r) => r.driverId === driverId && r.totalPoints > 0).map((r) => ({ className: c.className, position: r.position, totalPoints: r.totalPoints })));
+  return <SeasonSummary rows={rows} places={places} />;
+}
+
+function SeasonSummary({ rows, places }: { rows: Entry[]; places: ChampPlace[] }) {
   const t = tally(rows);
-  const mine = st?.byClass.flatMap((c) => c.rows.map((r) => ({ ...r, className: c.className }))).find((r) => r.driverId === driverId && r.totalPoints > 0);
+  const mine = places[0];
   return (
     <span className="inline-flex flex-wrap gap-x-3 sm:justify-end">
       <span>
@@ -422,7 +465,7 @@ function SeasonSummary({ seasonId, driverId, rows }: { seasonId: string; driverI
       </span>
       {mine && (
         <span className="text-ink-2">
-          P{mine.position} in {mine.className || "the"} championship · <span className="num">{mine.totalPoints.toLocaleString()}</span> pts
+          P{mine.position} in {mine.className ? `the ${mine.className}` : "the"} championship · <span className="num">{mine.totalPoints.toLocaleString()}</span> pts
         </span>
       )}
     </span>
@@ -468,6 +511,47 @@ function ShapeBlock({ axes, events, name }: { axes: ShapeAxis[]; events: number;
         <p className="py-4 text-xs text-ink-3">
           Scores run 0–100 and compare drivers within their class. Each appears only once there's enough racing behind it.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function TeamMateCard({ book, self, mate }: { book: RecordBook; self: string; mate: TeamMate }) {
+  const d = book.drivers[mate.id];
+  const name = cleanName(d?.full_name) || "Unknown driver";
+  const lead = mate.ahead > mate.behind ? "ahead" : mate.behind > mate.ahead ? "behind" : "level";
+  return (
+    <div className="group relative flex flex-col rounded-3xl border bg-sheet p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-28px_rgba(0,0,0,0.35)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <Eyebrow>
+            {d?.nationality && <FlagImage nationality={d.nationality} size={14} className="rounded-[2px]" />}
+            {plural(mate.races, "race")} as team-mates
+          </Eyebrow>
+          <Link to={`/driver/${mate.id}`} className="display mt-2 block text-[1.8rem] leading-[1.02] after:absolute after:inset-0 after:rounded-3xl">
+            {name}
+          </Link>
+        </div>
+        <div className="text-right">
+          <div className="num whitespace-nowrap text-[2rem] leading-none">
+            {mate.ahead}–{mate.behind}
+          </div>
+          <div className="eyebrow mt-1">{lead}</div>
+        </div>
+      </div>
+      <div className="mt-5 flex items-end justify-between gap-3 border-t pt-4 text-sm text-ink-2">
+        <span>
+          {mate.ahead === mate.behind
+            ? "Dead level on track"
+            : `${mate.ahead > mate.behind ? "Ahead" : "Behind"} in ${Math.round((Math.max(mate.ahead, mate.behind) / Math.max(1, mate.ahead + mate.behind)) * 100)}% of decided races`}
+        </span>
+        <Link
+          to={`/compare?a=${self}&b=${mate.id}`}
+          className="relative z-10 inline-flex shrink-0 items-center gap-1 text-xs text-ink-3 hover:text-ink focus-visible:text-ink"
+          aria-label={`Compare with ${name}`}
+        >
+          Compare <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
     </div>
   );

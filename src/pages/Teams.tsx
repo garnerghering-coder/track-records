@@ -5,13 +5,13 @@ import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 import { classRank } from "@/lib/insights";
 import { ClassTag, Eyebrow, Note, Page, Skeleton, Tabs } from "@/site/ui";
-import { plural, tally, useRecordBook, type Entry, type Tally } from "@/site/records";
+import { plural, useRecordIndex, type TeamIndexRow } from "@/site/records";
 import { Chip, RecordCard, SearchField } from "@/site/record-ui";
 
 type Sort = "wins" | "entries" | "az";
 
 export default function Teams() {
-  const book = useRecordBook();
+  const book = useRecordIndex();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") || "";
   const series = params.get("series") || "";
@@ -27,32 +27,36 @@ export default function Teams() {
 
   const rows = useMemo(() => {
     if (!book) return [];
-    return [...book.byTeam.entries()]
-      .map(([id, list]) => ({ id, name: book.teams[id]?.full_name || "Unknown team", list, t: tally(list) as Tally, last: list[list.length - 1] as Entry }))
-      .filter((r) => r.t.starts > 0);
+    const short = new Map(book.series.map((s) => [s.id, s.short]));
+    return book.teams.map((r: TeamIndexRow) => ({ ...r, seriesShort: r.series.map((id) => short.get(id) || "") }));
   }, [book]);
 
   const classes = useMemo(() => {
     const m = new Map<string, string>();
-    for (const e of book?.entries || []) if (e.className && (!series || e.seriesId === series)) m.set(e.className, e.classColor);
+    for (const c of book?.classes || []) if (!series || c.seriesId === series) m.set(c.name, c.color);
     return [...m.entries()].sort((a, b) => classRank(a[0]) - classRank(b[0]));
   }, [book, series]);
 
   const shown = useMemo(() => {
     const n = dq.trim().toLocaleLowerCase();
-    const out = rows.filter(
-      (r) => (!n || r.name.toLocaleLowerCase().includes(n)) && (!series || r.list.some((e) => e.seriesId === series)) && (!cls || r.t.classes.includes(cls)),
-    );
+    const out = rows
+      .filter((r) => (!n || r.name.toLocaleLowerCase().includes(n)) && (!series || r.series.includes(series)) && (!cls || r.classes.includes(cls)))
+      .map((r) => {
+        if (!series) return r;
+        const [starts, wins, podiums] = r.bySeries[series] || [0, 0, 0];
+        return { ...r, starts, wins, podiums };
+      });
     if (sort === "az") return out.sort((a, b) => a.name.localeCompare(b.name));
-    if (sort === "entries") return out.sort((a, b) => b.t.starts - a.t.starts || a.name.localeCompare(b.name));
-    return out.sort((a, b) => b.t.wins - a.t.wins || b.t.podiums - a.t.podiums || b.t.starts - a.t.starts || a.name.localeCompare(b.name));
+    if (sort === "entries") return out.sort((a, b) => b.starts - a.starts || a.name.localeCompare(b.name));
+    return out.sort((a, b) => b.wins - a.wins || b.podiums - a.podiums || b.starts - a.starts || a.name.localeCompare(b.name));
   }, [rows, dq, series, cls, sort]);
 
-  const winners = rows.filter((r) => r.t.wins > 0).length;
+  const winners = rows.filter((r) => r.wins > 0).length;
+  const anyClassed = rows.some((r) => r.classed);
 
   return (
     <div className="min-h-screen">
-      <SEOHead title="Teams – Track Records" description="Every team on the record, with car entries, class wins, podiums and the cars they ran." canonical="/teams" />
+      <SEOHead title="Teams – Track Records" description="Every team on the record, in every series, with car entries, wins, podiums and the cars they ran." canonical="/teams" />
       <Header />
       <Page className="pt-6 sm:pt-10">
         <Eyebrow>
@@ -65,7 +69,7 @@ export default function Teams() {
         <div className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
           {book ? (
             <>
-              {plural(rows.length, "team")} have entered a car; {winners} of them have won their class. Open one for line-ups by season and every result.
+              {plural(rows.length, "team")} have entered a car; {winners} of them have won {anyClassed ? "a race or their class" : "a race"}. Open one for line-ups by season and every result.
             </>
           ) : (
             <Skeleton className="h-6 w-80" />
@@ -127,18 +131,18 @@ export default function Teams() {
                   <RecordCard
                     key={r.id}
                     to={`/team/${r.id}`}
-                    livery={r.last.livery}
-                    number={r.last.carNumber}
-                    tint={r.last.classColor}
-                    eyebrow={`${r.t.series.join(" · ")} · ${r.t.years.length > 1 ? `${r.t.years[0]}–${r.t.years[r.t.years.length - 1]}` : r.t.years[0]}`}
+                    livery={r.last?.livery ?? undefined}
+                    number={r.last?.carNumber}
+                    tint={r.last?.color}
+                    eyebrow={`${r.seriesShort.join(" · ")}${r.years ? ` · ${r.years[0] !== r.years[1] ? `${r.years[0]}–${r.years[1]}` : r.years[0]}` : ""}`}
                     title={r.name}
-                    tags={r.t.classes.map((c) => (
-                      <ClassTag key={c} name={c} color={r.t.classColors[c]} />
+                    tags={r.classes.map((c) => (
+                      <ClassTag key={c} name={c} color={r.classColors[c]} />
                     ))}
                     stats={[
-                      { label: "Entries", value: r.t.starts },
-                      { label: "Wins", value: r.t.wins },
-                      { label: "Podiums", value: r.t.podiums },
+                      { label: "Entries", value: r.starts },
+                      { label: "Wins", value: r.wins },
+                      { label: "Podiums", value: r.podiums },
                     ]}
                   />
                 ))}

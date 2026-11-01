@@ -24,6 +24,14 @@
  *   points imply, so post-session penalties count), then whoever achieved
  *   the deciding result first. Entries with identical records share a position
  *   (as co-drivers do in IMSA's tables); positions are dense (1, 1, 2, ...).
+ *
+ * Other series (`standingsRulesFor`): points are always the stored points
+ * (stage, sprint, fastest-lap, pole and bonus points included as imported),
+ * summed. Ties go to a generic countback on finishing positions in the main
+ * races (more wins, then more seconds, ...; sprints and qualifying excluded),
+ * then the earliest deciding result. Drivers who started a race appear even
+ * with no points. The teams' table is per car number (IMSA teams, NASCAR
+ * owners, INDYCAR entrants) or per team summing all its cars (F1 constructors).
  */
 
 export type StandingsSessionKind = "race" | "qualifying";
@@ -57,6 +65,40 @@ export interface SessionResult {
   points: number;
   classPosition: number | null;
   kind?: StandingsSessionKind;
+  /** a main race (not sprint/qualifying) the entry started (generic countback) */
+  main?: boolean;
+}
+
+/* ── Series rules ───────────────────────────────────────────────── */
+
+export interface StandingsRules {
+  /** "imsa": IMSA countback (positions implied by the IMSA points scale, qualifying included); "countback": wins, then seconds, ... in main races */
+  tiebreak: "imsa" | "countback";
+  /** "car": the teams' table is per car number (and class); "team": per team, all its cars together */
+  teamKey: "car" | "team";
+  /** What the series calls its teams' championship. */
+  teamLabel: string;
+  /** List drivers / entries who started a race but scored no points. */
+  includeZero: boolean;
+}
+
+export const IMSA_RULES: StandingsRules = { tiebreak: "imsa", teamKey: "car", teamLabel: "Teams", includeZero: false };
+export const GENERIC_RULES: StandingsRules = { tiebreak: "countback", teamKey: "car", teamLabel: "Teams", includeZero: true };
+
+/** IMSA-sanctioned championships (WeatherTech, Michelin Pilot Challenge, VP Racing, MX-5 Cup, ...). */
+export const isImsaSeries = (series: { name?: string | null; short_name?: string | null } | null | undefined) =>
+  /\bIMSA\b|WeatherTech|Michelin Pilot|VP Racing SportsCar|Prototype Challenge|Mazda MX-5|MX-5 CUP|Porsche Carrera Cup North America|Lamborghini Super Trofeo North America/i.test(
+    `${series?.name || ""} ${series?.short_name || ""}`,
+  );
+
+/** The standings rules for a series, from its name. */
+export function standingsRulesFor(series: { name?: string | null; short_name?: string | null } | null | undefined): StandingsRules {
+  const n = `${series?.name || ""} ${series?.short_name || ""}`;
+  if (isImsaSeries(series)) return IMSA_RULES;
+  if (/formula (1|one)\b|\bF1\b/i.test(n)) return { ...GENERIC_RULES, teamKey: "team", teamLabel: "Constructors" };
+  if (/nascar/i.test(n)) return { ...GENERIC_RULES, teamLabel: "Owners" };
+  if (/indy ?car/i.test(n)) return { ...GENERIC_RULES, teamLabel: "Entrants" };
+  return GENERIC_RULES;
 }
 
 /* IMSA race scale (see supabase/functions/_shared/imsa-points.ts). */
@@ -78,7 +120,9 @@ export function countbackPosition(r: SessionResult): number | null {
 
 export interface TeamStanding {
   key: string;
+  /** Most used car number (per-car tables have exactly one). */
   carNumber: string;
+  carNumbers: string[];
   className: string;
   teamId: string | null;
   driverIds: string[];
@@ -187,11 +231,17 @@ function isPodiumEligible(cs: CarSession, session: StandingsSession | undefined)
  * Points first, then best class positions (lexicographic over sorted
  * positions of scoring sessions), then the earliest achievement.
  */
-export function compareStandings(a: { totalPoints: number; results: SessionResult[] }, b: { totalPoints: number; results: SessionResult[] }): number {
+export function compareStandings(
+  a: { totalPoints: number; results: SessionResult[] },
+  b: { totalPoints: number; results: SessionResult[] },
+  rules: Pick<StandingsRules, "tiebreak"> = IMSA_RULES,
+): number {
   if (Math.abs(b.totalPoints - a.totalPoints) > 1e-9) return b.totalPoints - a.totalPoints;
+  const position = (r: SessionResult) =>
+    rules.tiebreak === "imsa" ? (r.points > 0 ? countbackPosition(r) : null) : r.main && r.classPosition != null && r.classPosition > 0 ? r.classPosition : null;
   const scoring = (x: { results: SessionResult[] }) =>
     x.results
-      .map((r) => ({ order: r.order, pos: r.points > 0 ? countbackPosition(r) : null }))
+      .map((r) => ({ order: r.order, pos: position(r) }))
       .filter((r): r is { order: number; pos: number } => r.pos != null)
       .sort((p, q) => p.pos - q.pos || p.order - q.order);
   const ra = scoring(a);
@@ -210,47 +260,84 @@ export function compareStandings(a: { totalPoints: number; results: SessionResul
 }
 
 /** Sort with `compareStandings` and assign dense positions (identical records share one). */
-export function rankStandings<T extends { totalPoints: number; results: SessionResult[]; position: number }>(list: T[], tiebreakKey: (t: T) => string): T[] {
-  const sorted = [...list].sort((a, b) => compareStandings(a, b) || tiebreakKey(a).localeCompare(tiebreakKey(b)));
+export function rankStandings<T extends { totalPoints: number; results: SessionResult[]; position: number }>(
+  list: T[],
+  tiebreakKey: (t: T) => string,
+  rules: Pick<StandingsRules, "tiebreak"> = IMSA_RULES,
+): T[] {
+  const sorted = [...list].sort((a, b) => compareStandings(a, b, rules) || tiebreakKey(a).localeCompare(tiebreakKey(b)));
   let pos = 0;
   sorted.forEach((e, i) => {
-    if (i === 0 || compareStandings(sorted[i - 1], e) !== 0) pos++;
+    if (i === 0 || compareStandings(sorted[i - 1], e, rules) !== 0) pos++;
     e.position = pos;
   });
   return sorted;
 }
 
-/** Team (car) standings for every class. Entries with 0 points are omitted. */
-export function computeTeamStandings(sessionList: StandingsSession[], rows: StandingsRow[]): TeamStanding[] {
+const sessionResult = (cs: CarSession, s: StandingsSession): SessionResult => ({
+  sessionId: cs.sessionId,
+  order: s.order,
+  points: cs.points,
+  classPosition: cs.classPosition,
+  kind: s.kind,
+  main: isPodiumEligible(cs, s),
+});
+
+/** Keep an entry in the table: it scored, or (when the rules list them) it started a race. */
+const listed = (e: { totalPoints: number; results: SessionResult[] }, rules: StandingsRules) => e.totalPoints > 0 || (rules.includeZero && e.results.some((r) => r.kind === "race" && r.main));
+
+/**
+ * Teams' standings for every class: per car number (IMSA teams, NASCAR owners,
+ * INDYCAR entrants) or per team with all its cars (F1 constructors).
+ * Entries with 0 points are omitted unless the rules list them.
+ */
+export function computeTeamStandings(sessionList: StandingsSession[], rows: StandingsRow[], rules: StandingsRules = IMSA_RULES): TeamStanding[] {
   const sessions = new Map(sessionList.map((s) => [s.id, s]));
-  const teams = new Map<string, TeamStanding>();
-  for (const cs of collapseRows(sessions, rows)) {
+  const carSessions = collapseRows(sessions, rows);
+  // Per-team tables: a car belongs to the team it ran for most (a car number may change hands).
+  const teamOfCar = new Map<string, string | null>();
+  if (rules.teamKey === "team") {
+    const use = new Map<string, Map<string, number>>();
+    for (const cs of carSessions) {
+      if (!cs.teamId) continue;
+      if (!use.has(cs.carKey)) use.set(cs.carKey, new Map());
+      use.get(cs.carKey)!.set(cs.teamId, (use.get(cs.carKey)!.get(cs.teamId) || 0) + 1);
+    }
+    for (const [car, m] of use) teamOfCar.set(car, [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+  }
+  const teams = new Map<string, TeamStanding & { carUse: Map<string, number> }>();
+  for (const cs of carSessions) {
     const s = sessions.get(cs.sessionId)!;
-    let t = teams.get(cs.carKey);
+    const teamId = rules.teamKey === "team" ? cs.teamId || teamOfCar.get(cs.carKey) || null : null;
+    const key = rules.teamKey === "team" && teamId ? `${cs.className}|team:${teamId}` : cs.carKey;
+    let t = teams.get(key);
     if (!t) {
-      t = { key: cs.carKey, carNumber: cs.carNumber, className: cs.className, teamId: cs.teamId, driverIds: [], totalPoints: 0, position: 0, wins: 0, podiums: 0, results: [] };
-      teams.set(cs.carKey, t);
+      t = { key, carNumber: cs.carNumber, carNumbers: [], className: cs.className, teamId: cs.teamId, driverIds: [], totalPoints: 0, position: 0, wins: 0, podiums: 0, results: [], carUse: new Map() };
+      teams.set(key, t);
     }
     if (!t.teamId && cs.teamId) t.teamId = cs.teamId;
+    t.carUse.set(cs.carNumber, (t.carUse.get(cs.carNumber) || 0) + 1);
     for (const d of cs.driverIds) if (!t.driverIds.includes(d)) t.driverIds.push(d);
     t.totalPoints += cs.points;
-    t.results.push({ sessionId: cs.sessionId, order: s.order, points: cs.points, classPosition: cs.classPosition, kind: s.kind });
+    t.results.push(sessionResult(cs, s));
     if (isPodiumEligible(cs, s) && cs.classPosition != null) {
       if (cs.classPosition === 1) t.wins++;
       if (cs.classPosition <= 3) t.podiums++;
     }
   }
   const byClass = new Map<string, TeamStanding[]>();
-  for (const t of teams.values()) {
-    if (t.totalPoints <= 0) continue;
+  for (const { carUse, ...t } of teams.values()) {
+    if (!listed(t, rules)) continue;
+    t.carNumbers = [...carUse.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+    t.carNumber = t.carNumbers[0];
     if (!byClass.has(t.className)) byClass.set(t.className, []);
     byClass.get(t.className)!.push(t);
   }
-  return [...byClass.values()].flatMap((list) => rankStandings(list, (t) => t.carNumber));
+  return [...byClass.values()].flatMap((list) => rankStandings(list, (t) => t.carNumber, rules));
 }
 
 /** Drivers' standings for every class. Entries with 0 points are omitted. */
-export function computeDriverStandings(sessionList: StandingsSession[], rows: StandingsRow[]): DriverStanding[] {
+export function computeDriverStandings(sessionList: StandingsSession[], rows: StandingsRow[], rules: StandingsRules = IMSA_RULES): DriverStanding[] {
   const sessions = new Map(sessionList.map((s) => [s.id, s]));
   const carSessions = collapseRows(sessions, rows);
 
@@ -295,7 +382,7 @@ export function computeDriverStandings(sessionList: StandingsSession[], rows: St
       standings.set(key, d);
     }
     d.totalPoints += cs.points;
-    d.results.push({ sessionId, order: s.order, points: cs.points, classPosition: cs.classPosition, kind: s.kind });
+    d.results.push(sessionResult(cs, s));
     d.carUse.set(cs.carNumber, (d.carUse.get(cs.carNumber) || 0) + 1);
     if (!d.teamId && cs.teamId) d.teamId = cs.teamId;
     if (isPodiumEligible(cs, s) && cs.classPosition != null) {
@@ -306,10 +393,10 @@ export function computeDriverStandings(sessionList: StandingsSession[], rows: St
 
   const byClass = new Map<string, DriverStanding[]>();
   for (const { carUse, ...d } of standings.values()) {
-    if (d.totalPoints <= 0) continue;
+    if (!listed(d, rules)) continue;
     d.carNumbers = [...carUse.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
     if (!byClass.has(d.className)) byClass.set(d.className, []);
     byClass.get(d.className)!.push(d);
   }
-  return [...byClass.values()].flatMap((list) => rankStandings(list, (x) => x.driverId));
+  return [...byClass.values()].flatMap((list) => rankStandings(list, (x) => x.driverId, rules));
 }

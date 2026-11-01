@@ -1,321 +1,93 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * The record book: every car entry in every (top-level) race on the record,
- * normalised once and shared by the driver, team, car, compare and directory
- * pages. Endurance "Hour N" snapshots (parent_session_id set) never count.
+ * The record book in the browser. The book itself (types, builder, tallies,
+ * compact per-entity records) lives in src/lib/record-book.ts, shared with the
+ * build. Record pages load precomputed files from public/data/derived/records/
+ * (written by scripts/build-derived.mjs):
  *
- * The static data client loads whole tables anyway, so building the book in
- * the browser is cheap (~1.5k entries) and every record page is instant after
- * the first visit.
+ *   useRecord("drivers" | "teams" | "cars", id) → that entity's slice of the book
+ *   useRecords("drivers", [a, b])               → several merged (Compare)
+ *   useRecordIndex()                            → the directory (/drivers, /teams, /cars)
+ *
+ * When a file is missing (e.g. a dev build before build-derived ran) they fall
+ * back to building the whole book here from the full results tables.
  */
 import { supabase } from "@/integrations/supabase/client";
-import { getClassColor } from "@/lib/classes";
 import { classRank } from "@/lib/insights";
 import { getCountryCode, COUNTRIES } from "@/lib/countries";
-import { cleanName, fetchEvents, useLoad } from "@/site/data";
+import {
+  buildRecordBook,
+  buildRecordIndex,
+  decodeRecordIndex,
+  expandRecordSlice,
+  loadRecordTables,
+  mergeRecordBooks,
+  recordFile,
+  recordIndexFile,
+  sliceRecordBook,
+  isWin,
+  type CarRow,
+  type Entry,
+  type Fingerprint,
+  type RecordBook,
+  type RecordIndex,
+  type RecordIndexWire,
+  type RecordKind,
+  type RecordSlice,
+} from "@/lib/record-book";
+import { cleanName, useLoad } from "@/site/data";
 
-/* ── Types ─────────────────────────────────────────────────────── */
+export * from "@/lib/record-book";
 
-export interface Entry {
-  key: string; // sessionId|carNumber
-  sessionId: string;
-  sessionName: string;
-  /** event has more than one race session (label "Race 1" etc.) */
-  multiRace: boolean;
-  endurance: boolean;
-  eventId: string;
-  eventName: string;
-  eventShort: string | null;
-  date: string; // event start yyyy-mm-dd
-  raceDate: string; // session date yyyy-mm-dd
-  year: number;
-  seasonId: string;
-  seriesId: string;
-  seriesName: string;
-  seriesShort: string;
-  circuitId: string | null;
-  circuitName: string | null;
-  carNumber: string;
-  carId: string | null;
-  teamId: string | null;
-  className: string | null;
-  classColor: string;
-  pic: number | null;
-  classSize: number;
-  position: number | null;
-  fieldSize: number;
-  status: string; // finished | dnf | dns
-  laps: number | null;
-  gap: string | null;
-  driverIds: string[]; // drivers who took the start
-  livery?: string;
-  pole: boolean; // class pole in this event's qualifying
-}
+const BASE = `${import.meta.env.BASE_URL || "/"}data/`.replace(/\/{2,}/g, "/");
 
-export interface DriverRow {
-  id: string;
-  full_name: string;
-  nationality: string | null;
-  date_of_birth: string | null;
-}
-export interface TeamRow {
-  id: string;
-  full_name: string;
-  short_name: string | null;
-}
-export interface CarRow {
-  id: string;
-  model_name: string;
-  manufacturer: string | null;
-}
-export interface Fingerprint {
-  dps: number | null;
-  dps_band: string | null;
-  adps: number | null;
-  adps_band: string | null;
-  dcs: number | null;
-  dcs_band: string | null;
-  das: number | null;
-  das_band: string | null;
-  dws: number | null;
-  dws_band: string | null;
-  events_included: number | null;
-  wet_sessions?: number | null;
-  dry_sessions?: number | null;
-}
-
-export interface RecordBook {
-  entries: Entry[]; // oldest → newest
-  byDriver: Map<string, Entry[]>;
-  byTeam: Map<string, Entry[]>;
-  byCar: Map<string, Entry[]>;
-  drivers: Record<string, DriverRow>;
-  teams: Record<string, TeamRow>;
-  cars: Record<string, CarRow>;
-  fingerprints: Record<string, Fingerprint>;
-  /** driver id → class poles (they set the time) */
-  driverPoles: Map<string, number>;
-  /** driver id → event ids where they appear in any session (incl. practice/qualifying) */
-  driverEvents: Map<string, Set<string>>;
-  series: { id: string; name: string; short: string }[];
-}
-
-/* ── Loader ────────────────────────────────────────────────────── */
-
-const day = (d?: string | null) => (d || "").slice(0, 10);
-
-async function fetchRecordBook(): Promise<RecordBook> {
-  const [events, sessionsQ, resultsQ, qualiQ, liveriesQ, classesQ, driversQ, teamsQ, carsQ, fpQ, practiceQ] = await Promise.all([
-    fetchEvents(),
-    supabase.from("v2_sessions").select("id, event_id, name, session_type, date, status, parent_session_id, sort_order"),
-    supabase
-      .from("v2_race_results")
-      .select("session_id, driver_id, team_id, car_id, car_number, position, status, laps_completed, gap_to_leader, extra_data"),
-    supabase.from("v2_qualifying_results").select("session_id, driver_id, car_number, extra_data, position"),
-    supabase.from("v2_car_liveries").select("season_id, car_number, image_url"),
-    supabase.from("v2_season_classes").select("season_id, class_name, color"),
-    supabase.from("v2_drivers").select("id, full_name, nationality, date_of_birth"),
-    supabase.from("v2_teams").select("id, full_name, short_name"),
-    supabase.from("v2_cars").select("id, model_name, manufacturer"),
-    supabase.from("v2_driver_fingerprints" as any).select("driver_id, dps, dps_band, adps, adps_band, dcs, dcs_band, das, das_band, dws, dws_band, events_included, wet_sessions, dry_sessions"),
-    supabase.from("v2_practice_results").select("session_id, driver_id"),
-  ]);
-
-  const evById = new Map(events.map((e) => [e.id, e]));
-  const sessions = ((sessionsQ.data || []) as any[]).filter((s) => evById.has(s.event_id));
-  const sessionById = new Map(sessions.map((s) => [s.id, s]));
-  const isRace = (t: string) => /race/.test(t || "");
-  const races = sessions.filter((s) => isRace(s.session_type) && !s.parent_session_id);
-  const raceIds = new Set(races.map((s) => s.id));
-  const racesPerEvent = new Map<string, number>();
-  for (const s of races) racesPerEvent.set(s.event_id, (racesPerEvent.get(s.event_id) || 0) + 1);
-
-  const liveries = new Map<string, string>();
-  for (const l of (liveriesQ.data || []) as any[]) liveries.set(`${l.season_id}|${l.car_number}`, l.image_url);
-  const classColors = new Map<string, string>();
-  for (const c of (classesQ.data || []) as any[]) if (c.color) classColors.set(`${c.season_id}|${c.class_name}`, c.color);
-
-  // Class poles: qualifying PIC 1, per event + car number, credited to the qualifier.
-  const poleCars = new Set<string>();
-  const driverPoles = new Map<string, number>();
-  const driverEvents = new Map<string, Set<string>>();
-  const touch = (driverId: string | null, sessionId: string) => {
-    const s = sessionById.get(sessionId);
-    if (!driverId || !s) return;
-    if (!driverEvents.has(driverId)) driverEvents.set(driverId, new Set());
-    driverEvents.get(driverId)!.add(s.event_id);
-  };
-  for (const q of (qualiQ.data || []) as any[]) {
-    const s = sessionById.get(q.session_id);
-    if (!s) continue;
-    touch(q.driver_id, q.session_id);
-    if (Number(q.extra_data?.PIC) === 1) {
-      poleCars.add(`${s.event_id}|${q.car_number}`);
-      if (q.driver_id) driverPoles.set(q.driver_id, (driverPoles.get(q.driver_id) || 0) + 1);
-    }
+async function fetchJson<T>(path: string, ok: (x: any) => boolean): Promise<T | null> {
+  try {
+    const res = await fetch(`${BASE}${path}`);
+    if (!res.ok || !(res.headers.get("content-type") || "").includes("json")) return null;
+    const data = await res.json();
+    return ok(data) ? (data as T) : null;
+  } catch {
+    return null;
   }
-  for (const p of (practiceQ.data || []) as any[]) touch(p.driver_id, p.session_id);
-
-  // Group race rows into car entries.
-  const byKey = new Map<string, any[]>();
-  for (const r of (resultsQ.data || []) as any[]) {
-    if (!raceIds.has(r.session_id)) continue;
-    touch(r.driver_id, r.session_id);
-    const k = `${r.session_id}|${r.car_number}`;
-    if (!byKey.has(k)) byKey.set(k, []);
-    byKey.get(k)!.push(r);
-  }
-
-  const classSize = new Map<string, number>();
-  const fieldSize = new Map<string, number>();
-  for (const [k, rows] of byKey) {
-    const sid = k.split("|")[0];
-    const cls = rows[0].extra_data?.Class ?? null;
-    classSize.set(`${sid}|${cls}`, (classSize.get(`${sid}|${cls}`) || 0) + 1);
-    fieldSize.set(sid, (fieldSize.get(sid) || 0) + 1);
-  }
-
-  const entries: Entry[] = [];
-  for (const [k, rows] of byKey) {
-    const r0 = rows[0];
-    const s = sessionById.get(r0.session_id)!;
-    const ev = evById.get(s.event_id)!;
-    const cls: string | null = r0.extra_data?.Class ?? null;
-    const started = rows.filter((r) => r.status !== "dns");
-    const pic = Number(r0.extra_data?.PIC);
-    entries.push({
-      key: k,
-      sessionId: s.id,
-      sessionName: s.name,
-      multiRace: (racesPerEvent.get(s.event_id) || 0) > 1,
-      endurance: s.session_type === "endurance_race",
-      eventId: ev.id,
-      eventName: ev.name,
-      eventShort: ev.short_name ?? null,
-      date: day(ev.start_date),
-      raceDate: day(s.date) || day(ev.end_date) || day(ev.start_date),
-      year: ev.year ?? Number(day(ev.start_date).slice(0, 4)),
-      seasonId: ev.season_id,
-      seriesId: ev.series?.id || "",
-      seriesName: ev.series?.name || "",
-      seriesShort: ev.series?.short_name || ev.series?.name || "",
-      circuitId: ev.circuit?.id ?? null,
-      circuitName: ev.circuit?.name ?? null,
-      carNumber: String(r0.car_number ?? ""),
-      carId: r0.car_id ?? null,
-      teamId: r0.team_id ?? null,
-      className: cls,
-      classColor: classColors.get(`${ev.season_id}|${cls}`) || getClassColor(cls),
-      pic: Number.isFinite(pic) && pic > 0 ? pic : null,
-      classSize: classSize.get(`${s.id}|${cls}`) || 0,
-      position: r0.position ?? null,
-      fieldSize: fieldSize.get(s.id) || 0,
-      status: started.length ? started[0].status || "finished" : "dns",
-      laps: r0.laps_completed ?? null,
-      gap: r0.gap_to_leader ?? null,
-      driverIds: started.map((r) => r.driver_id).filter(Boolean),
-      livery: liveries.get(`${ev.season_id}|${r0.car_number}`),
-      pole: poleCars.has(`${ev.id}|${r0.car_number}`),
-    });
-  }
-  entries.sort((a, b) => a.raceDate.localeCompare(b.raceDate) || a.sessionName.localeCompare(b.sessionName) || (a.position ?? 999) - (b.position ?? 999));
-
-  const group = (key: (e: Entry) => (string | null)[]) => {
-    const m = new Map<string, Entry[]>();
-    for (const e of entries)
-      for (const k of key(e)) {
-        if (!k) continue;
-        if (!m.has(k)) m.set(k, []);
-        m.get(k)!.push(e);
-      }
-    return m;
-  };
-
-  const byId = <T extends { id: string }>(rows: any[] | null) => Object.fromEntries(((rows || []) as T[]).map((x) => [x.id, x])) as Record<string, T>;
-  const fingerprints: Record<string, Fingerprint> = {};
-  for (const f of (fpQ.data || []) as any[]) fingerprints[f.driver_id] = f;
-
-  const seriesCount = new Map<string, number>();
-  for (const e of entries) seriesCount.set(e.seriesId, (seriesCount.get(e.seriesId) || 0) + 1);
-  const series = [...new Map(events.filter((e) => e.series).map((e) => [e.series!.id, { id: e.series!.id, name: e.series!.name, short: e.series!.short_name || e.series!.name }])).values()].sort(
-    (a, b) => (seriesCount.get(b.id) || 0) - (seriesCount.get(a.id) || 0),
-  );
-
-  return {
-    entries,
-    byDriver: group((e) => e.driverIds),
-    byTeam: group((e) => [e.teamId]),
-    byCar: group((e) => [e.carId]),
-    drivers: byId<DriverRow>(driversQ.data as any[]),
-    teams: byId<TeamRow>(teamsQ.data as any[]),
-    cars: byId<CarRow>(carsQ.data as any[]),
-    fingerprints,
-    driverPoles,
-    driverEvents,
-    series,
-  };
 }
 
-export const loadRecordBook = () => fetchRecordBook();
-export const useRecordBook = () => useLoad("record-book", fetchRecordBook).data;
+/* ── Full book (fallback) ──────────────────────────────────────── */
 
-/* ── Tallies ───────────────────────────────────────────────────── */
+let fullBook: Promise<RecordBook> | null = null;
+/** Builds the whole book from the full results tables (~15 MB): fallback only. */
+export const loadRecordBook = () => (fullBook ??= loadRecordTables(supabase).then(buildRecordBook));
+export const useRecordBook = () => useLoad("record-book", loadRecordBook).data;
 
-export const isStart = (e: Entry) => e.status !== "dns";
-export const isFinish = (e: Entry) => e.status === "finished";
-export const isWin = (e: Entry) => isFinish(e) && e.pic === 1;
-export const isPodium = (e: Entry) => isFinish(e) && e.pic != null && e.pic <= 3;
+/* ── Precomputed records ───────────────────────────────────────── */
 
-export interface Tally {
-  starts: number;
-  finishes: number;
-  dnfs: number;
-  wins: number;
-  podiums: number;
-  poles: number;
-  best: number | null;
-  bestCount: number;
-  bestClass: string | null;
-  avgPic: number | null;
-  seasons: number;
-  years: number[];
-  classes: string[];
-  classColors: Record<string, string>;
-  series: string[];
-  events: number;
-  first: Entry | null;
-  last: Entry | null;
+const sliceCache = new Map<string, Promise<RecordBook>>();
+export function loadRecord(kind: RecordKind, id: string): Promise<RecordBook> {
+  const k = `${kind}:${id}`;
+  let p = sliceCache.get(k);
+  if (!p) {
+    p = fetchJson<RecordSlice>(recordFile(kind, id), (x) => x && x.v === 1 && Array.isArray(x.entries)).then(async (s) =>
+      s ? expandRecordSlice(s) : expandRecordSlice(sliceRecordBook(await loadRecordBook(), kind, id)),
+    );
+    sliceCache.set(k, p);
+  }
+  return p;
+}
+export const useRecord = (kind: RecordKind, id: string) => useLoad(id ? `record:${kind}:${id}` : null, () => loadRecord(kind, id)).data;
+
+/** Several records merged into one book (Compare). */
+export function useRecords(kind: RecordKind, ids: string[]) {
+  const list = ids.filter(Boolean);
+  const key = list.length ? `records:${kind}:${list.join(",")}` : "records:none";
+  return useLoad(key, () => Promise.all(list.map((id) => loadRecord(kind, id))).then(mergeRecordBooks)).data;
 }
 
-export function tally(list: Entry[], poles?: number): Tally {
-  const s = list.filter(isStart);
-  const fin = s.filter(isFinish);
-  const pics = fin.map((e) => e.pic).filter((n): n is number => n != null);
-  const best = pics.length ? Math.min(...pics) : null;
-  const bestRows = best != null ? fin.filter((e) => e.pic === best) : [];
-  const bestClasses = [...new Set(bestRows.map((e) => e.className).filter(Boolean) as string[])].sort((a, b) => classRank(a) - classRank(b));
-  const bestClass = bestClasses.length ? bestClasses.join(" & ") : null;
-  return {
-    starts: s.length,
-    finishes: fin.length,
-    dnfs: s.filter((e) => e.status === "dnf").length,
-    wins: s.filter(isWin).length,
-    podiums: s.filter(isPodium).length,
-    poles: poles ?? s.filter((e) => e.pole).length,
-    best,
-    bestCount: bestRows.length,
-    bestClass,
-    avgPic: pics.length ? pics.reduce((a, b) => a + b, 0) / pics.length : null,
-    seasons: new Set(s.map((e) => e.seasonId)).size,
-    years: [...new Set(s.map((e) => e.year))].sort(),
-    classes: [...new Set(s.map((e) => e.className).filter(Boolean) as string[])].sort((a, b) => classRank(a) - classRank(b)),
-    classColors: Object.fromEntries(s.filter((e) => e.className).map((e) => [e.className!, e.classColor])),
-    series: [...new Set(s.map((e) => e.seriesShort))],
-    events: new Set(s.map((e) => e.eventId)).size,
-    first: s[0] ?? null,
-    last: s[s.length - 1] ?? null,
-  };
-}
+let indexP: Promise<RecordIndex> | null = null;
+export const loadRecordIndex = () =>
+  (indexP ??= fetchJson<RecordIndexWire>(recordIndexFile(), (x) => x && x.v === 2 && Array.isArray(x.drivers)).then(async (w) =>
+    decodeRecordIndex(w ?? buildRecordIndex(await loadRecordBook())),
+  ));
+export const useRecordIndex = () => useLoad("record-index", loadRecordIndex).data;
 
 /** Group entries by season (newest first), each with its own tally. */
 export function bySeason(list: Entry[]) {

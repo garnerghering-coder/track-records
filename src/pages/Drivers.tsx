@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { classRank } from "@/lib/insights";
 import { cleanName } from "@/site/data";
 import { ClassTag, Eyebrow, Note, Page, Skeleton, Tabs } from "@/site/ui";
-import { isStart, origin, personSortKey, plural, tally, useRecordBook, type RecordBook } from "@/site/records";
+import { origin, personSortKey, plural, useRecordIndex, type RecordIndex, type SeriesTally } from "@/site/records";
 import { Chip, SearchField } from "@/site/record-ui";
 
 type Sort = "az" | "starts" | "wins";
@@ -25,21 +25,20 @@ interface Row {
   starts: number;
   wins: number;
   podiums: number;
+  classed: boolean;
   classes: string[];
   classColors: Record<string, string>;
   series: string[];
+  bySeries: Record<string, SeriesTally>;
   team: string | null;
   last: string;
 }
 
-function buildRows(book: RecordBook): Row[] {
-  return Object.values(book.drivers).map((d) => {
-    const list = book.byDriver.get(d.id) || [];
-    const t = tally(list);
+function buildRows(ix: RecordIndex): Row[] {
+  return ix.drivers.map((d) => {
     const o = origin(d.nationality);
-    const name = cleanName(d.full_name);
-    const key = personSortKey(d.full_name);
-    const last = t.last;
+    const name = cleanName(d.name);
+    const key = personSortKey(d.name);
     return {
       id: d.id,
       name,
@@ -48,20 +47,29 @@ function buildRows(book: RecordBook): Row[] {
       country: o.country,
       key,
       letter: /[a-z]/.test(key[0] || "") ? key[0].toUpperCase() : "#",
-      starts: t.starts,
-      wins: t.wins,
-      podiums: t.podiums,
-      classes: t.classes,
-      classColors: t.classColors,
-      series: [...new Set(list.filter(isStart).map((e) => e.seriesId))],
-      team: last?.teamId ? book.teams[last.teamId]?.full_name ?? null : null,
-      last: last?.raceDate || "",
+      starts: d.starts,
+      wins: d.wins,
+      podiums: d.podiums,
+      classed: d.classed,
+      classes: d.classes,
+      classColors: d.classColors,
+      series: d.series,
+      bySeries: d.bySeries,
+      team: d.last?.team ?? null,
+      last: d.last?.date || "",
     };
   });
 }
 
+/** A row's numbers within one series (or overall). */
+const inSeries = (r: Row, series: string) => {
+  if (!series) return r;
+  const [starts, wins, podiums] = r.bySeries[series] || [0, 0, 0];
+  return { ...r, starts, wins, podiums };
+};
+
 export default function Drivers() {
-  const book = useRecordBook();
+  const book = useRecordIndex();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") || "";
   const series = params.get("series") || "";
@@ -80,7 +88,7 @@ export default function Drivers() {
   const rows = useMemo(() => (book ? buildRows(book) : []), [book]);
   const classes = useMemo(() => {
     const m = new Map<string, string>();
-    for (const e of book?.entries || []) if (e.className && (!series || e.seriesId === series)) m.set(e.className, e.classColor);
+    for (const c of book?.classes || []) if (!series || c.seriesId === series) m.set(c.name, c.color);
     return [...m.entries()].sort((a, b) => classRank(a[0]) - classRank(b[0]));
   }, [book, series]);
   const nations = useMemo(() => {
@@ -91,13 +99,15 @@ export default function Drivers() {
 
   const filtered = useMemo(() => {
     const n = dq.trim().toLocaleLowerCase();
-    const out = rows.filter(
-      (r) =>
-        (!n || r.name.toLocaleLowerCase().includes(n) || (r.team || "").toLocaleLowerCase().includes(n)) &&
-        (!series || r.series.includes(series)) &&
-        (!cls || r.classes.includes(cls)) &&
-        (!nat || r.code === nat),
-    );
+    const out = rows
+      .filter(
+        (r) =>
+          (!n || r.name.toLocaleLowerCase().includes(n) || (r.team || "").toLocaleLowerCase().includes(n)) &&
+          (!series || r.series.includes(series)) &&
+          (!cls || r.classes.includes(cls)) &&
+          (!nat || r.code === nat),
+      )
+      .map((r) => inSeries(r, series));
     if (sort === "starts") return out.sort((a, b) => b.starts - a.starts || b.wins - a.wins || a.key.localeCompare(b.key));
     if (sort === "wins") return out.sort((a, b) => b.wins - a.wins || b.podiums - a.podiums || b.starts - a.starts || a.key.localeCompare(b.key));
     return out.sort((a, b) => a.key.localeCompare(b.key));
@@ -113,13 +123,25 @@ export default function Drivers() {
     return [...m.entries()].map(([letter, rows]) => ({ letter, rows }));
   }, [filtered, sort]);
 
-  const leaders = useMemo(() => [...rows].filter((r) => r.wins > 0).sort((a, b) => b.wins - a.wins || b.podiums - a.podiums).slice(0, 4), [rows]);
-  const filtering = !!(q || series || cls || nat);
+  // Most wins: within the chosen series, else across everything.
+  const leaders = useMemo(
+    () =>
+      rows
+        .filter((r) => !series || r.series.includes(series))
+        .map((r) => inSeries(r, series))
+        .filter((r) => r.wins > 0)
+        .sort((a, b) => b.wins - a.wins || b.podiums - a.podiums)
+        .slice(0, 4),
+    [rows, series],
+  );
+  const allClassed = leaders.length > 0 && leaders.every((r) => r.classed);
+  const seriesName = book?.series.find((s) => s.id === series)?.short;
+  const filtering = !!(q || cls || nat);
   const raced = rows.filter((r) => r.starts > 0).length;
 
   return (
     <div className="min-h-screen">
-      <SEOHead title="Drivers – Track Records" description="Every driver on the record: search by name, nationality, series and class, with starts, wins and podiums." canonical="/drivers" />
+      <SEOHead title="Drivers – Track Records" description="Every driver on the record, across every series: search by name, nationality, series and class, with starts, wins and podiums." canonical="/drivers" />
       <Header />
       <Page className="pt-6 sm:pt-10">
         <Eyebrow>
@@ -132,7 +154,7 @@ export default function Drivers() {
         <div className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl">
           {book ? (
             <>
-              {plural(raced, "driver")} from {plural(nations.length, "country", "countries")} have taken a start in {book.series.map((s) => s.short).join(", ").replace(/, ([^,]*)$/, " and $1")}. Find
+              {plural(raced, "driver")} from {plural(nations.length, "country", "countries")} have taken a start in {listSeries(book.series.map((s) => s.short))}. Find
               anyone, then open their record.
             </>
           ) : (
@@ -142,8 +164,10 @@ export default function Drivers() {
 
         {/* ── Leaders ─────────────────────────────────────────── */}
         {book && !filtering && leaders.length > 0 && (
-          <section className="mt-12" aria-label="Most class wins">
-            <Eyebrow className="mb-3">Most class wins</Eyebrow>
+          <section className="mt-12" aria-label="Most wins">
+            <Eyebrow className="mb-3">
+              Most {allClassed ? "class " : ""}wins{seriesName ? ` in ${seriesName}` : ""}
+            </Eyebrow>
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border bg-rule lg:grid-cols-4">
               {leaders.map((r) => {
                 const rank = leaders.findIndex((x) => x.wins === r.wins) + 1;
@@ -270,6 +294,12 @@ export default function Drivers() {
       <Footer />
     </div>
   );
+}
+
+/** "A, B and C"; long lists name the first few. */
+function listSeries(names: string[]) {
+  if (names.length > 5) return `${names.slice(0, 4).join(", ")} and ${names.length - 4} more series`;
+  return names.join(", ").replace(/, ([^,]*)$/, " and $1");
 }
 
 function withOut(p: URLSearchParams, drop: string[], add: Record<string, string> = {}) {

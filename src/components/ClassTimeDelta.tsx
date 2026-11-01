@@ -1,3 +1,4 @@
+import { normalizeFlag } from "@/lib/flags";
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { DEFAULT_CLASS_COLORS as SHARED_CLASS_COLORS } from "@/lib/classes";
 import { useQuery } from "@tanstack/react-query";
@@ -43,6 +44,7 @@ const FLAG_COLORS: Record<string, string> = {
   GREEN: "rgba(34, 197, 94, 0.035)", YELLOW: "rgba(234, 179, 8, 0.12)",
   FCY: "rgba(251, 146, 60, 0.12)", RED: "rgba(239, 68, 68, 0.12)",
   SC: "rgba(251, 146, 60, 0.12)",
+  VSC: "rgba(251, 191, 36, 0.12)", CAUTION: "rgba(234, 179, 8, 0.12)", CODE60: "rgba(124, 58, 237, 0.10)",
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -419,7 +421,7 @@ export default function ClassTimeDelta({ sessionId, teamNameMap, isMulticlass, c
       if (e <= viewRange[0] || s >= viewRange[1]) continue;
       const x1 = Math.max(x(s), MARGIN.left);
       const x2 = Math.min(x(e), MARGIN.left + chartW);
-      const color = FLAG_COLORS[seg.flag_state] || "rgba(107, 114, 128, 0.05)";
+      const color = FLAG_COLORS[normalizeFlag(seg.flag_state)] || "rgba(107, 114, 128, 0.05)";
       ctx.fillStyle = color;
       ctx.fillRect(x1, MARGIN.top, x2 - x1, chartH);
     }

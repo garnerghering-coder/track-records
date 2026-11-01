@@ -13,6 +13,22 @@ export function loadDigests() {
     .catch(() => ({})));
 }
 
+const digestP = new Map<string, Promise<EventDigest | undefined>>();
+/** One event's full digest (insights, podiums, laps led), with the light list as fallback. */
+export function loadDigest(eventId: string) {
+  let p = digestP.get(eventId);
+  if (!p) {
+    p = fetch(`${BASE}derived/digests/${encodeURIComponent(eventId)}.json`)
+      .then((r) => (r.ok && (r.headers.get("content-type") || "").includes("json") ? (r.json() as Promise<EventDigest>) : null))
+      .catch(() => null)
+      .then(async (d) => d ?? (await loadDigests())[eventId]);
+    digestP.set(eventId, p);
+  }
+  return p;
+}
+export const useDigest = (eventId: string | null | undefined) => useLoad(eventId ? `digest:${eventId}` : null, () => loadDigest(eventId!));
+
+/** Every event's light digest (winners, classes, stats): for lists. */
 export function useDigests() {
   const [d, setD] = useState<Record<string, EventDigest> | null>(null);
   useEffect(() => {
@@ -150,9 +166,21 @@ export interface SeasonStandingRow {
 }
 
 export interface SeasonStandings {
-  byClass: { className: string; rows: SeasonStandingRow[] }[];
+  byClass: { className: string; color?: string | null; rows: SeasonStandingRow[] }[];
   rounds: number;
 }
+
+let leadersP: Promise<Record<string, SeasonStandings>> | null = null;
+/** The top two of each class (precomputed for every season), falling back to the season's standings. */
+export async function fetchSeasonLeaders(seasonId: string): Promise<SeasonStandings> {
+  leadersP ??= fetch(`${BASE}derived/standings/leaders.json`)
+    .then((r) => (r.ok && (r.headers.get("content-type") || "").includes("json") ? r.json() : {}))
+    .catch(() => ({}));
+  const all = await leadersP;
+  return all[seasonId] ?? fetchSeasonStandings(seasonId);
+}
+export const useSeasonLeaders = (seasonId: string | null | undefined) =>
+  useLoad(seasonId ? `leaders:${seasonId}` : null, () => fetchSeasonLeaders(seasonId!)).data;
 
 /** Drivers' standings per class, from the season's (precomputed) championship. */
 export async function fetchSeasonStandings(seasonId: string): Promise<SeasonStandings> {

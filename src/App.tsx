@@ -13,6 +13,7 @@ const Results = lazy(() => import("./pages/Results"));
 const DriverProfile = lazy(() => import("./pages/DriverProfile"));
 
 const Privacy = lazy(() => import("./pages/Privacy"));
+const Credits = lazy(() => import("./pages/Credits"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Teams = lazy(() => import("./pages/Teams"));
 const TeamProfile = lazy(() => import("./pages/TeamProfile"));
@@ -60,6 +61,7 @@ const App = () => (
           <Route path="/articles" element={<Articles />} />
           <Route path="/articles/:slug" element={<ArticleDetail />} />
           <Route path="/privacy" element={<Privacy />} />
+          <Route path="/credits" element={<Credits />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
