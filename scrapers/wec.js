@@ -41,6 +41,21 @@
   };
   /** one entry per car: drop the continuation rows of two-row entries (same Pos and No. cells) */
   const entries = (g, iPos, iNo) => g.filter((r, i) => i > 0 && r[iPos] && r[iNo] && r[iPos] !== g[0][iPos] && /\d/.test(txt(r[iNo])) && !(g[i - 1] && g[i - 1][iPos] === r[iPos] && g[i - 1][iNo] === r[iNo]));
+  /** names in a cell, one per line (<br> or list items); linked or not; flag title per line */
+  const people = (cell) => {
+    if (!cell) return [];
+    const c = cell.cloneNode(true);
+    c.querySelectorAll("sup, style, .sr-only, .reference").forEach((x) => x.remove());
+    c.querySelectorAll("br").forEach((b) => b.replaceWith("\u2063"));
+    c.querySelectorAll("li").forEach((li) => li.append("\u2063"));
+    const flags = [];
+    c.querySelectorAll(".flagicon").forEach((f) => { flags.push(f.querySelector("a[title]")?.getAttribute("title") || f.querySelector("img[alt]")?.getAttribute("alt") || null); f.replaceWith("\u2064"); });
+    let fi = 0;
+    return c.textContent.split("\u2063").map((seg) => {
+      const flag = seg.includes("\u2064") ? flags[fi++] ?? null : null;
+      return { name: seg.replace(/\u2064/g, "").replace(/\s+/g, " ").trim(), flag };
+    }).filter((x) => x.name && !/^\(?R\)?$/.test(x.name));
+  };
   const CIRCUIT = {
     "Imola Circuit": { name: "Autodromo Enzo e Dino Ferrari" },
     "Circuit de Spa-Francorchamps": { name: "Circuit de Spa-Francorchamps" },
@@ -74,15 +89,7 @@
     const sd = await wiki(`${YEAR} FIA World Endurance Championship`);
     // nationalities from the entry lists (flag icon before each driver link)
     const nat = new Map();
-    for (const t of findTables(sd, /^Entrant\|Car\|Engine/)) for (const td of t.querySelectorAll("td")) {
-      let flag = null;
-      for (const n of td.querySelectorAll(".flagicon, a[href]")) {
-        if (n.classList.contains("flagicon")) { flag = n.querySelector("a[title]")?.getAttribute("title") || n.querySelector("img[alt]")?.getAttribute("alt") || null; continue; }
-        if (n.closest(".flagicon") || n.closest("sup")) continue;
-        if (flag && !nat.has(norm(txt(n)))) nat.set(norm(txt(n)), flag);
-        flag = null;
-      }
-    }
+    for (const t of findTables(sd, /^Entrant\|Car\|Engine/)) for (const td of t.querySelectorAll("td")) for (const p of people(td)) if (p.flag && !nat.has(norm(p.name))) nat.set(norm(p.name), p.flag);
     const cal = findTables(sd, /^Rnd\|Race\|Circuit\|Location\|Date/)[0];
     const calRows = grid(cal).slice(1).filter((r) => /^\d+$/.test(txt(r[0])));
     const res = findTables(sd, /^Rnd\.?\|Circuit\|/)[0];
@@ -108,7 +115,7 @@
           const v = txt(cell);
           const pos = /^\d+$/.test(v) ? Number(v) : null;
           const pole = !!cell?.querySelector("b, strong");
-          per[k - first] = per[k - first] || { pos, pole };
+          if (!per[k - first] || (per[k - first].pos == null && !per[k - first].pole && (pos != null || pole))) per[k - first] = { pos, pole };
         }
         scored.set(norm(name), per);
       }
@@ -155,8 +162,7 @@
         if (numeric) clsPos[cls] = (clsPos[cls] || 0) + 1;
         const cp = numeric ? clsPos[cls] : null;
         overall++;
-        const drivers = [...r[ci.drv].querySelectorAll("a[href]")].filter((a) => !a.closest("sup") && !a.closest(".flagicon")).map((a) => {
-          const name = txt(a);
+        const drivers = people(r[ci.drv]).map(({ name }) => {
           const sc = scored.get(norm(name))?.[roundIdx];
           const p = /lmp2/i.test(cls) || !dur ? null : sc ? (sc.pos ? dur.pts[sc.pos - 1] || 0 : 0) + (sc.pole ? dur.pole : 0) : 0;
           return { name, nationality: nat.get(norm(name)) || null, points: p };
