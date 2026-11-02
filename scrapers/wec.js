@@ -100,6 +100,7 @@
     // drivers' standings grids: driver -> round index -> {pos, pole}; and the official totals
     const scored = new Map();
     const totals = new Map();
+    const display = new Map();
     for (const t of findTables(sd, /^Pos\.?\|Driver\|Team\|/)) {
       const H = headerOf(t);
       const first = 3, last = H.length - 1;
@@ -109,6 +110,7 @@
         const tot = Number(txt(r[last]));
         if (!Number.isFinite(tot)) continue;
         totals.set(norm(name), (totals.get(norm(name)) || 0) + tot);
+        display.set(norm(name), name);
         const per = scored.get(norm(name)) || [];
         for (let k = first; k < last; k++) {
           const cell = r[k];
@@ -162,7 +164,14 @@
         if (numeric) clsPos[cls] = (clsPos[cls] || 0) + 1;
         const cp = numeric ? clsPos[cls] : null;
         overall++;
-        const drivers = people(r[ci.drv]).map(({ name }) => {
+        const drivers = people(r[ci.drv]).map(({ name: raw }) => {
+          // same person, other spelling (e.g. "Răzvan" / "Petru Umbrărescu"): match the standings by surname
+          let name = raw;
+          if (!scored.has(norm(raw))) {
+            const last = norm(raw).split(" ").pop();
+            const cand = [...scored.keys()].filter((k) => k.split(" ").pop() === last);
+            if (cand.length === 1) name = display.get(cand[0]);
+          }
           const sc = scored.get(norm(name))?.[roundIdx];
           const p = /lmp2/i.test(cls) || !dur ? null : sc ? (sc.pos ? dur.pts[sc.pos - 1] || 0 : 0) + (sc.pole ? dur.pole : 0) : 0;
           return { name, nationality: nat.get(norm(name)) || null, points: p };
