@@ -59,10 +59,10 @@
   const CIRCUIT = {
     "Imola Circuit": { name: "Autodromo Enzo e Dino Ferrari" },
     "Circuit de Spa-Francorchamps": { name: "Circuit de Spa-Francorchamps" },
-    "Circuit de la Sarthe": { name: "Circuit de la Sarthe", layout: "24 Hours of Le Mans circuit" },
+    "Circuit de la Sarthe": { name: "Circuit de la Sarthe", layout: "24 Hours of Le Mans circuit", length: 13.626, country: "France" },
     "Interlagos Circuit": { name: "Autódromo José Carlos Pace (Interlagos)" },
     "Circuit of the Americas": { name: "Circuit of the Americas (COTA)", layout: "Grand Prix" },
-    "Fuji Speedway": { name: "Fuji Speedway", layout: "Grand Prix" },
+    "Fuji Speedway": { name: "Fuji Speedway", layout: "Grand Prix", length: 4.563, country: "Japan" },
     "Bahrain International Circuit": { name: "Bahrain International Circuit", layout: "Grand Prix" },
     "Lusail International Circuit": { name: "Lusail International Circuit" },
     "Circuit de Barcelona-Catalunya": { name: "Circuit de Barcelona-Catalunya", layout: "Grand Prix" },
@@ -139,14 +139,19 @@
       const ci = { pos: 0, cls: col(/^class/), no: col(/^no/), team: col(/^(team|entrant)/), drv: col(/^drivers/), chassis: col(/^(chassis|car)/), laps: col(/^laps/), time: col(/^time/) };
       const ib = txt(d.querySelector(".infobox"));
       const len = ib.match(/(?:Course|Circuit) length\s*([\d.]+)\s*km/i);
+      // race day(s) from the season calendar ("2 November", "14–15 June", "31 May – 1 June")
       const dates = [];
-      const dm = ib.match(/Date\s+(\d{1,2})(?:[–-](\d{1,2}))? ([A-Z][a-z]+) (\d{4})/);
-      if (dm) for (const day of [dm[1], dm[2] || dm[1]]) dates.push(new Date(`${day} ${dm[3]} ${dm[4]} 12:00 UTC`).toISOString().slice(0, 10));
+      const dt = txt(cr[4]);
+      const dm = dt.match(/^(\d{1,2})(?: ([A-Z][a-z]+))?\s*(?:[–-]\s*(\d{1,2}))? ?([A-Z][a-z]+)?/);
+      if (dm) {
+        const m1 = dm[2] || dm[4], m2 = dm[4] || dm[2];
+        for (const [day, mon] of [[dm[1], m1], [dm[3] || dm[1], m2]]) { const x = new Date(`${day} ${mon} ${YEAR} 12:00 UTC`); if (!isNaN(x)) dates.push(x.toISOString().slice(0, 10)); }
+      }
       const map = CIRCUIT[circuitTitle] || { name: circuitText };
       const dur = durationOf(scale, raceName);
       const ev = {
         name: report, short_name: raceName.replace(/^(TotalEnergies|Rolex|Bapco Energies|Qatar Airways|Lone Star) (?=\d|Le Mans)/, ""), round: rn, start_date: dates[0] || null, end_date: dates[1] || dates[0] || null,
-        circuit: { name: map.name, aliases: [circuitTitle, circuitText], location, country: null, ...(coords.get(circuitTitle) || {}), layout: { name: map.layout || "Grand Prix", length_km: len ? Number(len[1]) : null } },
+        circuit: { name: map.name, aliases: [circuitTitle, circuitText], location, country: map.country || null, ...(coords.get(circuitTitle) || {}), layout: { name: map.layout || "Grand Prix", length_km: map.length || (len ? Number(len[1]) : null) } },
         sessions: [],
       };
       // a pole point needs a timed qualifying (none when it was cancelled, e.g. Fuji 2026)
