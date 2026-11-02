@@ -18,7 +18,8 @@
   ].filter((s) => !window.__feSeasons || window.__feSeasons.includes(s.S));
   const SESSIONS = { "free-practice-1": ["Practice 1", "practice"], "free-practice-2": ["Practice 2", "practice"], "free-practice-3": ["Practice 3", "practice"], qualifying: ["Qualifying", "qualifying"], race: ["Race", "race"] };
   const COUNTRY = { "Great Britain": "United Kingdom", USA: "United States", "United States of America": "United States", Holland: "Netherlands" };
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // no timers: hidden tabs throttle setTimeout to once a minute. Requests stay sequential.
+  const sleep = () => Promise.resolve();
   const P = new DOMParser();
   const html = async (u) => { await sleep(150); return P.parseFromString(await (await fetch(u)).text(), "text/html"); };
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’'`.]/g, "").replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
