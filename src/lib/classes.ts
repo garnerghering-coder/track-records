@@ -5,6 +5,8 @@
  */
 export const DEFAULT_CLASS_COLORS: Record<string, string> = {
   GTP: "#e63946",
+  HYPERCAR: "#e63946",
+  LMGT3: "#2a9d8f",
   GTDPRO: "#457b9d",
   GTD: "#2a9d8f",
   LMP2: "#e9c46a",
@@ -13,7 +15,7 @@ export const DEFAULT_CLASS_COLORS: Record<string, string> = {
   TCR: "#a855f7",
 };
 
-export const CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+export const CLASS_ORDER = ["GTP", "HYPERCAR", "LMP2", "LMP3", "GTDPRO", "GTD", "LMGT3", "GS", "TCR"];
 
 const norm = (c: string) => c.toUpperCase().replace(/[\s_-]/g, "");
 

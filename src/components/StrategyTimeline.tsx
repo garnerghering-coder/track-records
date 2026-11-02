@@ -54,7 +54,7 @@ interface HourPosition {
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const DEFAULT_CLASS_ORDER: string[] = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const DEFAULT_CLASS_ORDER: string[] = ["GTP", "HYPERCAR", "LMP2", "LMP3", "GTDPRO", "GTD", "LMGT3", "GS", "TCR"];
 
 const DEFAULT_CLASS_COLORS: Record<string, string> = SHARED_CLASS_COLORS;
 

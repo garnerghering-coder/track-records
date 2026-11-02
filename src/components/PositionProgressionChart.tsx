@@ -71,7 +71,7 @@ interface Props {
 
 // ── Class colors (matching ClassTimeDelta) ────────────────────────────
 
-const DEFAULT_CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const DEFAULT_CLASS_ORDER = ["GTP", "HYPERCAR", "LMP2", "LMP3", "GTDPRO", "GTD", "LMGT3", "GS", "TCR"];
 
 const DEFAULT_CLASS_COLORS: Record<string, string> = SHARED_CLASS_COLORS;
 

@@ -23,7 +23,8 @@
  *         "date", "start_time", "end_time", "source_url",
  *         "results": [{ "position", "position_text", "status" (finished|classified|dnf|dns|dsq),
  *           "dnf_reason", "car_number", "driver"*: { "name"*, "nationality", "date_of_birth" },
- *           "drivers": [ ...co-drivers, same shape (endurance) ], "team", "car": { "manufacturer", "model" },
+ *           "drivers": [ ...co-drivers, same shape (endurance) ], "team",
+ *           (a driver may carry its own "points", e.g. WEC crews where not every driver scores), "car": { "manufacturer", "model" },
  *           "laps", "total_time", "gap", "best_lap", "grid", "points", "class", "class_position",
  *           "extra": {} }] }] }] }]
  * }
@@ -254,7 +255,7 @@ async function importSession(event, season, s, sortOrder) {
       if (RACE_TYPES.has(s.type)) {
         const status = STATUS.has(r.status) ? r.status : "finished";
         rows.push({
-          ...base, driver_id: did, points: num(r.points), status, laps_completed: num(r.laps), gap_to_leader: r.gap ?? null, pit_stops: num(r.pit_stops),
+          ...base, driver_id: did, points: d.points !== undefined ? num(d.points) : num(r.points), status, laps_completed: num(r.laps), gap_to_leader: r.gap ?? null, pit_stops: num(r.pit_stops),
           fastest_lap_time: r.best_lap ?? null, total_time: r.total_time ?? null, dnf_reason: status === "finished" || status === "classified" ? null : r.dnf_reason ?? null, extra_data: extra,
         });
       } else if (s.type === "qualifying") {

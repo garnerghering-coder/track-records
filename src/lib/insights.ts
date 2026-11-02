@@ -133,7 +133,7 @@ export function fmtGap(sec: number): string {
   return fmtLap(sec);
 }
 
-const CLASS_ORDER = ["GTP", "LMP2", "LMP3", "GTDPRO", "GTD", "GS", "TCR"];
+const CLASS_ORDER = ["GTP", "HYPERCAR", "LMP2", "LMP3", "GTDPRO", "GTD", "LMGT3", "GS", "TCR"];
 const norm = (c: string) => c.toUpperCase().replace(/[\s_-]/g, "");
 export function classRank(c: string | null | undefined): number {
   if (!c) return 0;
