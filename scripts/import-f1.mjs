@@ -569,7 +569,8 @@ async function circuitFor(race) {
     log(`  created circuit ${def.name}`);
   }
   const mine = layouts.filter((l) => l.circuit_id === c.id);
-  let layout = def.layout ? mine.find((l) => same(l.name, def.layout)) : mine.length === 1 ? mine[0] : null;
+  // other series add layouts to shared circuits (NASCAR at COTA and Mexico City): F1 uses "Grand Prix"
+  let layout = def.layout ? mine.find((l) => same(l.name, def.layout)) : mine.length === 1 ? mine[0] : mine.find((l) => same(l.name, "Grand Prix")) || null;
   if (!layout && def.newLayout) {
     layout = await insertOne("v2_circuit_layouts", {
       circuit_id: c.id, ...def.newLayout, total_straight_length_km: null, total_elevation_change_m: null,
@@ -580,6 +581,45 @@ async function circuitFor(race) {
   }
   if (!layout) throw new Error(`no layout for ${def.name}`);
   return { circuit: c, layout };
+}
+
+
+/* Jolpica publishes a classification a few hours to a day after the race. Until then the race
+ * (or sprint) is classified from OpenF1's session_result + starting_grid + laps, in Jolpica's
+ * shape, so the rest of the import is unchanged. Re-run with --replace once Jolpica has it. */
+async function of1Classification(sessionKey) {
+  const sr = await getJson(`${OPENF1}/session_result?session_key=${sessionKey}`);
+  if (!sr.length) return [];
+  const grid = await getJson(`${OPENF1}/starting_grid?session_key=${sessionKey}`);
+  const laps = await getJson(`${OPENF1}/laps?session_key=${sessionKey}`);
+  const gridBy = new Map(grid.map((g) => [g.driver_number, g.position]));
+  if (!gridBy.size) {
+    // no starting_grid yet: the first position OpenF1 records for each car is its grid slot
+    const pos = await getJson(`${OPENF1}/position?session_key=${sessionKey}`);
+    for (const x of [...pos].sort((a, b) => a.date.localeCompare(b.date))) if (!gridBy.has(x.driver_number)) gridBy.set(x.driver_number, x.position);
+  }
+  const best = new Map();
+  for (const l of laps) if (l.lap_duration && !l.is_pit_out_lap) {
+    const b = best.get(l.driver_number);
+    if (!b || l.lap_duration < b.t) best.set(l.driver_number, { t: l.lap_duration, lap: l.lap_number });
+  }
+  const fastRank = new Map([...best].sort((x, y) => x[1].t - y[1].t).map(([n], i) => [n, i + 1]));
+  const rows = [...sr].sort((x, y) => (x.position ?? 999) - (y.position ?? 999) || (y.number_of_laps ?? 0) - (x.number_of_laps ?? 0));
+  const winnerLaps = Math.max(0, ...rows.filter((r) => r.position === 1).map((r) => r.number_of_laps ?? 0));
+  return rows.map((r, i) => {
+    const classified = r.position != null && !r.dsq && !r.dns && !r.dnf;
+    const down = winnerLaps - (r.number_of_laps ?? 0);
+    const status = r.dsq ? "Disqualified" : r.dns ? "Did not start" : r.dnf ? "Retired" : down > 0 ? `+${down} Lap${down > 1 ? "s" : ""}` : "Finished";
+    const gap = typeof r.gap_to_leader === "number" && r.gap_to_leader > 0 ? `+${r.gap_to_leader.toFixed(3)}` : null;
+    const b = best.get(r.driver_number);
+    return {
+      number: String(r.driver_number), position: String(i + 1), positionText: classified ? String(r.position) : r.dsq ? "D" : r.dns ? "W" : "R",
+      status, laps: String(r.number_of_laps ?? 0), points: String(r.points ?? 0), grid: String(gridBy.get(r.driver_number) ?? 0),
+      Time: r.position === 1 && r.duration ? { time: fmtTime(r.duration), millis: String(Math.round(r.duration * 1000)) } : classified && !down && gap ? { time: gap } : undefined,
+      FastestLap: b ? { rank: String(fastRank.get(r.driver_number)), lap: String(b.lap), Time: { time: fmtTime(b.t) } } : undefined,
+      _openf1: true,
+    };
+  });
 }
 
 const existingEvents = (await all("v2_events")).filter((e) => e.season_id === season.id);
@@ -597,7 +637,16 @@ const SESSION_DEFS = {
 
 for (const race of calendar) {
   if (a.round && race.round !== a.round) continue;
-  const results = raceResults.get(race.round)?.Results || [];
+  let results = raceResults.get(race.round)?.Results || [];
+  let of1Race = null;
+  if (!results.length) {
+    const m = of1Meetings.find((mm) => of1Sessions.some((s) => s.meeting_key === mm.meeting_key && s.session_name === "Race" && !s.is_cancelled && s.date_start.slice(0, 10) === race.date));
+    const rs = m && of1Sessions.find((s) => s.meeting_key === m.meeting_key && s.session_name === "Race" && !s.is_cancelled);
+    if (rs && Date.parse(rs.date_end || rs.date_start) < Date.now()) {
+      results = await of1Classification(rs.session_key);
+      if (results.length) { of1Race = rs.session_key; log(`R${race.round} ${race.raceName}: Jolpica has no race result yet, classifying from OpenF1`); }
+    }
+  }
   if (!results.length) {
     log(`R${race.round} ${race.raceName}: no race results yet, skipped`);
     continue;
@@ -639,7 +688,7 @@ for (const race of calendar) {
   /* who drove which number this weekend (Jolpica first, OpenF1 for practice-only drivers) */
   const numberInfo = new Map(); // number → { driver, constructorId }
   for (const list of [qualiResults.get(race.round)?.QualifyingResults, sprintResults.get(race.round)?.SprintResults, results])
-    for (const r of list || []) numberInfo.set(String(r.number), { driver: jolpicaDriverInfo(r.Driver), constructorId: r.Constructor.constructorId });
+    for (const r of list || []) if (r.Driver) numberInfo.set(String(r.number), { driver: jolpicaDriverInfo(r.Driver), constructorId: r.Constructor.constructorId });
   const of1Drivers = await getJson(`${OPENF1}/drivers?meeting_key=${meeting.meeting_key}`);
   const entrant = async (sessionKey, number) => {
     const num = String(number);
@@ -680,7 +729,8 @@ for (const race of calendar) {
     const def = SESSION_DEFS[s.session_name];
     const sName = def.rename || s.session_name;
     const sr = meetingResults.filter((r) => r.session_key === s.session_key);
-    const jol = def.source === "race" ? results : def.source === "sprint" ? sprintResults.get(race.round)?.SprintResults || [] : def.source === "quali" ? qualiResults.get(race.round)?.QualifyingResults || [] : null;
+    let jol = def.source === "race" ? results : def.source === "sprint" ? sprintResults.get(race.round)?.SprintResults || [] : def.source === "quali" ? qualiResults.get(race.round)?.QualifyingResults || [] : null;
+    if (def.source === "sprint" && !jol.length && Date.parse(s.date_end || s.date_start) < Date.now()) jol = await of1Classification(s.session_key);
     if ((jol && !jol.length) || (!jol && !sr.length)) {
       log(`  ${sName}: no classification, skipped`);
       continue;
@@ -769,7 +819,7 @@ for (const race of calendar) {
     // Jolpica's lap times for the whole race: elapsed = cumulative lap time from t0.
     let lapSource = "OpenF1";
     const coverageShort = jol.some((r) => Number(r.laps) > 1 && (ends.get(Number(r.number))?.size || 0) < Number(r.laps) - 1);
-    if (coverageShort && def.source === "race") {
+    if (coverageShort && def.source === "race" && !jol[0]?._openf1) {
       const jl = await jolpicaRaces(`${YEAR}/${race.round}/laps`, "Laps");
       const timing = new Map();
       for (const lap of jl.get(race.round)?.Laps || [])
