@@ -18,7 +18,8 @@
   ].filter((s) => !window.__feSeasons || window.__feSeasons.includes(s.S));
   const SESSIONS = { "free-practice-1": ["Practice 1", "practice"], "free-practice-2": ["Practice 2", "practice"], "free-practice-3": ["Practice 3", "practice"], qualifying: ["Qualifying", "qualifying"], race: ["Race", "race"] };
   const COUNTRY = { "Great Britain": "United Kingdom", USA: "United States", "United States of America": "United States", Holland: "Netherlands" };
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // no timers: hidden tabs throttle setTimeout to once a minute. Requests stay sequential.
+  const sleep = () => Promise.resolve();
   const P = new DOMParser();
   const html = async (u) => { await sleep(150); return P.parseFromString(await (await fetch(u)).text(), "text/html"); };
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[’'`.]/g, "").replace(/[-_]/g, " ").replace(/\s+/g, " ").trim();
@@ -44,7 +45,10 @@
   };
   const headerOf = (t) => [...(t.querySelector("tr")?.children || [])].map((c) => txt(c));
   const findTable = (doc, re) => [...doc.querySelectorAll("table.wikitable")].filter((t) => re.test(headerOf(t).join("|")));
-  const titleOf = (cell) => decodeURIComponent((cell?.querySelector("a[href^='./']")?.getAttribute("href") || "").replace(/^\.\//, "")).replace(/_/g, " ");
+  const titleOf = (cell) => {
+    const a = [...(cell?.querySelectorAll("a[href]") || [])].find((x) => /^(\.\/|\/wiki\/)/.test(x.getAttribute("href")) && !x.closest("sup"));
+    return a ? decodeURIComponent(a.getAttribute("href").replace(/^(\.\/|\/wiki\/)/, "").split("#")[0]).replace(/_/g, " ") : "";
+  };
 
   const drivers = new Map(); // slug -> {nationality, date_of_birth}
   async function driverInfo(slug, name) {
@@ -110,7 +114,7 @@
       const reportTitle = reportBy.get(rn);
       if (reportTitle && !reports.has(reportTitle)) reports.set(reportTitle, await wiki(reportTitle));
       const rep = reportTitle ? reports.get(reportTitle) : null;
-      const sameReport = calRows.filter((r) => reportBy.get(txt(r[0])) === reportTitle).map((r) => txt(r[0]));
+      const sameReport = reportTitle ? calRows.filter((r) => reportBy.get(txt(r[0])) === reportTitle).map((r) => txt(r[0])) : [rn];
       const raceIdx = sameReport.indexOf(rn);
       const raceTables = rep ? findTable(rep, /Pos.*\|No.*\|Driver\|Team\|Laps\|Time/) : [];
       const wikiRace = new Map();
@@ -144,7 +148,8 @@
           const a = tr.querySelector('a[href*="/drivers/"]');
           const dslug = a.getAttribute("href").split("/").pop();
           const off = txt(a);
-          const en = entry.get(norm(off));
+          const last = norm(off).split(" ").pop();
+          const en = entry.get(norm(off)) || [...entry.values()].find((x) => norm(x.wikiName).split(" ").pop() === last && norm(x.team).split(" ")[0] === norm(c[2]).split(" ")[0]);
           const info = await driverInfo(dslug, off);
           const posTxt = c[0].replace(/Places? (gained|lost)|No change/gi, "").trim();
           const pos = /^\d+$/.test(posTxt) ? Number(posTxt) : null;
@@ -170,7 +175,7 @@
             r.best_lap = t;
             if (type === "practice") r.gap = c[4] && /^\+/.test(c[4]) ? c[4] : null;
             if (type === "qualifying") {
-              if (pos === 1) { poleTime = t; r.points = 3; } // pole position: 3 points
+              if (pos === 1) poleTime = t; // the official race points already include the 3 pole points
               r.extra = {};
             }
           }

@@ -57,7 +57,7 @@ export const norm = (s) =>
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[’'`.]/g, "")
-    .replace(/[-_]/g, " ")
+    .replace(/[-–—_]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 const same = (x, y) => norm(x) === norm(y) && norm(x) !== "";
