@@ -98,6 +98,8 @@ export function standingsRulesFor(series: { name?: string | null; short_name?: s
   if (/formula (1|one)\b|\bF1\b/i.test(n)) return { ...GENERIC_RULES, teamKey: "team", teamLabel: "Constructors" };
   if (/nascar/i.test(n)) return { ...GENERIC_RULES, teamLabel: "Owners" };
   if (/indy ?car/i.test(n)) return { ...GENERIC_RULES, teamLabel: "Entrants" };
+  // teams' championships that sum both cars of a team
+  if (/formula e\b|formula (2|3|two|three)\b|\bF[23]\b|super formula|supercars/i.test(n)) return { ...GENERIC_RULES, teamKey: "team", teamLabel: "Teams" };
   return GENERIC_RULES;
 }
 
