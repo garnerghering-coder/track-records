@@ -40,7 +40,7 @@
     return out;
   };
   /** one entry per car: drop the continuation rows of two-row entries (same Pos and No. cells) */
-  const entries = (g, iPos, iNo) => g.filter((r, i) => i > 0 && r[iPos] && r[iNo] && r[iPos].tagName === "TD" && !(g[i - 1] && g[i - 1][iPos] === r[iPos] && g[i - 1][iNo] === r[iNo]));
+  const entries = (g, iPos, iNo) => g.filter((r, i) => i > 0 && r[iPos] && r[iNo] && r[iPos] !== g[0][iPos] && /\d/.test(txt(r[iNo])) && !(g[i - 1] && g[i - 1][iPos] === r[iPos] && g[i - 1][iNo] === r[iNo]));
   const CIRCUIT = {
     "Imola Circuit": { name: "Autodromo Enzo e Dino Ferrari" },
     "Circuit de Spa-Francorchamps": { name: "Circuit de Spa-Francorchamps" },
