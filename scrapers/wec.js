@@ -149,6 +149,9 @@
         circuit: { name: map.name, aliases: [circuitTitle, circuitText], location, country: null, ...(coords.get(circuitTitle) || {}), layout: { name: map.layout || "Grand Prix", length_km: len ? Number(len[1]) : null } },
         sessions: [],
       };
+      // a pole point needs a timed qualifying (none when it was cancelled, e.g. Fuji 2026)
+      const qTable = findTables(d, /^Pos\.?\|Class\|No\.?\|(Entrant|Team)\|Qualifying/)[0];
+      const timedQuali = !!qTable && /\d:\d{2}\.\d/.test(txt(qTable));
       // race
       const g = grid(race);
       const results = [];
@@ -173,7 +176,7 @@
             if (cand.length === 1) name = display.get(cand[0]);
           }
           const sc = scored.get(norm(name))?.[roundIdx];
-          const p = /lmp2/i.test(cls) || !dur ? null : sc ? (sc.pos ? dur.pts[sc.pos - 1] || 0 : 0) + (sc.pole ? dur.pole : 0) : 0;
+          const p = /lmp2/i.test(cls) || !dur ? null : totals.get(norm(name)) === 0 ? 0 : sc ? (sc.pos ? dur.pts[sc.pos - 1] || 0 : 0) + (sc.pole && timedQuali ? dur.pole : 0) : 0;
           return { name, nationality: nat.get(norm(name)) || null, points: p };
         });
         const [manufacturer, ...model] = (t[ci.chassis] || "").split(" ");
